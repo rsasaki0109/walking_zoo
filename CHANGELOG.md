@@ -17,3 +17,4 @@
 - One-command MuJoCo Unitree G1 gait showcase launch for walk, run, sidestep, turn, and e-stop.
 - README hero MuJoCo Unitree G1 showcase GIF and asset validation helper.
 - Runtime trace recorder and MuJoCo G1 runtime showcase launch with JSON/Markdown demo artifacts.
+- Demo evidence documentation and richer runtime trace validator output.

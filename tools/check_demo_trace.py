@@ -16,6 +16,32 @@ REQUIRED_TOPICS = {
 }
 
 
+def event_summaries(events):
+    return [str(event.get("summary", "")) for event in events]
+
+
+def find_state_transitions(summaries):
+    prefix = "walking state -> "
+    states = []
+    for summary in summaries:
+        if summary.startswith(prefix):
+            states.append(summary[len(prefix):])
+    return states
+
+
+def print_report(trace_path, payload, topics, states, estop_confirmed):
+    print(f"demo trace looks valid: {trace_path}")
+    print(f"duration_sec: {payload.get('duration_sec', 0.0):.3f}")
+    print(f"events: {len(payload.get('events', []))}")
+    print("topics found:")
+    for topic in sorted(topics):
+        print(f"  - {topic}")
+    print("state transitions found:")
+    for state in states:
+        print(f"  - {state}")
+    print(f"estop confirmed: {'yes' if estop_confirmed else 'not required'}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -43,16 +69,20 @@ def main():
     if missing:
         raise SystemExit(f"trace is missing topics: {', '.join(missing)}")
 
-    summaries = " ".join(str(event.get("summary", "")) for event in events)
-    if "walking state -> WALKING" not in summaries:
+    summaries = event_summaries(events)
+    states = find_state_transitions(summaries)
+    summary_text = " ".join(summaries)
+    if "WALKING" not in states:
         raise SystemExit("trace does not show a WALKING runtime state")
 
+    estop_confirmed = False
     if args.require_estop:
         latest = json.dumps(payload.get("latest", {}), sort_keys=True)
-        if "estop" not in summaries.lower() and "ESTOPPED" not in latest:
+        estop_confirmed = "estop" in summary_text.lower() or "ESTOPPED" in latest
+        if not estop_confirmed:
             raise SystemExit("trace does not show estop behavior")
 
-    print(f"demo trace looks valid: {trace_path}")
+    print_report(trace_path, payload, topics, states, estop_confirmed)
 
 
 if __name__ == "__main__":

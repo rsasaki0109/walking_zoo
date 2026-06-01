@@ -12,6 +12,10 @@ observed across robot-specific SDKs.
 
 ![MuJoCo Unitree G1 walking_zoo gait showcase](docs/assets/readme/mujoco_unitree_g1_showcase.gif)
 
+Want proof behind the GIF? See [Demo Evidence](docs/demo_evidence.md) for the
+reproducible MuJoCo G1 runtime showcase, generated GIF, JSON trace, Markdown
+timeline, and e-stop evidence.
+
 ## Visual Tour
 
 Run the same humanoid gait sequence locally with one launch command:
@@ -162,6 +166,9 @@ This writes `latest.png`, `live.gif`, `demo_trace.json`, and `demo_trace.md`.
 The trace records `/walking_zoo/state`, `/walking_zoo/adapter_status`,
 `/walking_zoo/safety_state`, `/cmd_vel`, `/walking_zoo/cmd_vel`, and
 `/walking_zoo/semantic_action`.
+
+See [examples/mujoco_g1_runtime_showcase](examples/mujoco_g1_runtime_showcase)
+for the short example guide.
 
 Regenerate the README GIFs:
 
