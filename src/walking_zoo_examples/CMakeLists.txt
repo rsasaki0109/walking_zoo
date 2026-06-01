@@ -10,6 +10,7 @@ install(
     scripts/mujoco_g1_gait_showcase.py
     scripts/send_estop.py
     scripts/send_mock_cmd_vel.py
+    scripts/walking_zoo_demo_recorder.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

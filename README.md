@@ -151,6 +151,18 @@ The showcase automatically steps through forward walk, forward run, sidestep,
 turn-in-place, stop, and the runtime e-stop gate. It writes
 `/tmp/walking_zoo_mujoco_g1_showcase/latest.png` and `live.gif`.
 
+Run the runtime proof version to capture the GIF plus ROS2 topic trace:
+
+```bash
+ros2 launch walking_zoo_bringup mujoco_g1_runtime_showcase.launch.py
+python3 tools/check_demo_trace.py /tmp/walking_zoo_mujoco_g1_runtime_showcase/demo_trace.json --require-estop
+```
+
+This writes `latest.png`, `live.gif`, `demo_trace.json`, and `demo_trace.md`.
+The trace records `/walking_zoo/state`, `/walking_zoo/adapter_status`,
+`/walking_zoo/safety_state`, `/cmd_vel`, `/walking_zoo/cmd_vel`, and
+`/walking_zoo/semantic_action`.
+
 Regenerate the README GIFs:
 
 ```bash

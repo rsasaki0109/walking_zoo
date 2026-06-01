@@ -13,7 +13,26 @@ import os
 from geometry_msgs.msg import Twist, TwistStamped
 import rclpy
 from rclpy.node import Node
-from walking_zoo_msgs.msg import SafetyState, SemanticAction, WalkingState
+from walking_zoo_msgs.msg import AdapterStatus, SafetyState, SemanticAction, WalkingState
+
+
+ADAPTER_STATES = {
+    AdapterStatus.STATUS_UNKNOWN: "UNKNOWN",
+    AdapterStatus.STATUS_DISCONNECTED: "DISCONNECTED",
+    AdapterStatus.STATUS_CONNECTED: "CONNECTED",
+    AdapterStatus.STATUS_ACTIVE: "ACTIVE",
+    AdapterStatus.STATUS_FAULT: "FAULT",
+    AdapterStatus.STATUS_ESTOPPED: "ESTOPPED",
+}
+
+SAFETY_STATES = {
+    SafetyState.STATE_UNKNOWN: "UNKNOWN",
+    SafetyState.STATE_OK: "OK",
+    SafetyState.STATE_LIMITED: "LIMITED",
+    SafetyState.STATE_BLOCKED: "BLOCKED",
+    SafetyState.STATE_ESTOPPED: "ESTOPPED",
+    SafetyState.STATE_FAULT: "FAULT",
+}
 
 
 def require_visual_deps():
@@ -184,7 +203,17 @@ class UnitreeG1Renderer:
         self.renderer.update_scene(self.data, camera=self.camera)
         return self.Image.fromarray(self.renderer.render())
 
-    def draw_overlay(self, img, gait, source, runtime_state, latest_cmd, output_dir):
+    def draw_overlay(
+        self,
+        img,
+        gait,
+        source,
+        runtime_state,
+        adapter_state,
+        safety_state,
+        latest_cmd,
+        output_dir,
+    ):
         draw = self.ImageDraw.Draw(img)
         panel = (18, 18, 425, 118)
         accent = (245, 94, 94) if gait == "estopped" else (176, 132, 255)
@@ -193,16 +222,17 @@ class UnitreeG1Renderer:
         draw.text((40, 69), f"gait={gait}  source={source}", font=self.font(15), fill=(144, 160, 176))
         draw.text((40, 92), f"output={output_dir}", font=self.font(13), fill=(144, 160, 176))
 
-        state_panel = (642, 122, 902, 324)
+        state_panel = (642, 112, 902, 342)
         draw.rounded_rectangle(state_panel, radius=16, fill=(26, 40, 56), outline=accent, width=2)
         rows = [
             ("runtime", runtime_state or "unknown"),
+            ("adapter", adapter_state or "unknown"),
+            ("safety", safety_state or "unknown"),
             ("cmd", latest_cmd),
-            ("renderer", "MuJoCo"),
             ("model", "Unitree G1"),
         ]
-        draw.text((675, 144), "Runtime Target", font=self.font(20), fill=accent)
-        y = 188
+        draw.text((675, 134), "Runtime Target", font=self.font(20), fill=accent)
+        y = 174
         for key, value in rows:
             draw.text((668, y), key, font=self.font(14), fill=(144, 160, 176))
             draw.text((760, y), value[:18], font=self.font(14), fill=(232, 238, 245))
@@ -251,6 +281,8 @@ class MujocoG1GaitDemo(Node):
         self.last_command_time = self.get_clock().now()
         self.estop_active = False
         self.runtime_state = ""
+        self.adapter_state = ""
+        self.safety_state = ""
         self.source = "idle"
         self.latest_cmd = "zero"
 
@@ -258,6 +290,7 @@ class MujocoG1GaitDemo(Node):
         self.create_subscription(Twist, "/cmd_vel", self.on_twist, 10)
         self.create_subscription(SemanticAction, "/walking_zoo/semantic_action", self.on_semantic, 10)
         self.create_subscription(SafetyState, "/walking_zoo/safety_state", self.on_safety_state, 10)
+        self.create_subscription(AdapterStatus, "/walking_zoo/adapter_status", self.on_adapter_status, 10)
         self.create_subscription(WalkingState, "/walking_zoo/state", self.on_walking_state, 10)
         self.timer = self.create_timer(1.0 / max(self.fps, 1.0), self.on_timer)
         self.get_logger().info(f"writing MuJoCo G1 frames to {self.output_dir}")
@@ -340,6 +373,22 @@ class MujocoG1GaitDemo(Node):
 
     def on_safety_state(self, msg):
         self.estop_active = msg.estop_active or msg.state == SafetyState.STATE_ESTOPPED
+        self.safety_state = SAFETY_STATES.get(msg.state, str(msg.state))
+        if msg.estop_active:
+            self.safety_state = "ESTOPPED"
+
+    def on_adapter_status(self, msg):
+        status = ADAPTER_STATES.get(msg.status, str(msg.status))
+        adapter = self.short_adapter_name(msg.adapter_name)
+        self.adapter_state = f"{adapter}:{status.lower()}"
+
+    def short_adapter_name(self, adapter_name):
+        plugin = adapter_name.rsplit("/", 1)[-1] if adapter_name else "adapter"
+        if plugin == "MockWalkingAdapter":
+            return "mock"
+        if plugin == "UnitreeSdk2Adapter":
+            return "unitree"
+        return plugin
 
     def on_walking_state(self, msg):
         self.runtime_state = msg.status_text or str(msg.locomotion_state)
@@ -368,10 +417,12 @@ class MujocoG1GaitDemo(Node):
             gait,
             self.source,
             self.runtime_state,
+            self.adapter_state,
+            self.safety_state,
             self.latest_cmd,
             str(self.output_dir),
         )
-        img.save(self.latest_png)
+        self.save_latest_png(img)
         self.gif_frames.append(img.copy())
         live_gif_missing = (
             not self.live_gif.exists() or self.live_gif.stat().st_size == 0
@@ -381,6 +432,11 @@ class MujocoG1GaitDemo(Node):
         if first_live_gif or periodic_live_gif:
             self.save_live_gif()
             self.last_gif_save_frame = self.frame_index
+
+    def save_latest_png(self, img):
+        tmp_png = self.latest_png.with_name(f"{self.latest_png.name}.tmp")
+        img.save(tmp_png, format="PNG")
+        tmp_png.replace(self.latest_png)
 
     def save_live_gif(self):
         if len(self.gif_frames) < 2:

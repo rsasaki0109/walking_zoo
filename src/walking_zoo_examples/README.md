@@ -48,3 +48,12 @@ ros2 launch walking_zoo_bringup mujoco_g1_gait_showcase.launch.py
 The showcase publishes semantic actions for walk, run, sidestep, turn,
 stop, and e-stop. It writes `/tmp/walking_zoo_mujoco_g1_showcase/latest.png`
 and `/tmp/walking_zoo_mujoco_g1_showcase/live.gif`.
+
+Run the runtime trace showcase:
+
+```bash
+ros2 launch walking_zoo_bringup mujoco_g1_runtime_showcase.launch.py
+python3 tools/check_demo_trace.py /tmp/walking_zoo_mujoco_g1_runtime_showcase/demo_trace.json --require-estop
+```
+
+This adds `demo_trace.json` and `demo_trace.md` next to the live MuJoCo images.

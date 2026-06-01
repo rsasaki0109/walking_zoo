@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Drive the MuJoCo G1 demo through a repeatable gait showcase sequence."""
 
+from geometry_msgs.msg import Twist
 import rclpy
 from rclpy.node import Node
 from walking_zoo_msgs.msg import SemanticAction
@@ -17,6 +18,7 @@ class MujocoG1GaitShowcase(Node):
     def __init__(self):
         super().__init__("walking_zoo_mujoco_g1_gait_showcase")
         self.declare_parameter("semantic_topic", "/walking_zoo/semantic_action")
+        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("estop_service", "/walking_zoo/estop")
         self.declare_parameter("source", "walking_zoo_gait_showcase")
         self.declare_parameter("start_delay_sec", 4.0)
@@ -25,6 +27,7 @@ class MujocoG1GaitShowcase(Node):
         self.declare_parameter("include_estop", True)
 
         self.semantic_topic = self.get_parameter("semantic_topic").value
+        self.cmd_vel_topic = self.get_parameter("cmd_vel_topic").value
         self.estop_service_name = self.get_parameter("estop_service").value
         self.source = self.get_parameter("source").value
         self.start_delay_sec = float(self.get_parameter("start_delay_sec").value)
@@ -33,6 +36,7 @@ class MujocoG1GaitShowcase(Node):
         self.include_estop = parse_bool(self.get_parameter("include_estop").value)
 
         self.publisher = self.create_publisher(SemanticAction, self.semantic_topic, 10)
+        self.cmd_vel_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self.estop_client = self.create_client(EmergencyStop, self.estop_service_name)
         self.sequence = self.build_sequence()
         self.step_index = -1
@@ -71,9 +75,28 @@ class MujocoG1GaitShowcase(Node):
         msg.confidence = 1.0
         msg.tags = ["demo", "mujoco", "unitree_g1", "gait_showcase"]
         self.publisher.publish(msg)
+        self.publish_cmd_vel(action)
         self.get_logger().info(f"showcase action -> {action}")
         if action == "estop":
             self.call_estop()
+
+    def publish_cmd_vel(self, action):
+        if action == "estop":
+            return
+        msg = Twist()
+        if action == "walk_forward":
+            msg.linear.x = 0.22
+        elif action == "run_forward":
+            msg.linear.x = 0.45
+        elif action == "sidestep_left":
+            msg.linear.y = 0.22
+        elif action == "sidestep_right":
+            msg.linear.y = -0.22
+        elif action == "turn_left":
+            msg.angular.z = 0.55
+        elif action == "turn_right":
+            msg.angular.z = -0.55
+        self.cmd_vel_publisher.publish(msg)
 
     def call_estop(self):
         service_ready = (
