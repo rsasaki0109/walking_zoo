@@ -10,4 +10,4 @@
 - Lifecycle runtime manager.
 - Nav2 `/cmd_vel` bridge.
 - Bringup launch files, examples, docs, and CI.
-- README animated GIF assets and generator.
+- README animated simulation GIF assets and generator.

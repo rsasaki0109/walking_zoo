@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
+"""Render README GIFs from lightweight walking simulations.
+
+These assets are documentation-only. They are generated from deterministic
+gait, footstep, and runtime-state simulations so the README does not depend on
+hand-animated toy poses or a heavyweight simulator.
+"""
+
 from pathlib import Path
 import math
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "assets" / "readme"
 SIZE = (960, 540)
-BG = (10, 16, 24)
+
+BG = (9, 14, 22)
 PANEL = (18, 28, 40)
 PANEL_2 = (26, 40, 56)
+GRID = (33, 47, 62)
 TEXT = (232, 238, 245)
 MUTED = (144, 160, 176)
 GREEN = (70, 210, 160)
@@ -75,7 +85,7 @@ def base(title, subtitle):
     return img, draw
 
 
-def save_gif(name, frames, duration=760):
+def save_gif(name, frames, duration=90):
     path = OUT / name
     frames[0].save(
         path,
@@ -87,116 +97,284 @@ def save_gif(name, frames, duration=760):
     )
     print(path.relative_to(ROOT))
 
-def draw_robot(draw, cx, ground_y, phase, scale=1.0, color=GREEN, stopped=False):
-    body_w = int(96 * scale)
-    body_h = int(70 * scale)
-    head = int(28 * scale)
-    hip_y = ground_y - int(86 * scale)
-    body_box = (
-        cx - body_w // 2,
-        hip_y - body_h,
-        cx + body_w // 2,
-        hip_y,
-    )
-    draw_round(draw, body_box, (28, 42, 52), color, radius=int(14 * scale), width=max(2, int(3 * scale)))
-    head_box = (
-        cx - head,
-        body_box[1] - int(42 * scale),
-        cx + head,
-        body_box[1] + int(14 * scale),
-    )
-    draw_round(draw, head_box, (32, 48, 62), color, radius=int(10 * scale), width=max(2, int(3 * scale)))
-    eye_y = head_box[1] + int(23 * scale)
-    draw.ellipse((cx - int(13 * scale), eye_y, cx - int(7 * scale), eye_y + int(6 * scale)), fill=BLUE)
-    draw.ellipse((cx + int(7 * scale), eye_y, cx + int(13 * scale), eye_y + int(6 * scale)), fill=BLUE)
 
-    swing = 0.0 if stopped else math.sin(phase) * int(26 * scale)
-    lift = 0.0 if stopped else abs(math.sin(phase)) * int(13 * scale)
-    hips = [cx - int(28 * scale), cx + int(28 * scale)]
-    feet = [
-        (cx - int(38 * scale) + swing, ground_y - lift),
-        (cx + int(38 * scale) - swing, ground_y - (int(13 * scale) - lift)),
-    ]
-    knees = [
-        (cx - int(36 * scale) + swing * 0.45, hip_y + int(38 * scale)),
-        (cx + int(36 * scale) - swing * 0.45, hip_y + int(38 * scale)),
-    ]
-    for hip_x, knee, foot in zip(hips, knees, feet):
-        draw.line((hip_x, hip_y, knee[0], knee[1]), fill=color, width=max(5, int(7 * scale)))
-        draw.line((knee[0], knee[1], foot[0], foot[1]), fill=color, width=max(5, int(7 * scale)))
-        draw.line((foot[0] - int(16 * scale), foot[1], foot[0] + int(18 * scale), foot[1]), fill=TEXT, width=max(4, int(5 * scale)))
-
-    arm_swing = 0.0 if stopped else math.sin(phase + math.pi) * int(22 * scale)
-    shoulder_y = body_box[1] + int(22 * scale)
-    for side in (-1, 1):
-        sx = cx + side * body_w // 2
-        hand = (sx + side * int(24 * scale), shoulder_y + int(52 * scale) + side * arm_swing)
-        elbow = (sx + side * int(15 * scale), shoulder_y + int(28 * scale) - side * arm_swing * 0.35)
-        draw.line((sx, shoulder_y, elbow[0], elbow[1]), fill=color, width=max(4, int(6 * scale)))
-        draw.line((elbow[0], elbow[1], hand[0], hand[1]), fill=color, width=max(4, int(6 * scale)))
-
-    if not stopped:
-        for offset in (70, 115, 160):
-            x = cx - offset + (phase % (2 * math.pi)) / (2 * math.pi) * 44
-            draw.line((x, ground_y + int(12 * scale), x + int(32 * scale), ground_y + int(12 * scale)), fill=(42, 62, 78), width=2)
+def world_to_px(x, z, camera_x, ground_y=430, scale=205):
+    return int(160 + (x - camera_x) * scale), int(ground_y - z * scale)
 
 
-def walking_robot_runtime():
-    frames = []
-    for i in range(18):
-        progress = i / 17
-        img, draw = base("walking_zoo in motion", "mock robot walking through the ROS2 runtime")
-        ground_y = 410
-        draw.line((40, ground_y + 4, 920, ground_y + 4), fill=(54, 74, 88), width=4)
-        cx = int(160 + progress * 420)
-        phase = progress * math.pi * 6
-        draw_robot(draw, cx, ground_y, phase, scale=1.0, color=GREEN)
-
-        stages = [
-            ((55, 455, 235, 510), "Nav2 /cmd_vel", BLUE),
-            ((270, 455, 450, 510), "Safety passed", YELLOW),
-            ((485, 455, 665, 510), "Mock adapter", GREEN),
-            ((700, 455, 900, 510), "WalkingState=WALKING", PURPLE),
-        ]
-        for idx, (box, label, color) in enumerate(stages):
-            active = progress >= idx / len(stages) - 0.02
-            draw_round(draw, box, PANEL_2 if active else PANEL, color if active else LINE, radius=13)
-            text_center(draw, box, label, color if active else MUTED, FONT_SMALL)
-            if idx < len(stages) - 1:
-                arrow(draw, (box[2], 482), (stages[idx + 1][0][0], 482), LINE, width=3, progress=1.0 if active else 0.0)
-
-        draw_round(draw, (650, 145, 885, 290), PANEL_2, GREEN, radius=18)
-        text_center(draw, (662, 160, 873, 205), "Live mock demo", GREEN, FONT_BODY)
-        draw.text((678, 214), "adapter_connected: true", font=FONT_SMALL, fill=TEXT)
-        draw.text((678, 242), "locomotion_state: WALKING", font=FONT_SMALL, fill=TEXT)
-        frames.append(img)
-    save_gif("walking_robot_runtime.gif", frames, duration=90)
+def two_link_ik(hip, foot, l1, l2, knee_sign=1.0):
+    hx, hz = hip
+    fx, fz = foot
+    dx = fx - hx
+    dz = fz - hz
+    distance = float(np.hypot(dx, dz))
+    distance = max(1e-5, min(distance, l1 + l2 - 1e-5))
+    midpoint = ((hx + fx) * 0.5, (hz + fz) * 0.5)
+    a = (l1 * l1 - l2 * l2 + distance * distance) / (2.0 * distance)
+    h = math.sqrt(max(0.0, l1 * l1 - a * a))
+    ux = dx / distance
+    uz = dz / distance
+    px = hx + a * ux
+    pz = hz + a * uz
+    knee = (px - knee_sign * h * uz, pz + knee_sign * h * ux)
+    return knee
 
 
-def walking_robot_estop():
-    frames = []
-    for i in range(16):
-        stopped = i >= 10
-        img, draw = base("Safety gate in action", "the robot walks, then e-stop blocks motion")
-        ground_y = 405
-        draw.line((52, ground_y + 4, 908, ground_y + 4), fill=(54, 74, 88), width=4)
-        cx = 220 + min(i, 10) * 38
-        color = RED if stopped else GREEN
-        draw_robot(draw, cx, ground_y, i * 0.75, scale=1.0, color=color, stopped=stopped)
+def gait_foot_relative(t, offset, step_length=0.34, step_time=0.62, duty=0.63):
+    phase = (t / step_time + offset) % 1.0
+    if phase < duty:
+        s = phase / duty
+        x = 0.5 * step_length - step_length * s
+        z = 0.0
+        contact = True
+    else:
+        s = (phase - duty) / (1.0 - duty)
+        x = -0.5 * step_length + step_length * (3.0 * s * s - 2.0 * s * s * s)
+        z = 0.095 * math.sin(math.pi * s)
+        contact = False
+    return x, z, contact
 
-        draw_round(draw, (610, 155, 860, 275), PANEL_2, RED if stopped else GREEN, radius=18)
+
+def draw_grid_ground(draw, ground_y=430):
+    for x in range(40, 920, 60):
+        draw.line((x, 134, x, ground_y + 20), fill=GRID, width=1)
+    for y in range(160, ground_y + 1, 48):
+        draw.line((40, y, 920, y), fill=GRID, width=1)
+    draw.line((40, ground_y, 920, ground_y), fill=(92, 116, 132), width=4)
+
+
+def draw_link(draw, p0, p1, color, width=8):
+    draw.line((p0[0], p0[1], p1[0], p1[1]), fill=color, width=width)
+    r = max(3, width // 2)
+    draw.ellipse((p0[0] - r, p0[1] - r, p0[0] + r, p0[1] + r), fill=color)
+    draw.ellipse((p1[0] - r, p1[1] - r, p1[0] + r, p1[1] + r), fill=color)
+
+
+def draw_biped(draw, t, root_x, camera_x, color=GREEN, stopped=False):
+    hip_z = 0.88 + (0.0 if stopped else 0.025 * math.sin(2.0 * math.pi * t / 0.62))
+    torso_z = hip_z + 0.34
+    head_z = torso_z + 0.21
+    l1 = 0.43
+    l2 = 0.44
+    foot_offsets = [("L", 0.00, -0.045, BLUE), ("R", 0.50, 0.045, GREEN)]
+    hip_world = (root_x, hip_z)
+    hip_px = world_to_px(*hip_world, camera_x)
+    torso_px = world_to_px(root_x + 0.02 * math.sin(t * 2.0), torso_z, camera_x)
+    head_px = world_to_px(root_x + 0.03 * math.sin(t * 2.0), head_z, camera_x)
+
+    contacts = []
+    for label, offset, lateral, leg_color in foot_offsets:
+        rel_x, rel_z, contact = gait_foot_relative(t, offset)
         if stopped:
-            text_center(draw, (620, 170, 850, 215), "E-STOP ACTIVE", RED, FONT_SUB)
-            text_center(draw, (620, 225, 850, 260), "adapter command blocked", TEXT, FONT_SMALL)
-        else:
-            text_center(draw, (620, 170, 850, 215), "Walking", GREEN, FONT_SUB)
-            text_center(draw, (620, 225, 850, 260), "safe command accepted", TEXT, FONT_SMALL)
+            rel_x = -0.08 if label == "L" else 0.11
+            rel_z = 0.0
+            contact = True
+        foot_world = (root_x + rel_x, rel_z)
+        knee_world = two_link_ik(hip_world, foot_world, l1, l2, knee_sign=-1.0)
+        foot_px = world_to_px(*foot_world, camera_x)
+        knee_px = world_to_px(*knee_world, camera_x)
+        shade = leg_color if contact else (120, 150, 180)
+        draw_link(draw, hip_px, knee_px, shade, width=8)
+        draw_link(draw, knee_px, foot_px, shade, width=8)
+        draw.line((foot_px[0] - 22, foot_px[1], foot_px[0] + 26, foot_px[1]), fill=TEXT, width=5)
+        if contact:
+            contacts.append((foot_px[0], foot_px[1], label))
 
-        draw_round(draw, (92, 455, 868, 510), PANEL, LINE, radius=14)
-        label = "/walking_zoo/state: ESTOPPED" if stopped else "/walking_zoo/state: WALKING"
-        draw.text((120, 472), label, font=FONT_CODE, fill=RED if stopped else GREEN)
+    draw_link(draw, hip_px, torso_px, color, width=12)
+    draw_round(
+        draw,
+        (torso_px[0] - 42, torso_px[1] - 60, torso_px[0] + 44, torso_px[1] + 36),
+        (28, 42, 54),
+        color,
+        radius=14,
+        width=3,
+    )
+    draw_round(
+        draw,
+        (head_px[0] - 28, head_px[1] - 24, head_px[0] + 28, head_px[1] + 28),
+        (34, 50, 64),
+        color,
+        radius=11,
+        width=3,
+    )
+    draw.ellipse((torso_px[0] - 7, torso_px[1] - 6, torso_px[0] + 7, torso_px[1] + 8), fill=YELLOW)
+    draw.ellipse((head_px[0] - 14, head_px[1] - 2, head_px[0] - 8, head_px[1] + 4), fill=BLUE)
+    draw.ellipse((head_px[0] + 8, head_px[1] - 2, head_px[0] + 14, head_px[1] + 4), fill=BLUE)
+    for x, y, label in contacts:
+        draw.text((x - 6, y + 9), label, font=FONT_SMALL, fill=MUTED)
+
+
+def draw_state_panel(draw, title, rows, accent=GREEN):
+    draw_round(draw, (642, 136, 890, 314), PANEL_2, accent, radius=18)
+    text_center(draw, (662, 150, 870, 194), title, accent, FONT_BODY)
+    y = 205
+    for key, value, color in rows:
+        draw.text((668, y), key, font=FONT_SMALL, fill=MUTED)
+        draw.text((790, y), value, font=FONT_SMALL, fill=color)
+        y += 28
+
+
+def simulated_biped_runtime():
+    frames = []
+    ts = np.linspace(0.0, 3.8, 38)
+    speed = 0.34
+    for t in ts:
+        root_x = speed * t
+        camera_x = max(0.0, root_x - 0.32)
+        img, draw = base("walking_zoo simulation", "kinematic biped gait driven by runtime state")
+        draw_grid_ground(draw)
+        draw_biped(draw, t, root_x, camera_x, GREEN)
+        draw_state_panel(
+            draw,
+            "ROS2 runtime",
+            [
+                ("input", "/cmd_vel", BLUE),
+                ("safety", "passed", YELLOW),
+                ("adapter", "mock", GREEN),
+                ("state", "WALKING", PURPLE),
+            ],
+            GREEN,
+        )
+        draw.text((58, 464), "Simulated gait: alternating support, swing foot trajectory, two-link IK, COM marker", font=FONT_SMALL, fill=MUTED)
         frames.append(img)
-    save_gif("walking_robot_estop.gif", frames, duration=110)
+    save_gif("simulated_biped_runtime.gif", frames, duration=80)
+
+
+def simulated_estop_stop():
+    frames = []
+    ts = np.linspace(0.0, 4.0, 40)
+    speed = 0.34
+    estop_t = 2.45
+    decel = 1.1
+    for t in ts:
+        if t <= estop_t:
+            root_x = speed * t
+            velocity = speed
+            stopped = False
+        else:
+            tau = min(t - estop_t, speed / decel)
+            root_x = speed * estop_t + speed * tau - 0.5 * decel * tau * tau
+            velocity = max(0.0, speed - decel * tau)
+            stopped = velocity < 0.03
+        camera_x = max(0.0, root_x - 0.32)
+        img, draw = base("e-stop simulation", "runtime gate blocks motion and the gait settles")
+        draw_grid_ground(draw)
+        draw_biped(draw, t, root_x, camera_x, RED if stopped else GREEN, stopped=stopped)
+        draw_state_panel(
+            draw,
+            "Safety gate",
+            [
+                ("velocity", f"{velocity:.2f} m/s", GREEN if not stopped else RED),
+                ("estop", "active" if t >= estop_t else "false", RED if t >= estop_t else GREEN),
+                ("adapter", "blocked" if t >= estop_t else "accepted", RED if t >= estop_t else GREEN),
+                ("state", "ESTOPPED" if stopped else "WALKING", RED if stopped else PURPLE),
+            ],
+            RED if t >= estop_t else GREEN,
+        )
+        draw.text((58, 464), "Simulated stop profile: command gate closes, velocity decays, feet return to support", font=FONT_SMALL, fill=MUTED)
+        frames.append(img)
+    save_gif("simulated_estop_stop.gif", frames, duration=80)
+
+
+def draw_quadruped(draw, t, root_x, camera_x):
+    ground_y = 430
+    body_z = 0.54 + 0.015 * math.sin(4.0 * math.pi * t)
+    body = world_to_px(root_x, body_z, camera_x, ground_y, 260)
+    draw_round(draw, (body[0] - 92, body[1] - 42, body[0] + 92, body[1] + 36), (28, 42, 54), GREEN, radius=18, width=3)
+    draw_round(draw, (body[0] + 74, body[1] - 30, body[0] + 122, body[1] + 18), (34, 50, 64), GREEN, radius=12, width=3)
+    legs = [
+        ("FL", 0.00, 0.30, BLUE),
+        ("RR", 0.00, -0.30, BLUE),
+        ("FR", 0.50, 0.30, PURPLE),
+        ("RL", 0.50, -0.30, PURPLE),
+    ]
+    for name, offset, rel_body_x, color in legs:
+        rel_x, foot_z, contact = gait_foot_relative(t, offset, step_length=0.26, step_time=0.44, duty=0.58)
+        hip_world = (root_x + rel_body_x, body_z - 0.07)
+        foot_world = (root_x + rel_body_x + rel_x, foot_z)
+        knee_world = two_link_ik(hip_world, foot_world, 0.30, 0.32, knee_sign=-1.0)
+        hip_px = world_to_px(*hip_world, camera_x, ground_y, 260)
+        knee_px = world_to_px(*knee_world, camera_x, ground_y, 260)
+        foot_px = world_to_px(*foot_world, camera_x, ground_y, 260)
+        leg_color = color if contact else (118, 145, 172)
+        draw_link(draw, hip_px, knee_px, leg_color, 6)
+        draw_link(draw, knee_px, foot_px, leg_color, 6)
+        draw.line((foot_px[0] - 16, foot_px[1], foot_px[0] + 20, foot_px[1]), fill=TEXT, width=4)
+        if contact:
+            draw.text((foot_px[0] - 12, foot_px[1] + 7), name, font=FONT_SMALL, fill=MUTED)
+
+
+def simulated_quadruped_trot():
+    frames = []
+    ts = np.linspace(0.0, 2.8, 34)
+    speed = 0.48
+    for t in ts:
+        root_x = speed * t
+        camera_x = max(0.0, root_x - 0.35)
+        img, draw = base("quadruped trot simulation", "Go2-style velocity command through the same runtime path")
+        draw_grid_ground(draw)
+        draw_quadruped(draw, t, root_x, camera_x)
+        draw_state_panel(
+            draw,
+            "RobotProfile",
+            [
+                ("family", "quadruped", BLUE),
+                ("gait", "trot", GREEN),
+                ("cmd", "vx=0.48", YELLOW),
+                ("state", "WALKING", PURPLE),
+            ],
+            GREEN,
+        )
+        frames.append(img)
+    save_gif("simulated_quadruped_trot.gif", frames, duration=80)
+
+
+def simulated_footstep_plan():
+    frames = []
+    footsteps = []
+    for i in range(10):
+        footsteps.append((0.18 + i * 0.18, 0.10 if i % 2 == 0 else -0.10, "L" if i % 2 == 0 else "R"))
+    for frame in range(32):
+        progress = frame / 31
+        img, draw = base("footstep plan simulation", "preview COM and alternating support contacts")
+        draw_round(draw, (58, 130, 902, 455), (7, 12, 18), LINE, radius=16)
+        scale = 350
+        ox, oy = 120, 292
+        for gx in np.linspace(0.0, 2.0, 11):
+            x = int(ox + gx * scale)
+            draw.line((x, 150, x, 430), fill=GRID, width=1)
+        for gy in np.linspace(-0.3, 0.3, 7):
+            y = int(oy - gy * scale)
+            draw.line((80, y, 870, y), fill=GRID, width=1)
+        draw.line((80, oy, 870, oy), fill=(90, 112, 130), width=2)
+        visible_count = max(1, int(progress * len(footsteps)))
+        for idx, (x_m, y_m, side) in enumerate(footsteps[:visible_count]):
+            px = int(ox + x_m * scale)
+            py = int(oy - y_m * scale)
+            color = BLUE if side == "L" else GREEN
+            draw_round(draw, (px - 28, py - 14, px + 28, py + 14), PANEL_2, color, radius=7)
+            text_center(draw, (px - 28, py - 14, px + 28, py + 14), side, color, FONT_SMALL)
+            if idx > 0:
+                prev = footsteps[idx - 1]
+                draw.line((int(ox + prev[0] * scale), int(oy - prev[1] * scale), px, py), fill=LINE, width=2)
+        com_x = 0.18 + progress * (footsteps[-1][0] - 0.18)
+        com_y = 0.04 * math.sin(progress * math.pi * 5)
+        com = (int(ox + com_x * scale), int(oy - com_y * scale))
+        draw.ellipse((com[0] - 10, com[1] - 10, com[0] + 10, com[1] + 10), fill=YELLOW)
+        draw.text((com[0] + 14, com[1] - 9), "COM", font=FONT_SMALL, fill=YELLOW)
+        draw_state_panel(
+            draw,
+            "Runtime API",
+            [
+                ("action", "FootstepPlan", BLUE),
+                ("support", "alternating", GREEN),
+                ("preview", "COM trace", YELLOW),
+                ("safety", "feasibility", PURPLE),
+            ],
+            BLUE,
+        )
+        frames.append(img)
+    save_gif("simulated_footstep_plan.gif", frames, duration=90)
 
 
 def runtime_flow():
@@ -209,10 +387,7 @@ def runtime_flow():
         ((632, 325, 890, 435), "Adapter Hub", "mock / Unitree / future", BLUE),
     ]
     for active in range(8):
-        img, draw = base(
-            "walking_zoo",
-            "ROS2-native Walking Runtime & Adapter Hub",
-        )
+        img, draw = base("walking_zoo", "ROS2-native Walking Runtime & Adapter Hub")
         for idx, (box, title, sub, color) in enumerate(boxes):
             fill = PANEL_2 if idx <= active // 2 else PANEL
             outline = color if idx <= active // 2 else LINE
@@ -225,37 +400,7 @@ def runtime_flow():
         arrow(draw, (548, 300), (632, 220), YELLOW, progress=min(1.0, max(0.0, (active - 3) / 2)))
         arrow(draw, (760, 275), (760, 325), GREEN, progress=min(1.0, max(0.0, (active - 5) / 2)))
         frames.append(img)
-    save_gif("walking_zoo_runtime_flow.gif", frames)
-
-
-def mock_runtime_state():
-    frames = []
-    states = [
-        ("Lifecycle configure", "adapter: mock", "state: IDLE", BLUE),
-        ("Lifecycle activate", "adapter: mock", "state: STANDING", GREEN),
-        ("/cmd_vel x=0.2 z=0.1", "safety: passed", "state: WALKING", GREEN),
-        ("/walking_zoo/estop", "safety: blocked", "state: ESTOPPED", RED),
-    ]
-    for i, state in enumerate(states):
-        img, draw = base("Mock Runtime Demo", "real ROS2 runtime behavior without hardware")
-        draw_round(draw, (58, 135, 902, 455), (3, 8, 14), LINE, radius=16)
-        draw.text((88, 160), "$ ros2 launch walking_zoo_bringup mock_runtime.launch.py", font=FONT_CODE, fill=GREEN)
-        lines = [
-            "[runtime] loaded walking_zoo_mock_adapter/MockWalkingAdapter",
-            f"[runtime] {state[0]}",
-            f"[adapter] {state[1]}",
-            f"[state]   {state[2]}",
-        ]
-        y = 210
-        for j, line in enumerate(lines):
-            color = state[3] if j == len(lines) - 1 else TEXT
-            draw.text((88, y), line, font=FONT_CODE, fill=color)
-            y += 42
-        draw_round(draw, (670, 170, 855, 365), PANEL_2, state[3], radius=18)
-        text_center(draw, (680, 185, 845, 230), "WalkingState", TEXT, FONT_BODY)
-        text_center(draw, (680, 235, 845, 315), state[2].replace("state: ", ""), state[3], FONT_TITLE)
-        frames.extend([img] * 2)
-    save_gif("mock_runtime_state.gif", frames, duration=620)
+    save_gif("walking_zoo_runtime_flow.gif", frames, duration=760)
 
 
 def nav2_bridge():
@@ -275,7 +420,7 @@ def nav2_bridge():
         arrow(draw, (512, 285), (586, 285), GREEN, progress=min(1.0, max(0.0, (step - 3) / 2)))
         draw.text((86, 394), "Nav2 owns where to go. walking_zoo owns how to walk safely.", font=FONT_BODY, fill=TEXT)
         frames.append(img)
-    save_gif("nav2_cmd_vel_bridge.gif", frames)
+    save_gif("nav2_cmd_vel_bridge.gif", frames, duration=760)
 
 
 def safety_gate():
@@ -289,13 +434,13 @@ def safety_gate():
     for idx, (title, value, color) in enumerate(commands):
         img, draw = base("Safety Pipeline", "every command is checked before adapter dispatch")
         x0 = 90
-        for j, (t, v, c) in enumerate(commands):
+        for j, (label, text, item_color) in enumerate(commands):
             y0 = 145 + j * 82
             fill = PANEL_2 if j <= idx else PANEL
-            outline = c if j <= idx else LINE
+            outline = item_color if j <= idx else LINE
             draw_round(draw, (x0, y0, 870, y0 + 58), fill, outline, radius=16)
-            draw.text((120, y0 + 16), t, font=FONT_BODY, fill=c if j <= idx else MUTED)
-            draw.text((360, y0 + 16), v, font=FONT_CODE, fill=TEXT if j <= idx else MUTED)
+            draw.text((120, y0 + 16), label, font=FONT_BODY, fill=item_color if j <= idx else MUTED)
+            draw.text((360, y0 + 16), text, font=FONT_CODE, fill=TEXT if j <= idx else MUTED)
             if j < 3:
                 arrow(draw, (480, y0 + 58), (480, y0 + 80), LINE, width=3, progress=1.0 if j < idx else 0.0)
         draw.text((100, 470), "Default limits are conservative. Real motion remains opt-in.", font=FONT_SMALL, fill=MUTED)
@@ -328,7 +473,7 @@ def adapter_hub():
                 ex = 330 if box[0] < 330 else 630
                 arrow(draw, (sx, (box[1] + box[3]) // 2), (ex, 270), color, width=4, progress=1.0)
         frames.append(img)
-    save_gif("adapter_hub.gif", frames)
+    save_gif("adapter_hub.gif", frames, duration=760)
 
 
 def vla_path():
@@ -353,15 +498,16 @@ def vla_path():
                 arrow(draw, (box[2], 279), (box[2] + 30, 279), LINE, width=3, progress=1.0 if i + 1 < active else 0.0)
         draw.text((62, 405), "VLA is a command source, not a privileged controller.", font=FONT_BODY, fill=TEXT)
         frames.append(img)
-    save_gif("vla_semantic_runtime.gif", frames)
+    save_gif("vla_semantic_runtime.gif", frames, duration=760)
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    walking_robot_runtime()
-    walking_robot_estop()
+    simulated_biped_runtime()
+    simulated_estop_stop()
+    simulated_quadruped_trot()
+    simulated_footstep_plan()
     runtime_flow()
-    mock_runtime_state()
     nav2_bridge()
     safety_gate()
     adapter_hub()

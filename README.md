@@ -10,23 +10,29 @@ Think **Nav2 for walking robots**: Nav2 decides where a robot should go;
 walking_zoo owns how walking commands are admitted, limited, dispatched, and
 observed across robot-specific SDKs.
 
-![walking robot running through walking_zoo](docs/assets/readme/walking_robot_runtime.gif)
+![kinematic walking simulation running through walking_zoo](docs/assets/readme/simulated_biped_runtime.gif)
 
 ## Visual Tour
 
-Run the mock runtime, send a Nav2-style velocity command, and watch a robot walk
-through the runtime path without real hardware.
+Run the mock runtime, send a Nav2-style velocity command, and watch a simulated
+biped walk through the runtime path without real hardware.
 
-![walking_zoo robot runtime demo](docs/assets/readme/walking_robot_runtime.gif)
+![walking_zoo simulated biped runtime demo](docs/assets/readme/simulated_biped_runtime.gif)
 
-Trip the e-stop gate and the walking robot stops before another adapter command
-can pass through.
+Trip the e-stop gate and the simulated robot settles into support before another
+adapter command can pass through.
 
-![walking_zoo robot estop demo](docs/assets/readme/walking_robot_estop.gif)
+![walking_zoo simulated estop demo](docs/assets/readme/simulated_estop_stop.gif)
 
-Watch the same mock runtime state changes as ROS2 messages.
+Preview the same runtime idea with a quadruped trot profile, which is the first
+path for Unitree Go2-style velocity command demos.
 
-![mock runtime state transitions](docs/assets/readme/mock_runtime_state.gif)
+![walking_zoo simulated quadruped trot](docs/assets/readme/simulated_quadruped_trot.gif)
+
+Preview a future footstep command surface with alternating contacts and COM
+motion.
+
+![walking_zoo simulated footstep plan](docs/assets/readme/simulated_footstep_plan.gif)
 
 Use Nav2's standard `/cmd_vel` output while keeping walking execution inside a
 ROS2-native runtime boundary.
@@ -132,6 +138,10 @@ Regenerate the README GIFs:
 ```bash
 python3 tools/render_readme_gifs.py
 ```
+
+The README robot GIFs are generated from deterministic gait, footstep, and
+runtime-state simulations. They are documentation assets, not a new simulator
+inside walking_zoo.
 
 Expected behavior:
 
