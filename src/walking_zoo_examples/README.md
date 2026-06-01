@@ -17,3 +17,24 @@ Trigger the emergency stop gate:
 ```bash
 ros2 run walking_zoo_examples send_estop.py
 ```
+
+Run the optional MuJoCo Unitree G1 gait demo:
+
+```bash
+colcon build --symlink-install
+source install/setup.bash
+python3 -m pip install -r tools/readme_gif_requirements.txt
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
+ros2 launch walking_zoo_bringup mujoco_g1_gait_demo.launch.py
+```
+
+Switch gaits with semantic actions:
+
+```bash
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'run_forward'}" --once
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'sidestep_left'}" --once
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'turn_right'}" --once
+```
+
+The demo writes `/tmp/walking_zoo_mujoco_g1_demo/latest.png` and
+`/tmp/walking_zoo_mujoco_g1_demo/live.gif`.

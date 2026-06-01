@@ -108,6 +108,36 @@ Or run the end-to-end mock runtime check:
 python3 tools/check_mock_runtime_e2e.py
 ```
 
+## Live MuJoCo G1 Demo
+
+Run a headless Unitree G1 gait visualizer that listens to walking_zoo ROS2
+topics and writes `latest.png` plus `live.gif`:
+
+```bash
+colcon build --symlink-install
+source install/setup.bash
+python3 -m pip install -r tools/readme_gif_requirements.txt
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
+ros2 launch walking_zoo_bringup mujoco_g1_gait_demo.launch.py
+```
+
+Drive the demo through standard velocity commands:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.25}, angular: {z: 0.0}}" --rate 10
+```
+
+Or switch gaits through semantic actions:
+
+```bash
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'sidestep_left'}" --once
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'turn_right'}" --once
+```
+
+Open `/tmp/walking_zoo_mujoco_g1_demo/latest.png` or
+`/tmp/walking_zoo_mujoco_g1_demo/live.gif` to inspect the current simulated
+runtime target.
+
 Regenerate the README GIFs:
 
 ```bash
