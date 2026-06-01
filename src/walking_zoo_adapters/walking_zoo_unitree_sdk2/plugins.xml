@@ -1,0 +1,8 @@
+<library path="walking_zoo_unitree_sdk2">
+  <class
+    name="walking_zoo_unitree_sdk2/UnitreeSdk2Adapter"
+    type="walking_zoo_unitree_sdk2::UnitreeSdk2Adapter"
+    base_class_type="walking_zoo_core::WalkingAdapter">
+    <description>Optional Unitree SDK2 adapter skeleton. Motion is disabled by default.</description>
+  </class>
+</library>

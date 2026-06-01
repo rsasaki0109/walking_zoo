@@ -1,0 +1,6 @@
+uint8 locomotion_mode
+string reason
+---
+bool accepted
+uint8 active_locomotion_mode
+string status_text

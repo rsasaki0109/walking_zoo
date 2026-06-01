@@ -1,0 +1,11 @@
+<root main_tree_to_execute="WalkingZooRecovery">
+  <BehaviorTree ID="WalkingZooRecovery">
+    <Fallback name="walking_zoo_recovery">
+      <CheckWalkingReady/>
+      <Sequence>
+        <ClearWalkingFault/>
+        <CheckWalkingReady/>
+      </Sequence>
+    </Fallback>
+  </BehaviorTree>
+</root>

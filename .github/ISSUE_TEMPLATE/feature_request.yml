@@ -1,0 +1,17 @@
+name: Feature request
+description: Request a walking_zoo feature
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Approach
+    validations:
+      required: true

@@ -1,0 +1,6 @@
+bool stop
+string reason
+---
+bool success
+bool estop_active
+string status_text

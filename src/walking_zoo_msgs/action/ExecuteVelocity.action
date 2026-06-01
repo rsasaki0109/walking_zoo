@@ -1,0 +1,10 @@
+geometry_msgs/TwistStamped command
+float32 duration_sec
+string source
+---
+bool success
+string status_text
+---
+std_msgs/Header header
+WalkingState state
+float32 elapsed_sec

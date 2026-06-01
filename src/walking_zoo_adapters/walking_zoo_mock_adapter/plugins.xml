@@ -1,0 +1,8 @@
+<library path="walking_zoo_mock_adapter">
+  <class
+    name="walking_zoo_mock_adapter/MockWalkingAdapter"
+    type="walking_zoo_mock_adapter::MockWalkingAdapter"
+    base_class_type="walking_zoo_core::WalkingAdapter">
+    <description>Mock walking robot adapter for demos and tests.</description>
+  </class>
+</library>

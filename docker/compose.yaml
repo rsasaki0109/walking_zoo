@@ -1,0 +1,6 @@
+services:
+  walking_zoo_jazzy:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.jazzy
+    command: bash -lc "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 launch walking_zoo_bringup mock_runtime.launch.py"

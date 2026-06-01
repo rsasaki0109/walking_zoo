@@ -1,0 +1,23 @@
+name: Robot adapter request
+description: Request support for a robot platform
+title: "[Adapter]: "
+labels: ["adapter"]
+body:
+  - type: input
+    id: robot
+    attributes:
+      label: Robot model
+    validations:
+      required: true
+  - type: textarea
+    id: sdk
+    attributes:
+      label: SDK or ROS interface
+      description: Link public SDKs, ROS packages, or docs.
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Desired capabilities
+      description: Velocity, stand/sit, body pose, footsteps, estop, state readout.

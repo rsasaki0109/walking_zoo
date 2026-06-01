@@ -1,0 +1,9 @@
+SemanticAction action
+string source
+---
+bool success
+string status_text
+---
+std_msgs/Header header
+WalkingState state
+string active_phase

@@ -1,0 +1,9 @@
+FootstepPlan plan
+string source
+---
+bool success
+string status_text
+---
+std_msgs/Header header
+WalkingState state
+uint32 completed_steps

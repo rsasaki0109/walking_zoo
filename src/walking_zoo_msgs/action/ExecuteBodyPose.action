@@ -1,0 +1,9 @@
+BodyPoseCommand command
+string source
+---
+bool success
+string status_text
+---
+std_msgs/Header header
+WalkingState state
+float32 elapsed_sec

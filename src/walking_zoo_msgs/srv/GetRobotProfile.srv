@@ -1,0 +1,4 @@
+---
+bool success
+RobotProfile profile
+string status_text

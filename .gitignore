@@ -1,0 +1,11 @@
+build/
+install/
+log/
+.colcon/
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+*.bag
+*.db3
+*.mcap

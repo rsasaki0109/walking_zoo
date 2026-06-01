@@ -1,0 +1,19 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-package-xml:
+    runs-on: ubuntu-24.04
+    container: ros:jazzy
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build interface package and run tests
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --packages-select walking_zoo_msgs
+          colcon test --packages-select walking_zoo_msgs
+          colcon test-result --verbose
