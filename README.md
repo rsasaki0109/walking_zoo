@@ -10,12 +10,17 @@ Think **Nav2 for walking robots**: Nav2 decides where a robot should go;
 walking_zoo owns how walking commands are admitted, limited, dispatched, and
 observed across robot-specific SDKs.
 
-![PyBullet Laikago simulation running through walking_zoo](docs/assets/readme/pybullet_laikago_runtime.gif)
+![PyBullet humanoid run simulation running through walking_zoo](docs/assets/readme/pybullet_humanoid_run.gif)
 
 ## Visual Tour
 
-Run the mock runtime, send a Nav2-style velocity command, and watch a Laikago
-robot rendered in PyBullet move through the runtime path without real hardware.
+Preview the humanoid target path with PyBullet's humanoid URDF driven by the
+`humanoid3d_run` motion asset as a walking_zoo runtime target.
+
+![walking_zoo PyBullet humanoid run demo](docs/assets/readme/pybullet_humanoid_run.gif)
+
+Send a Nav2-style velocity command and watch a Laikago robot rendered in
+PyBullet move through the same runtime path without real hardware.
 
 ![walking_zoo PyBullet Laikago runtime demo](docs/assets/readme/pybullet_laikago_runtime.gif)
 
