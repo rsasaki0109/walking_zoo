@@ -327,51 +327,160 @@ class MujocoUnitreeG1Scene:
     def _set_joint(self, qpos, name, value):
         qpos[self.joint_qpos[name]] = value
 
-    def _g1_run_pose(self, frame_index):
-        qpos = self.stand_qpos.copy()
-        phase = 2.0 * math.pi * (frame_index / 24.0)
-        sin_phase = math.sin(phase)
-        cos_phase = math.cos(phase)
-        qpos[0] = 0.035 * frame_index
-        qpos[2] = 0.82 + 0.02 * max(0.0, cos_phase)
-        qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+    def _yaw_quat(self, yaw):
+        return [math.cos(yaw * 0.5), 0.0, 0.0, math.sin(yaw * 0.5)]
 
+    def _set_forward_gait(
+        self,
+        qpos,
+        sin_phase,
+        cos_phase,
+        hip_amp,
+        knee_base,
+        knee_amp,
+        ankle_base,
+        ankle_amp,
+        arm_amp,
+    ):
         for side, value in (("left", sin_phase), ("right", -sin_phase)):
             swing = max(0.0, value)
-            self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.48 * value)
-            self._set_joint(qpos, f"{side}_knee_joint", 0.32 + 0.62 * swing)
+            self._set_joint(qpos, f"{side}_hip_pitch_joint", -hip_amp * value)
+            self._set_joint(qpos, f"{side}_knee_joint", knee_base + knee_amp * swing)
             self._set_joint(
                 qpos,
                 f"{side}_ankle_pitch_joint",
-                -0.18 - 0.18 * swing + 0.10 * value,
+                ankle_base - ankle_amp * swing + 0.10 * value,
             )
 
         self._set_joint(qpos, "left_hip_roll_joint", 0.04 * cos_phase)
         self._set_joint(qpos, "right_hip_roll_joint", -0.04 * cos_phase)
         self._set_joint(qpos, "waist_pitch_joint", -0.07)
         self._set_joint(qpos, "waist_yaw_joint", 0.05 * sin_phase)
-        self._set_joint(qpos, "left_shoulder_pitch_joint", -0.65 * sin_phase)
-        self._set_joint(qpos, "right_shoulder_pitch_joint", 0.65 * sin_phase)
+        self._set_joint(qpos, "left_shoulder_pitch_joint", -arm_amp * sin_phase)
+        self._set_joint(qpos, "right_shoulder_pitch_joint", arm_amp * sin_phase)
         self._set_joint(qpos, "left_shoulder_roll_joint", 0.10)
         self._set_joint(qpos, "right_shoulder_roll_joint", -0.10)
         self._set_joint(qpos, "left_elbow_joint", 0.50 + 0.20 * max(0.0, -sin_phase))
         self._set_joint(qpos, "right_elbow_joint", 0.50 + 0.20 * max(0.0, sin_phase))
+
+    def _g1_gait_pose(self, frame_index, gait):
+        qpos = self.stand_qpos.copy()
+        period = 30.0 if gait == "walk" else 24.0
+        phase = 2.0 * math.pi * (frame_index / period)
+        sin_phase = math.sin(phase)
+        cos_phase = math.cos(phase)
+
+        if gait == "walk":
+            qpos[0] = 0.022 * frame_index
+            qpos[2] = 0.81 + 0.012 * max(0.0, cos_phase)
+            qpos[3:7] = self._yaw_quat(0.0)
+            self._set_forward_gait(qpos, sin_phase, cos_phase, 0.30, 0.18, 0.38, -0.13, 0.12, 0.36)
+        elif gait == "run":
+            qpos[0] = 0.035 * frame_index
+            qpos[2] = 0.82 + 0.02 * max(0.0, cos_phase)
+            qpos[3:7] = self._yaw_quat(0.0)
+            self._set_forward_gait(qpos, sin_phase, cos_phase, 0.48, 0.32, 0.62, -0.18, 0.18, 0.65)
+        elif gait == "sidestep":
+            qpos[1] = 0.018 * frame_index
+            qpos[2] = 0.81 + 0.012 * max(0.0, cos_phase)
+            qpos[3:7] = self._yaw_quat(0.0)
+            for side, value, sign in (("left", sin_phase, 1.0), ("right", -sin_phase, -1.0)):
+                swing = max(0.0, value)
+                self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.08 * value)
+                self._set_joint(qpos, f"{side}_hip_roll_joint", sign * (0.06 + 0.24 * swing))
+                self._set_joint(qpos, f"{side}_hip_yaw_joint", 0.06 * value)
+                self._set_joint(qpos, f"{side}_knee_joint", 0.24 + 0.42 * swing)
+                self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.10 - 0.08 * swing)
+                self._set_joint(qpos, f"{side}_ankle_roll_joint", -sign * (0.05 + 0.16 * swing))
+            self._set_joint(qpos, "waist_roll_joint", 0.05 * sin_phase)
+            self._set_joint(qpos, "left_shoulder_pitch_joint", -0.22 * sin_phase)
+            self._set_joint(qpos, "right_shoulder_pitch_joint", 0.22 * sin_phase)
+            self._set_joint(qpos, "left_elbow_joint", 0.50)
+            self._set_joint(qpos, "right_elbow_joint", 0.50)
+        elif gait == "turn":
+            yaw = 0.030 * frame_index
+            qpos[2] = 0.81 + 0.010 * max(0.0, cos_phase)
+            qpos[3:7] = self._yaw_quat(yaw)
+            for side, value, sign in (("left", sin_phase, 1.0), ("right", -sin_phase, -1.0)):
+                swing = max(0.0, value)
+                self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.22 * value)
+                self._set_joint(qpos, f"{side}_hip_yaw_joint", sign * (0.10 + 0.18 * swing))
+                self._set_joint(qpos, f"{side}_knee_joint", 0.24 + 0.42 * swing)
+                self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.12 - 0.10 * swing)
+                self._set_joint(qpos, f"{side}_ankle_roll_joint", -sign * 0.06 * swing)
+            self._set_joint(qpos, "waist_yaw_joint", 0.08 * sin_phase)
+            self._set_joint(qpos, "left_shoulder_pitch_joint", -0.30 * sin_phase)
+            self._set_joint(qpos, "right_shoulder_pitch_joint", 0.30 * sin_phase)
+            self._set_joint(qpos, "left_elbow_joint", 0.52)
+            self._set_joint(qpos, "right_elbow_joint", 0.52)
+        else:
+            raise ValueError(f"unknown gait: {gait}")
+
         return qpos
 
-    def apply_run_frame(self, frame_index):
-        self.data.qpos[:] = self._g1_run_pose(frame_index)
+    def apply_gait_frame(self, frame_index, gait):
+        self.data.qpos[:] = self._g1_gait_pose(frame_index, gait)
         self.data.qvel[:] = 0.0
         mujoco.mj_forward(self.model, self.data)
-        return self.data.qpos[0]
+        return self.data.qpos[0], self.data.qpos[1]
 
-    def render(self, x):
-        self.camera.lookat[:] = [x + 0.18, 0.0, 0.82]
+    def apply_run_frame(self, frame_index):
+        x, _y = self.apply_gait_frame(frame_index, "run")
+        return x
+
+    def render(self, x, y=0.0, distance=None, elevation=None):
+        if distance is not None:
+            self.camera.distance = distance
+        if elevation is not None:
+            self.camera.elevation = elevation
+        self.camera.lookat[:] = [x + 0.18, y, 0.82]
         self.renderer.update_scene(self.data, camera=self.camera)
         return Image.fromarray(self.renderer.render())
 
 
-def mujoco_unitree_g1_runtime():
-    scene = MujocoUnitreeG1Scene()
+def draw_small_label(img, title, subtitle, accent):
+    draw = ImageDraw.Draw(img)
+    draw_round(draw, (258, 198, 462, 258), (8, 14, 22), accent, radius=12)
+    draw.text((274, 209), title, font=FONT_SMALL, fill=TEXT)
+    draw.text((274, 232), subtitle, font=font(12), fill=MUTED)
+
+
+def mujoco_unitree_g1_gait_gallery(scene=None):
+    owns_scene = scene is None
+    if owns_scene:
+        scene = MujocoUnitreeG1Scene()
+    gait_specs = [
+        ("walk", "Forward walk", "/cmd_vel x=0.20", GREEN),
+        ("run", "Forward run", "semantic/run", YELLOW),
+        ("sidestep", "Sidestep", "body pose lateral", BLUE),
+        ("turn", "Turn-in-place", "yaw command", PURPLE),
+    ]
+    frames = []
+    try:
+        for frame in range(48):
+            tiles = []
+            for gait, title, subtitle, accent in gait_specs:
+                x, y = scene.apply_gait_frame(frame, gait)
+                tile = scene.render(x, y, distance=2.28, elevation=-15).resize(
+                    (480, 270),
+                    Image.Resampling.LANCZOS,
+                )
+                draw_small_label(tile, title, subtitle, accent)
+                tiles.append(tile)
+            canvas = Image.new("RGB", SIZE, BG)
+            for index, tile in enumerate(tiles):
+                canvas.paste(tile, ((index % 2) * 480, (index // 2) * 270))
+            frames.append(canvas)
+    finally:
+        if owns_scene:
+            scene.close()
+    save_gif("mujoco_unitree_g1_gait_gallery.gif", frames, duration=80)
+
+
+def mujoco_unitree_g1_runtime(scene=None):
+    owns_scene = scene is None
+    if owns_scene:
+        scene = MujocoUnitreeG1Scene()
     frames = []
     try:
         for frame in range(54):
@@ -394,7 +503,8 @@ def mujoco_unitree_g1_runtime():
             )
             frames.append(img)
     finally:
-        scene.close()
+        if owns_scene:
+            scene.close()
     save_gif("mujoco_unitree_g1_runtime.gif", frames, duration=70)
 
 
@@ -539,7 +649,12 @@ def vla_path():
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    mujoco_unitree_g1_runtime()
+    g1_scene = MujocoUnitreeG1Scene()
+    try:
+        mujoco_unitree_g1_runtime(g1_scene)
+        mujoco_unitree_g1_gait_gallery(g1_scene)
+    finally:
+        g1_scene.close()
     pybullet_laikago_runtime()
     pybullet_laikago_estop()
     runtime_flow()

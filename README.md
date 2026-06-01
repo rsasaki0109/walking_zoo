@@ -19,6 +19,11 @@ a walking_zoo runtime target.
 
 ![walking_zoo MuJoCo Unitree G1 humanoid demo](docs/assets/readme/mujoco_unitree_g1_runtime.gif)
 
+The gait gallery shows the command surface walking_zoo is designed to normalize:
+forward walk, forward run, sidestep, and turn-in-place.
+
+![walking_zoo MuJoCo Unitree G1 gait gallery](docs/assets/readme/mujoco_unitree_g1_gait_gallery.gif)
+
 Send a Nav2-style velocity command and watch a Laikago robot rendered in
 PyBullet move through the same runtime path without real hardware.
 
@@ -108,12 +113,13 @@ Regenerate the README GIFs:
 ```bash
 python3 -m venv /tmp/walking_zoo_gif_venv
 /tmp/walking_zoo_gif_venv/bin/python -m pip install -r tools/readme_gif_requirements.txt
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
 /tmp/walking_zoo_gif_venv/bin/python tools/render_readme_gifs.py
 ```
 
-The README robot GIFs are rendered with PyBullet's headless renderer using the
-Laikago URDF from `pybullet_data`. They are documentation assets, not a runtime
-dependency and not a new simulator inside walking_zoo.
+The README robot GIFs are rendered with MuJoCo and PyBullet using existing robot
+assets. They are documentation assets, not a runtime dependency and not a new
+simulator inside walking_zoo.
 
 Expected behavior:
 

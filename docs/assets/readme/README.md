@@ -15,6 +15,7 @@ git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp
 Simulator-rendered robot GIFs:
 
 - `mujoco_unitree_g1_runtime.gif`: Unitree G1 rendered with MuJoCo.
+- `mujoco_unitree_g1_gait_gallery.gif`: Unitree G1 forward walk, run, sidestep, and turn-in-place.
 - `pybullet_laikago_runtime.gif`: Laikago velocity runtime path.
 - `pybullet_laikago_estop.gif`: Laikago e-stop behavior.
 
