@@ -10,29 +10,19 @@ Think **Nav2 for walking robots**: Nav2 decides where a robot should go;
 walking_zoo owns how walking commands are admitted, limited, dispatched, and
 observed across robot-specific SDKs.
 
-![kinematic walking simulation running through walking_zoo](docs/assets/readme/simulated_biped_runtime.gif)
+![PyBullet Laikago simulation running through walking_zoo](docs/assets/readme/pybullet_laikago_runtime.gif)
 
 ## Visual Tour
 
-Run the mock runtime, send a Nav2-style velocity command, and watch a simulated
-biped walk through the runtime path without real hardware.
+Run the mock runtime, send a Nav2-style velocity command, and watch a Laikago
+robot rendered in PyBullet move through the runtime path without real hardware.
 
-![walking_zoo simulated biped runtime demo](docs/assets/readme/simulated_biped_runtime.gif)
+![walking_zoo PyBullet Laikago runtime demo](docs/assets/readme/pybullet_laikago_runtime.gif)
 
-Trip the e-stop gate and the simulated robot settles into support before another
-adapter command can pass through.
+Trip the e-stop gate and the simulated robot stops before another adapter
+command can pass through.
 
-![walking_zoo simulated estop demo](docs/assets/readme/simulated_estop_stop.gif)
-
-Preview the same runtime idea with a quadruped trot profile, which is the first
-path for Unitree Go2-style velocity command demos.
-
-![walking_zoo simulated quadruped trot](docs/assets/readme/simulated_quadruped_trot.gif)
-
-Preview a future footstep command surface with alternating contacts and COM
-motion.
-
-![walking_zoo simulated footstep plan](docs/assets/readme/simulated_footstep_plan.gif)
+![walking_zoo PyBullet estop demo](docs/assets/readme/pybullet_laikago_estop.gif)
 
 Use Nav2's standard `/cmd_vel` output while keeping walking execution inside a
 ROS2-native runtime boundary.
@@ -136,12 +126,14 @@ python3 tools/check_mock_runtime_e2e.py
 Regenerate the README GIFs:
 
 ```bash
-python3 tools/render_readme_gifs.py
+python3 -m venv /tmp/walking_zoo_gif_venv
+/tmp/walking_zoo_gif_venv/bin/python -m pip install -r tools/readme_gif_requirements.txt
+/tmp/walking_zoo_gif_venv/bin/python tools/render_readme_gifs.py
 ```
 
-The README robot GIFs are generated from deterministic gait, footstep, and
-runtime-state simulations. They are documentation assets, not a new simulator
-inside walking_zoo.
+The README robot GIFs are rendered with PyBullet's headless renderer using the
+Laikago URDF from `pybullet_data`. They are documentation assets, not a runtime
+dependency and not a new simulator inside walking_zoo.
 
 Expected behavior:
 

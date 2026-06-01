@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Render README GIFs from lightweight walking simulations.
+"""Render README GIFs with an existing simulator.
 
-These assets are documentation-only. They are generated from deterministic
-gait, footstep, and runtime-state simulations so the README does not depend on
-hand-animated toy poses or a heavyweight simulator.
+Robot GIFs are rendered by PyBullet's headless TinyRenderer using the Laikago
+URDF from pybullet_data. The script is intentionally optional and is not part of
+the walking_zoo runtime dependency set.
 """
 
 from pathlib import Path
@@ -11,6 +11,17 @@ import math
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
+try:
+    import pybullet as p
+    import pybullet_data
+except ImportError as error:
+    raise SystemExit(
+        "PyBullet is required for README robot GIF generation.\n"
+        "Use: python3 -m venv /tmp/walking_zoo_gif_venv && "
+        "/tmp/walking_zoo_gif_venv/bin/python -m pip install -r "
+        "tools/readme_gif_requirements.txt"
+    ) from error
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +31,6 @@ SIZE = (960, 540)
 BG = (9, 14, 22)
 PANEL = (18, 28, 40)
 PANEL_2 = (26, 40, 56)
-GRID = (33, 47, 62)
 TEXT = (232, 238, 245)
 MUTED = (144, 160, 176)
 GREEN = (70, 210, 160)
@@ -98,283 +108,184 @@ def save_gif(name, frames, duration=90):
     print(path.relative_to(ROOT))
 
 
-def world_to_px(x, z, camera_x, ground_y=430, scale=205):
-    return int(160 + (x - camera_x) * scale), int(ground_y - z * scale)
-
-
-def two_link_ik(hip, foot, l1, l2, knee_sign=1.0):
-    hx, hz = hip
-    fx, fz = foot
-    dx = fx - hx
-    dz = fz - hz
-    distance = float(np.hypot(dx, dz))
-    distance = max(1e-5, min(distance, l1 + l2 - 1e-5))
-    midpoint = ((hx + fx) * 0.5, (hz + fz) * 0.5)
-    a = (l1 * l1 - l2 * l2 + distance * distance) / (2.0 * distance)
-    h = math.sqrt(max(0.0, l1 * l1 - a * a))
-    ux = dx / distance
-    uz = dz / distance
-    px = hx + a * ux
-    pz = hz + a * uz
-    knee = (px - knee_sign * h * uz, pz + knee_sign * h * ux)
-    return knee
-
-
-def gait_foot_relative(t, offset, step_length=0.34, step_time=0.62, duty=0.63):
-    phase = (t / step_time + offset) % 1.0
-    if phase < duty:
-        s = phase / duty
-        x = 0.5 * step_length - step_length * s
-        z = 0.0
-        contact = True
-    else:
-        s = (phase - duty) / (1.0 - duty)
-        x = -0.5 * step_length + step_length * (3.0 * s * s - 2.0 * s * s * s)
-        z = 0.095 * math.sin(math.pi * s)
-        contact = False
-    return x, z, contact
-
-
-def draw_grid_ground(draw, ground_y=430):
-    for x in range(40, 920, 60):
-        draw.line((x, 134, x, ground_y + 20), fill=GRID, width=1)
-    for y in range(160, ground_y + 1, 48):
-        draw.line((40, y, 920, y), fill=GRID, width=1)
-    draw.line((40, ground_y, 920, ground_y), fill=(92, 116, 132), width=4)
-
-
-def draw_link(draw, p0, p1, color, width=8):
-    draw.line((p0[0], p0[1], p1[0], p1[1]), fill=color, width=width)
-    r = max(3, width // 2)
-    draw.ellipse((p0[0] - r, p0[1] - r, p0[0] + r, p0[1] + r), fill=color)
-    draw.ellipse((p1[0] - r, p1[1] - r, p1[0] + r, p1[1] + r), fill=color)
-
-
-def draw_biped(draw, t, root_x, camera_x, color=GREEN, stopped=False):
-    hip_z = 0.88 + (0.0 if stopped else 0.025 * math.sin(2.0 * math.pi * t / 0.62))
-    torso_z = hip_z + 0.34
-    head_z = torso_z + 0.21
-    l1 = 0.43
-    l2 = 0.44
-    foot_offsets = [("L", 0.00, -0.045, BLUE), ("R", 0.50, 0.045, GREEN)]
-    hip_world = (root_x, hip_z)
-    hip_px = world_to_px(*hip_world, camera_x)
-    torso_px = world_to_px(root_x + 0.02 * math.sin(t * 2.0), torso_z, camera_x)
-    head_px = world_to_px(root_x + 0.03 * math.sin(t * 2.0), head_z, camera_x)
-
-    contacts = []
-    for label, offset, lateral, leg_color in foot_offsets:
-        rel_x, rel_z, contact = gait_foot_relative(t, offset)
-        if stopped:
-            rel_x = -0.08 if label == "L" else 0.11
-            rel_z = 0.0
-            contact = True
-        foot_world = (root_x + rel_x, rel_z)
-        knee_world = two_link_ik(hip_world, foot_world, l1, l2, knee_sign=-1.0)
-        foot_px = world_to_px(*foot_world, camera_x)
-        knee_px = world_to_px(*knee_world, camera_x)
-        shade = leg_color if contact else (120, 150, 180)
-        draw_link(draw, hip_px, knee_px, shade, width=8)
-        draw_link(draw, knee_px, foot_px, shade, width=8)
-        draw.line((foot_px[0] - 22, foot_px[1], foot_px[0] + 26, foot_px[1]), fill=TEXT, width=5)
-        if contact:
-            contacts.append((foot_px[0], foot_px[1], label))
-
-    draw_link(draw, hip_px, torso_px, color, width=12)
-    draw_round(
-        draw,
-        (torso_px[0] - 42, torso_px[1] - 60, torso_px[0] + 44, torso_px[1] + 36),
-        (28, 42, 54),
-        color,
-        radius=14,
-        width=3,
-    )
-    draw_round(
-        draw,
-        (head_px[0] - 28, head_px[1] - 24, head_px[0] + 28, head_px[1] + 28),
-        (34, 50, 64),
-        color,
-        radius=11,
-        width=3,
-    )
-    draw.ellipse((torso_px[0] - 7, torso_px[1] - 6, torso_px[0] + 7, torso_px[1] + 8), fill=YELLOW)
-    draw.ellipse((head_px[0] - 14, head_px[1] - 2, head_px[0] - 8, head_px[1] + 4), fill=BLUE)
-    draw.ellipse((head_px[0] + 8, head_px[1] - 2, head_px[0] + 14, head_px[1] + 4), fill=BLUE)
-    for x, y, label in contacts:
-        draw.text((x - 6, y + 9), label, font=FONT_SMALL, fill=MUTED)
-
-
-def draw_state_panel(draw, title, rows, accent=GREEN):
-    draw_round(draw, (642, 136, 890, 314), PANEL_2, accent, radius=18)
-    text_center(draw, (662, 150, 870, 194), title, accent, FONT_BODY)
-    y = 205
+def overlay_panel(img, title, rows, accent=GREEN):
+    draw = ImageDraw.Draw(img)
+    draw_round(draw, (635, 132, 902, 326), PANEL_2, accent, radius=18)
+    text_center(draw, (655, 146, 882, 190), title, accent, FONT_BODY)
+    y = 204
     for key, value, color in rows:
-        draw.text((668, y), key, font=FONT_SMALL, fill=MUTED)
+        draw.text((662, y), key, font=FONT_SMALL, fill=MUTED)
         draw.text((790, y), value, font=FONT_SMALL, fill=color)
-        y += 28
+        y += 29
 
 
-def simulated_biped_runtime():
-    frames = []
-    ts = np.linspace(0.0, 3.8, 38)
-    speed = 0.34
-    for t in ts:
-        root_x = speed * t
-        camera_x = max(0.0, root_x - 0.32)
-        img, draw = base("walking_zoo simulation", "kinematic biped gait driven by runtime state")
-        draw_grid_ground(draw)
-        draw_biped(draw, t, root_x, camera_x, GREEN)
-        draw_state_panel(
-            draw,
-            "ROS2 runtime",
-            [
-                ("input", "/cmd_vel", BLUE),
-                ("safety", "passed", YELLOW),
-                ("adapter", "mock", GREEN),
-                ("state", "WALKING", PURPLE),
-            ],
-            GREEN,
+class PyBulletLaikagoScene:
+    def __init__(self):
+        self.client = p.connect(p.DIRECT)
+        p.setAdditionalSearchPath(pybullet_data.getDataPath(), physicsClientId=self.client)
+        p.setGravity(0, 0, -9.81, physicsClientId=self.client)
+        p.setTimeStep(1.0 / 240.0, physicsClientId=self.client)
+        self.plane = p.loadURDF("plane.urdf", physicsClientId=self.client)
+        self.robot = p.loadURDF(
+            "laikago/laikago_toes_zup.urdf",
+            [0.0, 0.0, 0.58],
+            p.getQuaternionFromEuler([0.0, 0.0, 0.0]),
+            flags=p.URDF_USE_SELF_COLLISION,
+            physicsClientId=self.client,
         )
-        draw.text((58, 464), "Simulated gait: alternating support, swing foot trajectory, two-link IK, COM marker", font=FONT_SMALL, fill=MUTED)
-        frames.append(img)
-    save_gif("simulated_biped_runtime.gif", frames, duration=80)
+        self.legs = {
+            "FR": (0, 1, 2, 0.00),
+            "FL": (4, 5, 6, math.pi),
+            "RR": (8, 9, 10, math.pi),
+            "RL": (12, 13, 14, 0.00),
+        }
+        self.stand_upper = 0.72
+        self.stand_knee = -1.42
 
+        for _name, (hip, upper, knee, _phase) in self.legs.items():
+            p.resetJointState(self.robot, hip, 0.0, physicsClientId=self.client)
+            p.resetJointState(self.robot, upper, self.stand_upper, physicsClientId=self.client)
+            p.resetJointState(self.robot, knee, self.stand_knee, physicsClientId=self.client)
+        for _ in range(20):
+            p.stepSimulation(physicsClientId=self.client)
 
-def simulated_estop_stop():
-    frames = []
-    ts = np.linspace(0.0, 4.0, 40)
-    speed = 0.34
-    estop_t = 2.45
-    decel = 1.1
-    for t in ts:
-        if t <= estop_t:
-            root_x = speed * t
-            velocity = speed
-            stopped = False
-        else:
-            tau = min(t - estop_t, speed / decel)
-            root_x = speed * estop_t + speed * tau - 0.5 * decel * tau * tau
-            velocity = max(0.0, speed - decel * tau)
-            stopped = velocity < 0.03
-        camera_x = max(0.0, root_x - 0.32)
-        img, draw = base("e-stop simulation", "runtime gate blocks motion and the gait settles")
-        draw_grid_ground(draw)
-        draw_biped(draw, t, root_x, camera_x, RED if stopped else GREEN, stopped=stopped)
-        draw_state_panel(
-            draw,
-            "Safety gate",
-            [
-                ("velocity", f"{velocity:.2f} m/s", GREEN if not stopped else RED),
-                ("estop", "active" if t >= estop_t else "false", RED if t >= estop_t else GREEN),
-                ("adapter", "blocked" if t >= estop_t else "accepted", RED if t >= estop_t else GREEN),
-                ("state", "ESTOPPED" if stopped else "WALKING", RED if stopped else PURPLE),
-            ],
-            RED if t >= estop_t else GREEN,
+    def close(self):
+        p.disconnect(self.client)
+
+    def apply_trot_pose(self, sim_t, x, stopped=False):
+        z = 0.49 + (0.0 if stopped else 0.025 * math.sin(2.0 * math.pi * sim_t * 2.0))
+        pitch = 0.0 if stopped else 0.035 * math.sin(2.0 * math.pi * sim_t * 1.4)
+        yaw = 0.0 if stopped else 0.015 * math.sin(2.0 * math.pi * sim_t * 0.7)
+        p.resetBasePositionAndOrientation(
+            self.robot,
+            [x, 0.0, z],
+            p.getQuaternionFromEuler([0.0, pitch, yaw]),
+            physicsClientId=self.client,
         )
-        draw.text((58, 464), "Simulated stop profile: command gate closes, velocity decays, feet return to support", font=FONT_SMALL, fill=MUTED)
-        frames.append(img)
-    save_gif("simulated_estop_stop.gif", frames, duration=80)
-
-
-def draw_quadruped(draw, t, root_x, camera_x):
-    ground_y = 430
-    body_z = 0.54 + 0.015 * math.sin(4.0 * math.pi * t)
-    body = world_to_px(root_x, body_z, camera_x, ground_y, 260)
-    draw_round(draw, (body[0] - 92, body[1] - 42, body[0] + 92, body[1] + 36), (28, 42, 54), GREEN, radius=18, width=3)
-    draw_round(draw, (body[0] + 74, body[1] - 30, body[0] + 122, body[1] + 18), (34, 50, 64), GREEN, radius=12, width=3)
-    legs = [
-        ("FL", 0.00, 0.30, BLUE),
-        ("RR", 0.00, -0.30, BLUE),
-        ("FR", 0.50, 0.30, PURPLE),
-        ("RL", 0.50, -0.30, PURPLE),
-    ]
-    for name, offset, rel_body_x, color in legs:
-        rel_x, foot_z, contact = gait_foot_relative(t, offset, step_length=0.26, step_time=0.44, duty=0.58)
-        hip_world = (root_x + rel_body_x, body_z - 0.07)
-        foot_world = (root_x + rel_body_x + rel_x, foot_z)
-        knee_world = two_link_ik(hip_world, foot_world, 0.30, 0.32, knee_sign=-1.0)
-        hip_px = world_to_px(*hip_world, camera_x, ground_y, 260)
-        knee_px = world_to_px(*knee_world, camera_x, ground_y, 260)
-        foot_px = world_to_px(*foot_world, camera_x, ground_y, 260)
-        leg_color = color if contact else (118, 145, 172)
-        draw_link(draw, hip_px, knee_px, leg_color, 6)
-        draw_link(draw, knee_px, foot_px, leg_color, 6)
-        draw.line((foot_px[0] - 16, foot_px[1], foot_px[0] + 20, foot_px[1]), fill=TEXT, width=4)
-        if contact:
-            draw.text((foot_px[0] - 12, foot_px[1] + 7), name, font=FONT_SMALL, fill=MUTED)
-
-
-def simulated_quadruped_trot():
-    frames = []
-    ts = np.linspace(0.0, 2.8, 34)
-    speed = 0.48
-    for t in ts:
-        root_x = speed * t
-        camera_x = max(0.0, root_x - 0.35)
-        img, draw = base("quadruped trot simulation", "Go2-style velocity command through the same runtime path")
-        draw_grid_ground(draw)
-        draw_quadruped(draw, t, root_x, camera_x)
-        draw_state_panel(
-            draw,
-            "RobotProfile",
-            [
-                ("family", "quadruped", BLUE),
-                ("gait", "trot", GREEN),
-                ("cmd", "vx=0.48", YELLOW),
-                ("state", "WALKING", PURPLE),
-            ],
-            GREEN,
+        p.resetBaseVelocity(
+            self.robot,
+            [0.36 if not stopped else 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            physicsClientId=self.client,
         )
-        frames.append(img)
-    save_gif("simulated_quadruped_trot.gif", frames, duration=80)
 
+        for _name, (hip, upper, knee, phase) in self.legs.items():
+            ph = 2.0 * math.pi * 1.7 * sim_t + phase
+            if stopped:
+                target_hip = 0.0
+                target_upper = self.stand_upper
+                target_knee = self.stand_knee
+            else:
+                swing = math.sin(ph)
+                lift = max(0.0, math.sin(ph))
+                target_hip = 0.10 * math.sin(ph + 0.5)
+                target_upper = self.stand_upper + 0.20 * swing + 0.12 * lift
+                target_knee = self.stand_knee - 0.25 * lift + 0.08 * swing
+            for joint, angle in ((hip, target_hip), (upper, target_upper), (knee, target_knee)):
+                p.resetJointState(self.robot, joint, angle, physicsClientId=self.client)
+                p.setJointMotorControl2(
+                    self.robot,
+                    joint,
+                    p.POSITION_CONTROL,
+                    targetPosition=angle,
+                    force=95,
+                    positionGain=0.75,
+                    velocityGain=0.25,
+                    physicsClientId=self.client,
+                )
+        p.stepSimulation(physicsClientId=self.client)
 
-def simulated_footstep_plan():
-    frames = []
-    footsteps = []
-    for i in range(10):
-        footsteps.append((0.18 + i * 0.18, 0.10 if i % 2 == 0 else -0.10, "L" if i % 2 == 0 else "R"))
-    for frame in range(32):
-        progress = frame / 31
-        img, draw = base("footstep plan simulation", "preview COM and alternating support contacts")
-        draw_round(draw, (58, 130, 902, 455), (7, 12, 18), LINE, radius=16)
-        scale = 350
-        ox, oy = 120, 292
-        for gx in np.linspace(0.0, 2.0, 11):
-            x = int(ox + gx * scale)
-            draw.line((x, 150, x, 430), fill=GRID, width=1)
-        for gy in np.linspace(-0.3, 0.3, 7):
-            y = int(oy - gy * scale)
-            draw.line((80, y, 870, y), fill=GRID, width=1)
-        draw.line((80, oy, 870, oy), fill=(90, 112, 130), width=2)
-        visible_count = max(1, int(progress * len(footsteps)))
-        for idx, (x_m, y_m, side) in enumerate(footsteps[:visible_count]):
-            px = int(ox + x_m * scale)
-            py = int(oy - y_m * scale)
-            color = BLUE if side == "L" else GREEN
-            draw_round(draw, (px - 28, py - 14, px + 28, py + 14), PANEL_2, color, radius=7)
-            text_center(draw, (px - 28, py - 14, px + 28, py + 14), side, color, FONT_SMALL)
-            if idx > 0:
-                prev = footsteps[idx - 1]
-                draw.line((int(ox + prev[0] * scale), int(oy - prev[1] * scale), px, py), fill=LINE, width=2)
-        com_x = 0.18 + progress * (footsteps[-1][0] - 0.18)
-        com_y = 0.04 * math.sin(progress * math.pi * 5)
-        com = (int(ox + com_x * scale), int(oy - com_y * scale))
-        draw.ellipse((com[0] - 10, com[1] - 10, com[0] + 10, com[1] + 10), fill=YELLOW)
-        draw.text((com[0] + 14, com[1] - 9), "COM", font=FONT_SMALL, fill=YELLOW)
-        draw_state_panel(
-            draw,
-            "Runtime API",
-            [
-                ("action", "FootstepPlan", BLUE),
-                ("support", "alternating", GREEN),
-                ("preview", "COM trace", YELLOW),
-                ("safety", "feasibility", PURPLE),
-            ],
-            BLUE,
+    def render(self, x, yaw=0.0):
+        view = p.computeViewMatrix(
+            cameraEyePosition=[x - 1.65, -2.45, 1.15],
+            cameraTargetPosition=[x + 0.18, 0.0, 0.38],
+            cameraUpVector=[0.0, 0.0, 1.0],
         )
-        frames.append(img)
-    save_gif("simulated_footstep_plan.gif", frames, duration=90)
+        projection = p.computeProjectionMatrixFOV(
+            fov=48,
+            aspect=SIZE[0] / SIZE[1],
+            nearVal=0.05,
+            farVal=50.0,
+        )
+        _w, _h, rgba, _depth, _seg = p.getCameraImage(
+            width=SIZE[0],
+            height=SIZE[1],
+            viewMatrix=view,
+            projectionMatrix=projection,
+            renderer=p.ER_TINY_RENDERER,
+            physicsClientId=self.client,
+        )
+        arr = np.reshape(np.asarray(rgba, dtype=np.uint8), (SIZE[1], SIZE[0], 4))
+        return Image.fromarray(arr[:, :, :3], "RGB")
+
+
+def pybullet_laikago_runtime():
+    scene = PyBulletLaikagoScene()
+    frames = []
+    try:
+        for frame in range(44):
+            sim_t = frame / 12.0
+            x = 0.28 * sim_t
+            scene.apply_trot_pose(sim_t, x)
+            img = scene.render(x)
+            draw = ImageDraw.Draw(img)
+            draw_round(draw, (26, 24, 595, 110), (8, 14, 22), GREEN, radius=18)
+            draw.text((48, 40), "PyBullet Laikago simulation", font=FONT_TITLE, fill=TEXT)
+            draw.text((50, 84), "Nav2 /cmd_vel -> walking_zoo runtime -> mock adapter", font=FONT_SMALL, fill=MUTED)
+            overlay_panel(
+                img,
+                "ROS2 runtime",
+                [
+                    ("input", "/cmd_vel", BLUE),
+                    ("safety", "passed", YELLOW),
+                    ("adapter", "mock", GREEN),
+                    ("state", "WALKING", PURPLE),
+                ],
+                GREEN,
+            )
+            frames.append(img)
+    finally:
+        scene.close()
+    save_gif("pybullet_laikago_runtime.gif", frames, duration=80)
+
+
+def pybullet_laikago_estop():
+    scene = PyBulletLaikagoScene()
+    frames = []
+    try:
+        stop_x = 0.0
+        for frame in range(44):
+            sim_t = frame / 12.0
+            estop = frame >= 25
+            if not estop:
+                x = 0.28 * sim_t
+                stop_x = x
+                stopped = False
+            else:
+                tau = min((frame - 25) / 12.0, 0.45)
+                x = stop_x + 0.18 * tau * (1.0 - tau / 0.45)
+                stopped = frame >= 31
+            scene.apply_trot_pose(sim_t, x, stopped=stopped)
+            img = scene.render(x)
+            draw = ImageDraw.Draw(img)
+            draw_round(draw, (26, 24, 585, 110), (8, 14, 22), RED if estop else GREEN, radius=18)
+            draw.text((48, 40), "PyBullet e-stop simulation", font=FONT_TITLE, fill=TEXT)
+            draw.text((50, 84), "runtime gate blocks adapter commands before motion continues", font=FONT_SMALL, fill=MUTED)
+            overlay_panel(
+                img,
+                "Safety gate",
+                [
+                    ("estop", "active" if estop else "false", RED if estop else GREEN),
+                    ("adapter", "blocked" if estop else "accepted", RED if estop else GREEN),
+                    ("velocity", "0.00" if stopped else "0.28", RED if stopped else YELLOW),
+                    ("state", "ESTOPPED" if stopped else "WALKING", RED if stopped else PURPLE),
+                ],
+                RED if estop else GREEN,
+            )
+            frames.append(img)
+    finally:
+        scene.close()
+    save_gif("pybullet_laikago_estop.gif", frames, duration=80)
 
 
 def runtime_flow():
@@ -387,16 +298,19 @@ def runtime_flow():
         ((632, 325, 890, 435), "Adapter Hub", "mock / Unitree / future", BLUE),
     ]
     for active in range(8):
-        img, draw = base("walking_zoo", "ROS2-native Walking Runtime & Adapter Hub")
+        img = Image.new("RGB", SIZE, BG)
+        draw = ImageDraw.Draw(img)
+        draw.text((42, 30), "walking_zoo", font=FONT_TITLE, fill=TEXT)
+        draw.text((44, 78), "ROS2-native Walking Runtime & Adapter Hub", font=FONT_SUB, fill=MUTED)
         for idx, (box, title, sub, color) in enumerate(boxes):
             fill = PANEL_2 if idx <= active // 2 else PANEL
             outline = color if idx <= active // 2 else LINE
             draw_round(draw, box, fill, outline)
             text_center(draw, (box[0], box[1] + 14, box[2], box[1] + 58), title, color, FONT_SUB)
             text_center(draw, (box[0], box[1] + 58, box[2], box[3] - 12), sub, MUTED, FONT_SMALL)
-        p = min(1.0, max(0.0, (active - 1) / 2))
-        arrow(draw, (228, 230), (312, 290), BLUE, progress=p)
-        arrow(draw, (228, 380), (312, 310), PURPLE, progress=p)
+        p0 = min(1.0, max(0.0, (active - 1) / 2))
+        arrow(draw, (228, 230), (312, 290), BLUE, progress=p0)
+        arrow(draw, (228, 380), (312, 310), PURPLE, progress=p0)
         arrow(draw, (548, 300), (632, 220), YELLOW, progress=min(1.0, max(0.0, (active - 3) / 2)))
         arrow(draw, (760, 275), (760, 325), GREEN, progress=min(1.0, max(0.0, (active - 5) / 2)))
         frames.append(img)
@@ -411,7 +325,10 @@ def nav2_bridge():
         ((586, 235, 868, 335), "Runtime", "/walking_zoo/cmd_vel", YELLOW),
     ]
     for step in range(7):
-        img, draw = base("Nav2 Bridge", "use Nav2 with walking robots through ROS2 topics")
+        img = Image.new("RGB", SIZE, BG)
+        draw = ImageDraw.Draw(img)
+        draw.text((42, 30), "Nav2 Bridge", font=FONT_TITLE, fill=TEXT)
+        draw.text((44, 78), "use Nav2 with walking robots through ROS2 topics", font=FONT_SUB, fill=MUTED)
         for idx, (box, title, sub, color) in enumerate(labels):
             draw_round(draw, box, PANEL_2 if idx <= step // 2 else PANEL, color if idx <= step // 2 else LINE)
             text_center(draw, (box[0], box[1] + 12, box[2], box[1] + 52), title, color, FONT_SUB)
@@ -431,8 +348,11 @@ def safety_gate():
         ("adapter command", "sanitized velocity accepted", GREEN),
         ("estop gate", "motion blocked", RED),
     ]
-    for idx, (title, value, color) in enumerate(commands):
-        img, draw = base("Safety Pipeline", "every command is checked before adapter dispatch")
+    for idx, (_title, _value, _color) in enumerate(commands):
+        img = Image.new("RGB", SIZE, BG)
+        draw = ImageDraw.Draw(img)
+        draw.text((42, 30), "Safety Pipeline", font=FONT_TITLE, fill=TEXT)
+        draw.text((44, 78), "every command is checked before adapter dispatch", font=FONT_SUB, fill=MUTED)
         x0 = 90
         for j, (label, text, item_color) in enumerate(commands):
             y0 = 145 + j * 82
@@ -457,7 +377,10 @@ def adapter_hub():
         ("Future adapters", "Digit / Figure / ANYmal", YELLOW),
     ]
     for active in range(len(robots) + 2):
-        img, draw = base("Adapter Hub", "bring your own robot SDK behind one contract")
+        img = Image.new("RGB", SIZE, BG)
+        draw = ImageDraw.Draw(img)
+        draw.text((42, 30), "Adapter Hub", font=FONT_TITLE, fill=TEXT)
+        draw.text((44, 78), "bring your own robot SDK behind one contract", font=FONT_SUB, fill=MUTED)
         draw_round(draw, (330, 185, 630, 355), PANEL_2, GREEN, radius=20)
         text_center(draw, (340, 205, 620, 255), "WalkingAdapter", GREEN, FONT_SUB)
         text_center(draw, (340, 262, 620, 315), "pluginlib contract", TEXT, FONT_BODY)
@@ -486,7 +409,10 @@ def vla_path():
         ("Adapter", "robot SDK hidden", TEXT),
     ]
     for active in range(len(steps) + 1):
-        img, draw = base("VLA-Ready Runtime", "semantic intent never bypasses safety")
+        img = Image.new("RGB", SIZE, BG)
+        draw = ImageDraw.Draw(img)
+        draw.text((42, 30), "VLA-Ready Runtime", font=FONT_TITLE, fill=TEXT)
+        draw.text((44, 78), "semantic intent never bypasses safety", font=FONT_SUB, fill=MUTED)
         for i, (title, sub, color) in enumerate(steps):
             x0 = 48 + i * 178
             box = (x0, 228, x0 + 148, 330)
@@ -503,10 +429,8 @@ def vla_path():
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    simulated_biped_runtime()
-    simulated_estop_stop()
-    simulated_quadruped_trot()
-    simulated_footstep_plan()
+    pybullet_laikago_runtime()
+    pybullet_laikago_estop()
     runtime_flow()
     nav2_bridge()
     safety_gate()
