@@ -138,6 +138,16 @@ Open `/tmp/walking_zoo_mujoco_g1_demo/latest.png` or
 `/tmp/walking_zoo_mujoco_g1_demo/live.gif` to inspect the current simulated
 runtime target.
 
+Run the one-command gait showcase to capture multiple walking styles:
+
+```bash
+ros2 launch walking_zoo_bringup mujoco_g1_gait_showcase.launch.py
+```
+
+The showcase automatically steps through forward walk, forward run, sidestep,
+turn-in-place, stop, and the runtime e-stop gate. It writes
+`/tmp/walking_zoo_mujoco_g1_showcase/latest.png` and `live.gif`.
+
 Regenerate the README GIFs:
 
 ```bash

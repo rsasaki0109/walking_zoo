@@ -268,7 +268,12 @@ class MujocoG1GaitDemo(Node):
                 if not self.live_gif.exists() or self.live_gif.stat().st_size == 0:
                     self.save_live_gif()
             finally:
-                self.renderer.close()
+                try:
+                    self.renderer.close()
+                except KeyboardInterrupt:
+                    pass
+                except Exception as error:
+                    self.get_logger().warn(f"MuJoCo renderer close failed: {error}")
         super().destroy_node()
 
     def on_twist_stamped(self, msg):
@@ -407,6 +412,8 @@ def main():
     node = MujocoG1GaitDemo()
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
         if rclpy.ok():

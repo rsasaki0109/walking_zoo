@@ -38,3 +38,13 @@ ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction 
 
 The demo writes `/tmp/walking_zoo_mujoco_g1_demo/latest.png` and
 `/tmp/walking_zoo_mujoco_g1_demo/live.gif`.
+
+Run the automated gait showcase:
+
+```bash
+ros2 launch walking_zoo_bringup mujoco_g1_gait_showcase.launch.py
+```
+
+The showcase publishes semantic actions for walk, run, sidestep, turn,
+stop, and e-stop. It writes `/tmp/walking_zoo_mujoco_g1_showcase/latest.png`
+and `/tmp/walking_zoo_mujoco_g1_showcase/live.gif`.
