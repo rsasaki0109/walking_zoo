@@ -10,9 +10,12 @@ Think **Nav2 for walking robots**: Nav2 decides where a robot should go;
 walking_zoo owns how walking commands are admitted, limited, dispatched, and
 observed across robot-specific SDKs.
 
-![MuJoCo Unitree G1 simulation running through walking_zoo](docs/assets/readme/mujoco_unitree_g1_runtime.gif)
+![MuJoCo Unitree G1 walking_zoo gait showcase](docs/assets/readme/mujoco_unitree_g1_showcase.gif)
 
 ## Visual Tour
+
+Run the same humanoid gait sequence locally with one launch command:
+`ros2 launch walking_zoo_bringup mujoco_g1_gait_showcase.launch.py`.
 
 Preview the humanoid target path with a Unitree G1 model rendered in MuJoCo as
 a walking_zoo runtime target.
@@ -154,7 +157,9 @@ Regenerate the README GIFs:
 python3 -m venv /tmp/walking_zoo_gif_venv
 /tmp/walking_zoo_gif_venv/bin/python -m pip install -r tools/readme_gif_requirements.txt
 git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
+/tmp/walking_zoo_gif_venv/bin/python tools/render_mujoco_g1_showcase_gif.py
 /tmp/walking_zoo_gif_venv/bin/python tools/render_readme_gifs.py
+python3 tools/check_mujoco_g1_showcase_assets.py
 ```
 
 The README robot GIFs are rendered with MuJoCo and PyBullet using existing robot

@@ -15,3 +15,4 @@
 - README Unitree G1 gait gallery covering forward walk, run, sidestep, and turn-in-place.
 - Optional live MuJoCo Unitree G1 gait demo driven by `/cmd_vel` and semantic actions.
 - One-command MuJoCo Unitree G1 gait showcase launch for walk, run, sidestep, turn, and e-stop.
+- README hero MuJoCo Unitree G1 showcase GIF and asset validation helper.
