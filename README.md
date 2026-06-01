@@ -10,14 +10,14 @@ Think **Nav2 for walking robots**: Nav2 decides where a robot should go;
 walking_zoo owns how walking commands are admitted, limited, dispatched, and
 observed across robot-specific SDKs.
 
-![PyBullet humanoid run simulation running through walking_zoo](docs/assets/readme/pybullet_humanoid_run.gif)
+![MuJoCo Unitree G1 simulation running through walking_zoo](docs/assets/readme/mujoco_unitree_g1_runtime.gif)
 
 ## Visual Tour
 
-Preview the humanoid target path with PyBullet's humanoid URDF driven by the
-`humanoid3d_run` motion asset as a walking_zoo runtime target.
+Preview the humanoid target path with a Unitree G1 model rendered in MuJoCo as
+a walking_zoo runtime target.
 
-![walking_zoo PyBullet humanoid run demo](docs/assets/readme/pybullet_humanoid_run.gif)
+![walking_zoo MuJoCo Unitree G1 humanoid demo](docs/assets/readme/mujoco_unitree_g1_runtime.gif)
 
 Send a Nav2-style velocity command and watch a Laikago robot rendered in
 PyBullet move through the same runtime path without real hardware.
@@ -28,31 +28,6 @@ Trip the e-stop gate and the simulated robot stops before another adapter
 command can pass through.
 
 ![walking_zoo PyBullet estop demo](docs/assets/readme/pybullet_laikago_estop.gif)
-
-Use Nav2's standard `/cmd_vel` output while keeping walking execution inside a
-ROS2-native runtime boundary.
-
-![Nav2 cmd_vel bridge](docs/assets/readme/nav2_cmd_vel_bridge.gif)
-
-Every command passes through conservative safety gates before an adapter sees
-it.
-
-![walking_zoo safety pipeline](docs/assets/readme/safety_pipeline.gif)
-
-Robot SDKs sit behind one adapter contract instead of leaking into the public
-runtime API.
-
-![walking_zoo adapter hub](docs/assets/readme/adapter_hub.gif)
-
-Future VLA systems can provide semantic intent without becoming privileged
-low-level controllers.
-
-![walking_zoo VLA semantic runtime](docs/assets/readme/vla_semantic_runtime.gif)
-
-The full runtime flow is still explicit: Nav2, teleop, and VLA commands all
-enter the same walking runtime and safety path.
-
-![walking_zoo runtime flow](docs/assets/readme/walking_zoo_runtime_flow.gif)
 
 ## Why walking_zoo?
 

@@ -11,3 +11,4 @@
 - Nav2 `/cmd_vel` bridge.
 - Bringup launch files, examples, docs, and CI.
 - README PyBullet simulation GIF assets and generator.
+- README MuJoCo Unitree G1 humanoid simulation GIF and simulation-only visual tour.

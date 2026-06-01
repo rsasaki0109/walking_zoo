@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
-"""Render README GIFs with an existing simulator.
+"""Render README GIFs with existing simulators.
 
-Robot GIFs are rendered by PyBullet's headless TinyRenderer using URDF and
-motion assets from pybullet_data. The script is intentionally optional and is
-not part of the walking_zoo runtime dependency set.
+Robot GIFs are rendered by MuJoCo and PyBullet using existing robot assets.
+The script is intentionally optional and is not part of the walking_zoo runtime
+dependency set.
 """
 
 from pathlib import Path
-import json
 import math
+import os
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+os.environ.setdefault("MUJOCO_GL", "egl")
+
 try:
+    import mujoco
     import pybullet as p
     import pybullet_data
 except ImportError as error:
     raise SystemExit(
-        "PyBullet is required for README robot GIF generation.\n"
+        "MuJoCo and PyBullet are required for README robot GIF generation.\n"
         "Use: python3 -m venv /tmp/walking_zoo_gif_venv && "
         "/tmp/walking_zoo_gif_venv/bin/python -m pip install -r "
         "tools/readme_gif_requirements.txt"
@@ -27,6 +30,9 @@ except ImportError as error:
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "assets" / "readme"
+MENAGERIE = Path(
+    os.environ.get("WALKING_ZOO_MENAGERIE_PATH", "/tmp/walking_zoo_mujoco_menagerie")
+)
 SIZE = (960, 540)
 
 BG = (9, 14, 22)
@@ -289,187 +295,107 @@ def pybullet_laikago_estop():
     save_gif("pybullet_laikago_estop.gif", frames, duration=80)
 
 
-class PyBulletHumanoidRunScene:
+class MujocoUnitreeG1Scene:
     def __init__(self):
-        self.client = p.connect(p.DIRECT)
-        p.setAdditionalSearchPath(pybullet_data.getDataPath(), physicsClientId=self.client)
-        p.setGravity(0, -9.81, 0, physicsClientId=self.client)
-        p.setTimeStep(1.0 / 240.0, physicsClientId=self.client)
-        self.motion_frames = self._load_run_motion()
-        self._create_y_up_floor()
-        flags = (
-            p.URDF_MAINTAIN_LINK_ORDER |
-            p.URDF_USE_SELF_COLLISION |
-            p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
-        )
-        self.robot = p.loadURDF(
-            "humanoid/humanoid.urdf",
-            [0.0, 0.889540259, 0.0],
-            globalScaling=0.25,
-            useFixedBase=False,
-            flags=flags,
-            physicsClientId=self.client,
-        )
-        for link in range(-1, p.getNumJoints(self.robot, physicsClientId=self.client)):
-            p.changeVisualShape(
-                self.robot,
-                link,
-                rgbaColor=[0.52, 0.54, 0.58, 1.0],
-                physicsClientId=self.client,
+        scene_path = MENAGERIE / "unitree_g1" / "scene.xml"
+        if not scene_path.exists():
+            raise SystemExit(
+                "Unitree G1 MJCF assets were not found.\n"
+                "Clone mujoco_menagerie or set WALKING_ZOO_MENAGERIE_PATH:\n"
+                "  git clone --depth 1 https://github.com/google-deepmind/"
+                "mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie"
             )
-        self.joint_indices = [1, 2, 9, 10, 11, 3, 4, 12, 13, 14, 6, 7]
-        self.motion_slices = [
-            (8, 4), (12, 4),
-            (16, 4), (20, 1), (21, 4), (25, 4), (29, 1),
-            (30, 4), (34, 1), (35, 4), (39, 4), (43, 1),
-        ]
+        self.model = mujoco.MjModel.from_xml_path(str(scene_path))
+        self.model.vis.global_.offwidth = SIZE[0]
+        self.model.vis.global_.offheight = SIZE[1]
+        self.data = mujoco.MjData(self.model)
+        mujoco.mj_resetDataKeyframe(self.model, self.data, 0)
+        self.stand_qpos = self.data.qpos.copy()
+        self.joint_qpos = {}
+        for i in range(self.model.njnt):
+            name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, i)
+            self.joint_qpos[name] = self.model.jnt_qposadr[i]
+        self.renderer = mujoco.Renderer(self.model, height=SIZE[1], width=SIZE[0])
+        self.camera = mujoco.MjvCamera()
+        self.camera.distance = 1.72
+        self.camera.azimuth = 142
+        self.camera.elevation = -14
 
     def close(self):
-        p.disconnect(self.client)
+        self.renderer.close()
 
-    def _load_run_motion(self):
-        motion_path = (
-            Path(pybullet_data.getDataPath()) / "data" / "motions" / "humanoid3d_run.txt"
-        )
-        return json.loads(motion_path.read_text())["Frames"]
+    def _set_joint(self, qpos, name, value):
+        qpos[self.joint_qpos[name]] = value
 
-    def _create_y_up_floor(self):
-        floor = p.createVisualShape(
-            p.GEOM_BOX,
-            halfExtents=[8.0, 0.006, 2.4],
-            rgbaColor=[0.88, 0.93, 1.0, 1.0],
-            physicsClientId=self.client,
-        )
-        p.createMultiBody(
-            baseMass=0,
-            baseVisualShapeIndex=floor,
-            basePosition=[3.0, -0.01, 0.0],
-            physicsClientId=self.client,
-        )
-        line_color = [0.58, 0.70, 0.90, 1.0]
-        for i in range(-10, 22):
-            line = p.createVisualShape(
-                p.GEOM_BOX,
-                halfExtents=[0.008, 0.008, 2.4],
-                rgbaColor=line_color,
-                physicsClientId=self.client,
-            )
-            p.createMultiBody(
-                baseMass=0,
-                baseVisualShapeIndex=line,
-                basePosition=[i * 0.4, -0.002, 0.0],
-                physicsClientId=self.client,
-            )
-        for j in range(-6, 7):
-            line = p.createVisualShape(
-                p.GEOM_BOX,
-                halfExtents=[8.0, 0.008, 0.008],
-                rgbaColor=line_color,
-                physicsClientId=self.client,
-            )
-            p.createMultiBody(
-                baseMass=0,
-                baseVisualShapeIndex=line,
-                basePosition=[3.0, -0.001, j * 0.4],
-                physicsClientId=self.client,
+    def _g1_run_pose(self, frame_index):
+        qpos = self.stand_qpos.copy()
+        phase = 2.0 * math.pi * (frame_index / 24.0)
+        sin_phase = math.sin(phase)
+        cos_phase = math.cos(phase)
+        qpos[0] = 0.035 * frame_index
+        qpos[2] = 0.82 + 0.02 * max(0.0, cos_phase)
+        qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+
+        for side, value in (("left", sin_phase), ("right", -sin_phase)):
+            swing = max(0.0, value)
+            self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.48 * value)
+            self._set_joint(qpos, f"{side}_knee_joint", 0.32 + 0.62 * swing)
+            self._set_joint(
+                qpos,
+                f"{side}_ankle_pitch_joint",
+                -0.18 - 0.18 * swing + 0.10 * value,
             )
 
-    def _motion_quaternion(self, frame_data, start):
-        return [
-            frame_data[start + 1],
-            frame_data[start + 2],
-            frame_data[start + 3],
-            frame_data[start],
-        ]
+        self._set_joint(qpos, "left_hip_roll_joint", 0.04 * cos_phase)
+        self._set_joint(qpos, "right_hip_roll_joint", -0.04 * cos_phase)
+        self._set_joint(qpos, "waist_pitch_joint", -0.07)
+        self._set_joint(qpos, "waist_yaw_joint", 0.05 * sin_phase)
+        self._set_joint(qpos, "left_shoulder_pitch_joint", -0.65 * sin_phase)
+        self._set_joint(qpos, "right_shoulder_pitch_joint", 0.65 * sin_phase)
+        self._set_joint(qpos, "left_shoulder_roll_joint", 0.10)
+        self._set_joint(qpos, "right_shoulder_roll_joint", -0.10)
+        self._set_joint(qpos, "left_elbow_joint", 0.50 + 0.20 * max(0.0, -sin_phase))
+        self._set_joint(qpos, "right_elbow_joint", 0.50 + 0.20 * max(0.0, sin_phase))
+        return qpos
 
     def apply_run_frame(self, frame_index):
-        cycle = frame_index // len(self.motion_frames)
-        frame_data = self.motion_frames[frame_index % len(self.motion_frames)]
-        root_x = frame_data[1] * 0.55 + cycle * 1.05
-        root_y = frame_data[2]
-        root_z = frame_data[3] * 0.55
-        p.resetBasePositionAndOrientation(
-            self.robot,
-            [root_x, root_y, root_z],
-            self._motion_quaternion(frame_data, 4),
-            physicsClientId=self.client,
-        )
-        joint_positions = []
-        for start, count in self.motion_slices:
-            if count == 4:
-                joint_positions.append(self._motion_quaternion(frame_data, start))
-            else:
-                joint_positions.append([frame_data[start]])
-        p.resetJointStatesMultiDof(
-            self.robot,
-            self.joint_indices,
-            joint_positions,
-            physicsClientId=self.client,
-        )
-        p.stepSimulation(physicsClientId=self.client)
-        return root_x
+        self.data.qpos[:] = self._g1_run_pose(frame_index)
+        self.data.qvel[:] = 0.0
+        mujoco.mj_forward(self.model, self.data)
+        return self.data.qpos[0]
 
     def render(self, x):
-        view = p.computeViewMatrix(
-            cameraEyePosition=[x - 1.70, 1.25, -2.60],
-            cameraTargetPosition=[x + 0.05, 0.38, 0.0],
-            cameraUpVector=[0.0, 1.0, 0.0],
-        )
-        projection = p.computeProjectionMatrixFOV(
-            fov=62,
-            aspect=SIZE[0] / SIZE[1],
-            nearVal=0.03,
-            farVal=60.0,
-        )
-        _w, _h, rgba, _depth, _seg = p.getCameraImage(
-            width=SIZE[0],
-            height=SIZE[1],
-            viewMatrix=view,
-            projectionMatrix=projection,
-            renderer=p.ER_TINY_RENDERER,
-            physicsClientId=self.client,
-        )
-        arr = np.reshape(np.asarray(rgba, dtype=np.uint8), (SIZE[1], SIZE[0], 4))
-        return Image.fromarray(arr[:, :, :3], "RGB")
+        self.camera.lookat[:] = [x + 0.18, 0.0, 0.82]
+        self.renderer.update_scene(self.data, camera=self.camera)
+        return Image.fromarray(self.renderer.render())
 
 
-def pybullet_humanoid_run_runtime():
-    scene = PyBulletHumanoidRunScene()
+def mujoco_unitree_g1_runtime():
+    scene = MujocoUnitreeG1Scene()
     frames = []
     try:
-        for frame in range(48):
+        for frame in range(54):
             x = scene.apply_run_frame(frame)
             img = scene.render(x)
             draw = ImageDraw.Draw(img)
-            draw_round(draw, (26, 382, 610, 520), (8, 14, 22), PURPLE, radius=18)
-            draw.text((48, 400), "PyBullet humanoid run", font=FONT_TITLE, fill=TEXT)
-            draw.text(
-                (50, 444),
-                "humanoid3d_run motion -> walking_zoo target",
-                font=FONT_SMALL,
-                fill=MUTED,
-            )
-            draw.text(
-                (50, 472),
-                "PyBullet URDF asset, optional docs generator",
-                font=FONT_SMALL,
-                fill=MUTED,
-            )
+            draw_round(draw, (26, 24, 405, 112), (8, 14, 22), PURPLE, radius=18)
+            draw.text((48, 40), "MuJoCo Unitree G1", font=FONT_SUB, fill=TEXT)
+            draw.text((50, 76), "walking_zoo runtime target", font=FONT_SMALL, fill=MUTED)
             overlay_panel(
                 img,
                 "Humanoid runtime",
                 [
                     ("input", "semantic/run", BLUE),
                     ("mode", "RUNNING", YELLOW),
-                    ("asset", "humanoid3d_run", GREEN),
-                    ("state", "WALKING/RUN", PURPLE),
+                    ("model", "Unitree G1", GREEN),
+                    ("sim", "MuJoCo", PURPLE),
                 ],
                 PURPLE,
             )
             frames.append(img)
     finally:
         scene.close()
-    save_gif("pybullet_humanoid_run.gif", frames, duration=70)
+    save_gif("mujoco_unitree_g1_runtime.gif", frames, duration=70)
 
 
 def runtime_flow():
@@ -613,7 +539,7 @@ def vla_path():
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    pybullet_humanoid_run_runtime()
+    mujoco_unitree_g1_runtime()
     pybullet_laikago_runtime()
     pybullet_laikago_estop()
     runtime_flow()
