@@ -15,7 +15,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .model import G1Model, Observation
+from .model import G1Model, LEG_JOINTS, Observation
+
+_GRAVITY = 9.81
 
 
 @dataclass
@@ -148,6 +150,98 @@ class BalancedCPG(GaitController):
         return ctrl
 
 
-# Registry. ``run_compare`` iterates this; tests assert balanced beats open-loop.
+class CapturePointWalk(GaitController):
+    """Model-based footstep walking: capture-point foot placement + leg IK.
+
+    A different *class* of algorithm from the CPGs above. Instead of a fixed
+    joint pattern, it reasons about where to put the next foot and then solves
+    inverse kinematics to get there:
+
+    * The robot is modelled as a linear inverted pendulum, ``omega = sqrt(g/z)``.
+    * At each foot strike it commits a footstep for the swing leg at the
+      *instantaneous capture point* ``xi = x_com + v_com / omega`` (laterally, to
+      catch the sideways fall) plus a forward term that regulates walking speed.
+    * The swing foot arcs to that target (a lift profile) while the stance foot
+      is held at its planted world position; both are realised by per-leg
+      Jacobian IK (:meth:`G1Model.solve_leg_ik`).
+    * A light ankle attitude feedback is layered on the IK solution to keep the
+      torso upright.
+
+    On the same robot it walks the *farthest* of all the algorithms here — but
+    it is *less* durable than :class:`BalancedCPG`: kinematic footstep placement
+    commits to long strides without true dynamic (ZMP/force) balance, so it
+    eventually topples. That tradeoff — farthest walker vs. most stable — is the
+    headline result the testbed is built to surface, and the motivation for a
+    learned or optimisation-based gait behind this same interface.
+    """
+
+    name = "capture-point"
+    step_duration = 0.45     # s per step (~ a LIPM lateral half-period)
+    forward_speed = 0.15     # forward foot-placement bias (m/s)
+    capture_x = 1.0          # how strongly forward capture point regulates speed
+    capture_y = 0.4          # lateral capture-point weight
+    nominal_width = 0.9      # lateral nominal-stance weight
+    step_lift = 0.05         # swing-foot apex above ground (m)
+    ankle_pitch_kp = 0.15
+    ankle_roll_kp = 0.30
+    ankle_kd = 0.05
+
+    def reset(self, model: G1Model) -> None:
+        super().reset(model)
+        self.ground = float(model.foot_pos("left")[2])
+        self.planted = {f: model.foot_pos(f) for f in ("left", "right")}
+        self.stance = "right"
+        self.swing = "left"
+        self.t_step_start = 0.0
+        self.swing_from = self.planted["left"].copy()
+        self.plant_target = self._plan_footstep(model.observe(0.0))
+
+    def _plan_footstep(self, obs: Observation) -> np.ndarray:
+        omega = np.sqrt(_GRAVITY / max(obs.com_z, 0.3))
+        xi_y = obs.com_xy[1] + obs.com_vel_xy[1] / omega
+        nominal_y = 0.119 if self.swing == "left" else -0.119
+        target_x = (
+            obs.com_xy[0]
+            + self.capture_x * obs.com_vel_xy[0] / omega
+            + self.forward_speed * self.step_duration
+        )
+        target_y = self.capture_y * xi_y + self.nominal_width * nominal_y
+        return np.array([target_x, target_y, self.ground])
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        model = self.model
+        phase = (obs.t - self.t_step_start) / self.step_duration
+        if phase >= 1.0:
+            # Foot strike: plant the swing foot, swap stance/swing, replan.
+            self.planted[self.swing] = model.foot_pos(self.swing)
+            self.stance, self.swing = self.swing, self.stance
+            self.t_step_start = obs.t
+            phase = 0.0
+            self.swing_from = model.foot_pos(self.swing).copy()
+            self.plant_target = self._plan_footstep(obs)
+
+        ph = float(np.clip(phase, 0.0, 1.0))
+        swing_xy = (1.0 - ph) * self.swing_from[:2] + ph * self.plant_target[:2]
+        swing_z = self.ground + self.step_lift * np.sin(np.pi * ph)
+        swing_target = np.array([swing_xy[0], swing_xy[1], swing_z])
+
+        roll, pitch, _ = obs.torso_rpy
+        roll_rate, pitch_rate = obs.torso_ang_vel[0], obs.torso_ang_vel[1]
+        ankle_pitch_fix = self.ankle_pitch_kp * pitch + self.ankle_kd * pitch_rate
+        ankle_roll_fix = self.ankle_roll_kp * roll + self.ankle_kd * roll_rate
+
+        ctrl = self.stand.copy()
+        for foot, target in ((self.stance, self.planted[self.stance]),
+                             (self.swing, swing_target)):
+            angles = model.solve_leg_ik(foot, target)
+            for joint, value in zip(LEG_JOINTS[foot], angles):
+                ctrl[model.actuator(joint)] = value
+            # Attitude feedback layered on top of the IK solution.
+            ctrl[model.actuator(f"{foot}_ankle_pitch_joint")] += ankle_pitch_fix
+            ctrl[model.actuator(f"{foot}_ankle_roll_joint")] += ankle_roll_fix
+        return ctrl
+
+
+# Registry. ``run_compare`` iterates this; tests assert each invariant.
 def CONTROLLERS() -> list[GaitController]:
-    return [StandHold(), OpenLoopCPG(), BalancedCPG()]
+    return [StandHold(), OpenLoopCPG(), BalancedCPG(), CapturePointWalk()]

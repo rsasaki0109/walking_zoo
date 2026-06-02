@@ -17,13 +17,14 @@ the "runtime" is the physics harness.
 
 ## What's included
 
-Three algorithms, increasing in sophistication:
+Four algorithms spanning two classes (CPG and model-based footstep):
 
-| algorithm        | idea                                                        |
-|------------------|-------------------------------------------------------------|
-| `stand-hold`     | hold the standing keyframe (baseline: stable, goes nowhere) |
+| algorithm        | idea                                                          |
+|------------------|---------------------------------------------------------------|
+| `stand-hold`     | hold the standing keyframe (baseline: stable, goes nowhere)   |
 | `open-loop-cpg`  | fixed sinusoidal stepping, **no feedback** (the honest failure) |
-| `balanced-cpg`   | stepping + lateral weight-shift + torso-attitude feedback   |
+| `balanced-cpg`   | stepping + lateral weight-shift + torso-attitude feedback     |
+| `capture-point`  | LIPM capture-point footstep placement + leg **inverse kinematics** |
 
 A representative run (`run_compare.py`, 6 s horizon):
 
@@ -32,14 +33,30 @@ algorithm           forward     speed       survival  drift     minH   status
 stand-hold         fwd=-0.000m  speed=-0.000m/s  survive= 6.00s  drift=0.000m  minH=0.79m  [ok]
 open-loop-cpg      fwd=+0.100m  speed=+0.130m/s  survive= 1.07s  drift=0.168m  minH=0.50m  [FELL]
 balanced-cpg       fwd=+0.269m  speed=+0.096m/s  survive= 3.09s  drift=0.267m  minH=0.50m  [FELL]
+capture-point      fwd=+0.614m  speed=+0.814m/s  survive= 1.05s  drift=0.038m  minH=0.50m  [FELL]
+
+farthest walker: capture-point (+0.614 m, survived 1.05s)
+most stable:     stand-hold (survived 6.00s)
 ```
 
-The story the numbers tell: open-loop stepping topples a humanoid in ~1 s;
-adding a lateral weight-shift (so the swing foot can unload) plus ankle attitude
-feedback survives **~3× longer and makes net forward progress**. It is **not** a
-robustly-walking controller — that gap is exactly what the testbed measures, and
-the natural next algorithm is a learned or optimisation-based gait dropped in
-behind the same `GaitController` interface.
+The story the numbers tell, and the reason a comparison testbed is worth having:
+
+* **open-loop** stepping topples a humanoid in ~1 s — feedback is not optional.
+* **balanced-cpg** (lateral weight-shift so the swing foot can unload + ankle
+  attitude feedback) survives **~3× longer** and creeps forward: the *most
+  stable* stepper.
+* **capture-point** reasons about *where* to put the next foot — it models the
+  robot as a linear inverted pendulum, places the swing foot at the
+  instantaneous capture point (`xi = x_com + v_com/omega`) via leg IK, and walks
+  **~6× farther and far straighter** (drift 0.04 m vs 0.17 m) than open-loop —
+  the *farthest walker*. But it is the *least durable*: kinematic footstep
+  placement commits to long strides without true dynamic (ZMP/force) balance, so
+  it eventually topples.
+
+There is no free lunch here — *farthest walker* and *most stable* are different
+algorithms. None is a robustly-walking controller; that gap is exactly what the
+testbed measures, and the natural next algorithm is a learned or
+optimisation-based gait dropped in behind the same `GaitController` interface.
 
 ## Running it
 

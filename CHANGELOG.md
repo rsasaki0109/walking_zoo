@@ -73,6 +73,18 @@
   per-algorithm GIF/JSON) and a skip-if-unavailable pytest suite asserting the
   comparison invariants. Kept under `experiments/` so the hardware-free ROS 2
   build never depends on MuJoCo or a model checkout.
+- Added a second *class* of gait algorithm to `experiments/gait_lab`: a
+  model-based `capture-point` walker alongside the CPG controllers. It models the
+  G1 as a linear inverted pendulum, commits each footstep at the instantaneous
+  capture point (`xi = x_com + v_com/omega`, laterally to catch the fall plus a
+  forward speed term), and realises both feet with a new Jacobian damped-least-
+  squares leg IK (`G1Model.solve_leg_ik`, driving the `left_foot`/`right_foot`
+  sites through the 6-DOF leg chains). It walks the farthest and straightest of
+  all algorithms (~0.6 m, lateral drift ~0.04 m vs the open-loop CPG's ~0.17 m)
+  but is the least durable stepper — a deliberate, honest "farthest walker vs.
+  most stable" tradeoff the testbed surfaces, motivating a learned/optimisation
+  gait behind the same interface. Covered by added IK and comparison pytest
+  cases.
 - Captured multi-episode LeRobot datasets from live runtime runs and confirmed
   HuggingFace `datasets.load_dataset` compatibility. Added
   `tools/capture_lerobot_episodes.py`, which brings up the mock runtime and

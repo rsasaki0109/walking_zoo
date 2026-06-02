@@ -18,6 +18,7 @@ from .controllers import (
     StandHold,
     OpenLoopCPG,
     BalancedCPG,
+    CapturePointWalk,
     CONTROLLERS,
 )
 from .harness import GaitHarness, rollout
@@ -30,6 +31,7 @@ __all__ = [
     "StandHold",
     "OpenLoopCPG",
     "BalancedCPG",
+    "CapturePointWalk",
     "CONTROLLERS",
     "GaitHarness",
     "rollout",

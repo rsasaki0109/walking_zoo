@@ -15,7 +15,9 @@ import pytest
 mujoco = pytest.importorskip("mujoco")
 
 from gait_lab import (  # noqa: E402
+    CONTROLLERS,
     BalancedCPG,
+    CapturePointWalk,
     Command,
     GaitHarness,
     G1Model,
@@ -64,6 +66,33 @@ def test_balanced_cpg_beats_open_loop(model):
     assert balanced.survival_time > naive.survival_time + 1.0
     # ...and actually makes forward progress.
     assert balanced.forward_distance > 0.1
+
+
+def test_leg_ik_reaches_foot_target(model):
+    model.reset()
+    stand_foot = model.foot_pos("left")
+    target = stand_foot + [0.12, 0.0, 0.05]  # forward + up: a reachable swing pose
+    angles = model.solve_leg_ik("left", target)
+    assert angles.shape == (6,)
+    # Apply the solution on a scratch and confirm the foot got close.
+    import numpy as np
+
+    s = model._ik_scratch
+    s.qpos[:] = model.data.qpos
+    s.qpos[model._leg_qadr["left"]] = angles
+    mujoco.mj_kinematics(model.model, s)
+    reached = s.site_xpos[model._foot_site["left"]]
+    assert np.linalg.norm(reached - target) < 0.02
+
+
+def test_capture_point_walks_farthest(model):
+    results = {c.name: rollout(model, c, horizon=6.0) for c in CONTROLLERS()}
+    cp = results["capture-point"]
+    # The model-based IK walker travels farther than every other algorithm...
+    assert cp.forward_distance > results["balanced-cpg"].forward_distance
+    assert cp.forward_distance > 0.4
+    # ...and tracks a straighter line than the naive open-loop stepper.
+    assert cp.lateral_drift < results["open-loop-cpg"].lateral_drift
 
 
 def test_metrics_are_finite_and_serializable(model):

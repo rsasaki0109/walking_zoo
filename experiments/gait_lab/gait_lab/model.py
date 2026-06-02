@@ -34,6 +34,28 @@ LEG_ACTUATORS = [
     "right_ankle_roll_joint",
 ]
 
+# Per-foot leg-joint chains (6 DOF each), in kinematic order. Used by the IK so a
+# controller can command a foot world position and get joint targets back.
+LEG_JOINTS = {
+    "left": [
+        "left_hip_pitch_joint",
+        "left_hip_roll_joint",
+        "left_hip_yaw_joint",
+        "left_knee_joint",
+        "left_ankle_pitch_joint",
+        "left_ankle_roll_joint",
+    ],
+    "right": [
+        "right_hip_pitch_joint",
+        "right_hip_roll_joint",
+        "right_hip_yaw_joint",
+        "right_knee_joint",
+        "right_ankle_pitch_joint",
+        "right_ankle_roll_joint",
+    ],
+}
+FOOT_SITE = {"left": "left_foot", "right": "right_foot"}
+
 
 @dataclass
 class Observation:
@@ -47,6 +69,7 @@ class Observation:
     torso_ang_vel: np.ndarray        # body angular velocity (rad/s)
     com_xy: np.ndarray               # whole-body centre of mass (world x, y)
     com_vel_xy: np.ndarray           # whole-body CoM velocity (world x, y)
+    com_z: float                     # whole-body CoM height (world z)
 
 
 def _quat_to_rpy(q: np.ndarray) -> np.ndarray:
@@ -96,6 +119,23 @@ class G1Model:
             mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, i): i
             for i in range(self.nu)
         }
+        # Per-foot kinematic chains for IK: site id, dof columns, qpos addresses.
+        self._foot_site = {
+            foot: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, site)
+            for foot, site in FOOT_SITE.items()
+        }
+        self._leg_dofs = {}
+        self._leg_qadr = {}
+        for foot, joints in LEG_JOINTS.items():
+            jids = [
+                mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, j)
+                for j in joints
+            ]
+            self._leg_dofs[foot] = np.array([self.model.jnt_dofadr[j] for j in jids])
+            self._leg_qadr[foot] = np.array([self.model.jnt_qposadr[j] for j in jids])
+        self._ik_scratch = mujoco.MjData(self.model)
+        self._ik_jacp = np.zeros((3, self.model.nv))
+
         # Standing keyframe (named "stand" in the menagerie scene).
         self.reset()
         self.stand_qpos = self.data.qpos.copy()
@@ -134,4 +174,43 @@ class G1Model:
             com_vel_xy=d.subtree_linvel[0, 0:2].copy()
             if hasattr(d, "subtree_linvel")
             else d.qvel[0:2].copy(),
+            com_z=float(d.subtree_com[0, 2]),
         )
+
+    # -- kinematics for IK-based controllers -------------------------------
+    def foot_pos(self, foot: str) -> np.ndarray:
+        """Current world position of a foot site ('left' or 'right')."""
+        return self.data.site_xpos[self._foot_site[foot]].copy()
+
+    def solve_leg_ik(
+        self,
+        foot: str,
+        target_world: np.ndarray,
+        *,
+        iters: int = 16,
+        damp: float = 1e-2,
+        tol: float = 1e-4,
+    ) -> np.ndarray:
+        """Damped-least-squares IK: 6 leg-joint angles placing the foot at a target.
+
+        Warm-started from the *current* physics pose, holding the floating base
+        and all other joints fixed. Returns joint angles in ``LEG_JOINTS[foot]``
+        order (which equals the actuator order for those joints).
+        """
+        mujoco = self._mj
+        s = self._ik_scratch
+        s.qpos[:] = self.data.qpos
+        site = self._foot_site[foot]
+        dofs = self._leg_dofs[foot]
+        qadr = self._leg_qadr[foot]
+        for _ in range(iters):
+            mujoco.mj_kinematics(self.model, s)
+            mujoco.mj_comPos(self.model, s)
+            err = target_world - s.site_xpos[site]
+            if np.linalg.norm(err) < tol:
+                break
+            mujoco.mj_jacSite(self.model, s, self._ik_jacp, None, site)
+            jac = self._ik_jacp[:, dofs]
+            dq = jac.T @ np.linalg.solve(jac @ jac.T + damp * np.eye(3), err)
+            s.qpos[qadr] += dq
+        return s.qpos[qadr].copy()
