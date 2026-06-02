@@ -14,6 +14,7 @@ CmdVelBridge::CmdVelBridge(const rclcpp::NodeOptions & options)
 
   legged_aware_ = declare_parameter<bool>("legged_aware", true);
   require_ready_ = declare_parameter<bool>("require_ready", true);
+  input_stamped_ = declare_parameter<bool>("input_stamped", false);
 
   LeggedMotionLimits limits;
   limits.max_forward = declare_parameter<double>("legged.max_forward", limits.max_forward);
@@ -32,10 +33,17 @@ CmdVelBridge::CmdVelBridge(const rclcpp::NodeOptions & options)
   pub_ = create_publisher<geometry_msgs::msg::TwistStamped>(
     output_topic,
     rclcpp::SystemDefaultsQoS());
-  sub_ = create_subscription<geometry_msgs::msg::Twist>(
-    input_topic,
-    rclcpp::SystemDefaultsQoS(),
-    std::bind(&CmdVelBridge::handle_cmd_vel, this, std::placeholders::_1));
+  if (input_stamped_) {
+    sub_stamped_ = create_subscription<geometry_msgs::msg::TwistStamped>(
+      input_topic,
+      rclcpp::SystemDefaultsQoS(),
+      std::bind(&CmdVelBridge::handle_cmd_vel_stamped, this, std::placeholders::_1));
+  } else {
+    sub_ = create_subscription<geometry_msgs::msg::Twist>(
+      input_topic,
+      rclcpp::SystemDefaultsQoS(),
+      std::bind(&CmdVelBridge::handle_cmd_vel, this, std::placeholders::_1));
+  }
 
   if (require_ready_) {
     state_sub_ = create_subscription<walking_zoo_msgs::msg::WalkingState>(
@@ -75,6 +83,17 @@ bool CmdVelBridge::robot_ready() const
 
 void CmdVelBridge::handle_cmd_vel(const geometry_msgs::msg::Twist::SharedPtr msg)
 {
+  process_twist(*msg);
+}
+
+void CmdVelBridge::handle_cmd_vel_stamped(
+  const geometry_msgs::msg::TwistStamped::SharedPtr msg)
+{
+  process_twist(msg->twist);
+}
+
+void CmdVelBridge::process_twist(const geometry_msgs::msg::Twist & msg)
+{
   geometry_msgs::msg::TwistStamped stamped;
   stamped.header.stamp = now();
   stamped.header.frame_id = frame_id_;
@@ -99,7 +118,7 @@ void CmdVelBridge::handle_cmd_vel(const geometry_msgs::msg::Twist::SharedPtr msg
   }
 
   if (!legged_aware_) {
-    stamped.twist = *msg;
+    stamped.twist = msg;
     pub_->publish(stamped);
     return;
   }
@@ -113,7 +132,7 @@ void CmdVelBridge::handle_cmd_vel(const geometry_msgs::msg::Twist::SharedPtr msg
   has_last_cmd_time_ = true;
 
   const auto shaped = shaper_.shape(
-    msg->linear.x, msg->linear.y, msg->angular.z, dt);
+    msg.linear.x, msg.linear.y, msg.angular.z, dt);
   stamped.twist.linear.x = shaped.vx;
   stamped.twist.linear.y = shaped.vy;
   stamped.twist.angular.z = shaped.vyaw;
