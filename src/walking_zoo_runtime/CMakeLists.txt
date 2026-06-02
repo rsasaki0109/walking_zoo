@@ -65,6 +65,11 @@ if(BUILD_TESTING)
   if(TARGET test_command_arbiter)
     target_link_libraries(test_command_arbiter ${PROJECT_NAME})
   endif()
+
+  ament_add_gtest(test_mode_manager test/test_mode_manager.cpp)
+  if(TARGET test_mode_manager)
+    target_link_libraries(test_mode_manager ${PROJECT_NAME})
+  endif()
 endif()
 
 ament_package()
