@@ -423,6 +423,80 @@ class ZMPPreviewWalk(GaitController):
         return ctrl
 
 
+# Linear feedback policy (4 outputs x 6 observations, row-major) found by
+# `train_policy.py`. Trained ROBUSTLY: each candidate is scored on the WORST of
+# several perturbed initial states, because a falling humanoid is chaotic and a
+# naive single-rollout search overfits to fragile flukes (an early run found a
+# "3.4 s" policy that collapsed to 1.8 s under mere 4-decimal weight rounding —
+# see the README). Robustly trained, this learned feedback walks much farther than
+# the hand-tuned balanced-cpg (~0.74 m vs 0.27 m) at ~2.0 s survival: learning the
+# feedback buys distance, but does NOT break the gait class's balance ceiling.
+LEARNED_FEEDBACK_WEIGHTS = [
+    -0.0080, 0.4121, -0.1297, 0.0634, -0.1680, 0.1113,   # -> ankle_pitch residual
+    0.1905, -0.7327, 0.0276, 0.1250, -0.0741, 0.6008,    # -> ankle_roll residual
+    -0.2176, -0.0297, -0.0539, -0.0049, -0.0214, 0.7609, # -> hip_pitch residual
+    -0.0065, 0.2130, 0.0163, -0.1260, -0.3664, -0.1725,  # -> hip_roll residual
+]
+
+
+class LearnedFeedbackWalk(GaitController):
+    """CPG feedforward + a *learned* linear feedback policy.
+
+    The feedforward rhythm (the leg sinusoids and lateral rock) is a CPG like
+    :class:`BalancedCPG`'s. The difference is the balance feedback: instead of
+    hand-tuned ankle gains, a linear policy ``residual = W @ observation`` maps the
+    full torso/CoM state to ankle and hip corrections, with ``W`` *trained* by the
+    Cross-Entropy Method (`train_policy.py`) against physics rollouts.
+
+    The honest answer it gives to "can a learned closed-loop feedback beat
+    hand-designed feedback?": it walks much farther than ``balanced-cpg`` (~0.74 m
+    vs 0.27 m) but does *not* out-survive it — the same farthest-vs-stable
+    tradeoff, now learned rather than hand-tuned. Learning buys distance, not a
+    broken balance ceiling. (And it must be trained *robustly* — see
+    ``train_policy.py`` and the README on the chaotic-overfit trap.) A neural
+    policy is the same shape with more capacity, behind this same interface.
+    """
+
+    name = "learned-feedback"
+    frequency = 0.8
+    hip_amp = 0.25
+    knee_amp = 0.45
+    ankle_amp = 0.16
+    lateral_amp = 0.10
+    OBS_DIM = 6
+    OUT_DIM = 4
+
+    def __init__(self, weights: list | None = None):
+        w = weights if weights is not None else LEARNED_FEEDBACK_WEIGHTS
+        self.W = np.asarray(w, dtype=float).reshape(self.OUT_DIM, self.OBS_DIM)
+
+    def _observe(self, obs: Observation) -> np.ndarray:
+        return np.array([
+            obs.torso_rpy[0], obs.torso_rpy[1],
+            obs.torso_ang_vel[0], obs.torso_ang_vel[1],
+            obs.com_vel_xy[0], obs.com_vel_xy[1],
+        ])
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        # Learned feedback: [ankle_pitch, ankle_roll, hip_pitch, hip_roll].
+        ap, ar, hp, hr = self.W @ self._observe(obs)
+
+        ctrl = self.stand.copy()
+        phase = 2.0 * np.pi * self.frequency * obs.t
+        rock = self.lateral_amp * np.sin(phase + np.pi)
+        self._leg(ctrl, "left_hip_roll_joint", rock + hr)
+        self._leg(ctrl, "right_hip_roll_joint", rock + hr)
+        self._leg(ctrl, "left_ankle_roll_joint", ar)
+        self._leg(ctrl, "right_ankle_roll_joint", ar)
+        for side, offset in (("left", 0.0), ("right", np.pi)):
+            s = np.sin(phase + offset)
+            swing = max(0.0, s)
+            self._leg(ctrl, f"{side}_hip_pitch_joint", self.hip_amp * s + hp)
+            self._leg(ctrl, f"{side}_knee_joint", self.knee_amp * swing)
+            self._leg(ctrl, f"{side}_ankle_pitch_joint", -self.ankle_amp * swing + ap)
+        return ctrl
+
+
 # Registry. ``run_compare`` iterates this; tests assert each invariant.
 def CONTROLLERS() -> list[GaitController]:
     return [
@@ -432,4 +506,5 @@ def CONTROLLERS() -> list[GaitController]:
         CapturePointWalk(),
         OptimizedCapturePoint(),
         ZMPPreviewWalk(),
+        LearnedFeedbackWalk(),
     ]

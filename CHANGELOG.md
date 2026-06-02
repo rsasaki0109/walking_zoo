@@ -131,6 +131,21 @@
   a dependency-free PNG writer (stdlib `zlib`/`struct` only), and embedded the
   generated `assets/gait_comparison.png` in the README with a colour legend.
   Covered by a PNG round-trip pytest case.
+- Added a learned gait to `experiments/gait_lab`: `learned-feedback` keeps a CPG
+  feedforward but replaces the hand-tuned ankle gains with a learned linear
+  feedback policy (`residual = W @ observation` over torso roll/pitch/rates and
+  CoM velocity), `W` trained by the Cross-Entropy Method (`train_policy.py`). It
+  walks ~2.7× farther and far straighter than the hand-tuned `balanced-cpg`
+  (0.74 m vs 0.27 m, drift 0.10 m) but does not out-survive it — learning the
+  feedback buys distance, not a broken balance ceiling (the same farthest-vs-
+  stable through-line). The training is deliberately *robust*: each candidate is
+  scored on the worst of several perturbed initial states, because a falling
+  humanoid is chaotic and a naive single-rollout search overfits — a first run
+  found a "3.4 s" policy that collapsed to 1.8 s under mere 4-decimal weight
+  rounding. Added `G1Model.perturb` / a `perturb_seed` rollout option for
+  robustness testing, and pytest cases asserting the learned gait out-walks
+  hand-tuning, is reproducible, and stays robust under perturbation. The chaotic-
+  overfit lesson and the gait-class balance ceiling are documented in the README.
 - Captured multi-episode LeRobot datasets from live runtime runs and confirmed
   HuggingFace `datasets.load_dataset` compatibility. Added
   `tools/capture_lerobot_episodes.py`, which brings up the mock runtime and

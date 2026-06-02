@@ -158,6 +158,23 @@ class G1Model:
             self._mj.mj_resetData(self.model, self.data)
         self._mj.mj_forward(self.model, self.data)
 
+    def perturb(self, seed: int, scale: float = 0.015) -> None:
+        """Tilt the base and jitter joint angles for robustness testing.
+
+        Deterministic for a given ``seed``. Call right after :meth:`reset`.
+        """
+        rng = np.random.default_rng(seed)
+        axis_angle = rng.normal(0.0, scale, 3)
+        angle = float(np.linalg.norm(axis_angle))
+        if angle > 1e-9:
+            axis = axis_angle / angle
+            self.data.qpos[3:7] = [
+                np.cos(angle / 2),
+                *(axis * np.sin(angle / 2)),
+            ]
+        self.data.qpos[7:] += rng.normal(0.0, scale, self.data.qpos.shape[0] - 7)
+        self._mj.mj_forward(self.model, self.data)
+
     def step(self) -> None:
         self._mj.mj_step(self.model, self.data)
 

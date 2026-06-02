@@ -34,10 +34,17 @@ class GaitHarness:
         width: int = 640,
         height: int = 480,
         fps: int = 30,
+        perturb_seed: int | None = None,
+        perturb_scale: float = 0.015,
     ) -> tuple[GaitMetrics, list]:
         cmd = cmd or Command()
         m = self.model
         m.reset()
+        if perturb_seed is not None:
+            # Tilt the base and jitter the joints a little, for robustness testing
+            # / robust training (a falling humanoid is chaotic; a policy that only
+            # survives the nominal start is a fragile fluke).
+            m.perturb(perturb_seed, perturb_scale)
         controller.reset(m)
 
         renderer = None

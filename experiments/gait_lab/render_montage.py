@@ -28,6 +28,7 @@ SWATCHES = {
     "capture-point": (244, 180, 0),
     "optimized-cp": (52, 168, 83),
     "zmp-preview": (162, 94, 224),
+    "learned-feedback": (0, 191, 196),
 }
 
 

@@ -20,6 +20,7 @@ from gait_lab import (  # noqa: E402
     CapturePointWalk,
     OptimizedCapturePoint,
     ZMPPreviewWalk,
+    LearnedFeedbackWalk,
     Command,
     GaitHarness,
     G1Model,
@@ -155,6 +156,31 @@ def test_png_writer_roundtrip(tmp_path):
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
     width, height = struct.unpack(">II", data[16:24])
     assert (width, height) == (20, 12)
+
+
+def test_learned_feedback_walks_far_and_is_deterministic(model):
+    learned = rollout(model, LearnedFeedbackWalk(), horizon=8.0)
+    balanced = rollout(model, BalancedCPG(), horizon=8.0)
+    # The learned linear feedback walks markedly farther than the hand-tuned
+    # feedback (it does not out-survive it — the honest farthest-vs-stable tradeoff).
+    assert learned.forward_distance > balanced.forward_distance
+    # The baked policy must be reproducible (the whole point after the chaotic
+    # 3.4s-fluke lesson).
+    again = rollout(model, LearnedFeedbackWalk(), horizon=8.0)
+    assert learned.forward_distance == pytest.approx(again.forward_distance)
+    assert learned.survival_time == pytest.approx(again.survival_time)
+
+
+def test_perturbation_is_deterministic_and_robust(model):
+    from gait_lab import GaitHarness
+
+    harness = GaitHarness(model, horizon=8.0)
+    a, _ = harness.rollout(LearnedFeedbackWalk(), render=False, perturb_seed=0)
+    b, _ = harness.rollout(LearnedFeedbackWalk(), render=False, perturb_seed=0)
+    # Same perturbation seed -> identical rollout.
+    assert a.survival_time == pytest.approx(b.survival_time)
+    # Robustly trained: it still walks forward from a perturbed start.
+    assert a.forward_distance > 0.3
 
 
 def test_optimizer_objectives_reward_their_axis():

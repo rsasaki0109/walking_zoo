@@ -22,22 +22,23 @@ bottom by the left colour bar: **grey** `stand-hold` (stays upright, goes
 nowhere), **red** `open-loop-cpg` (topples in ~1 s), **blue** `balanced-cpg`
 (steps and stays up longest of the CPGs), **yellow** `capture-point` (walks then
 falls), **green** `optimized-cp` (walks farthest), **purple** `zmp-preview`
-(planned, balanced walking). Regenerate with `MUJOCO_GL=egl python3
-render_montage.py`.*
+(planned, balanced walking), **teal** `learned-feedback` (learned feedback,
+walks far). Regenerate with `MUJOCO_GL=egl python3 render_montage.py`.*
 
 ## What's included
 
-Six algorithms spanning four classes (CPG, reactive model-based, optimised,
-preview model-based):
+Seven algorithms spanning five classes (CPG, reactive model-based, optimised,
+preview model-based, learned):
 
-| algorithm        | idea                                                          |
-|------------------|---------------------------------------------------------------|
-| `stand-hold`     | hold the standing keyframe (baseline: stable, goes nowhere)   |
-| `open-loop-cpg`  | fixed sinusoidal stepping, **no feedback** (the honest failure) |
-| `balanced-cpg`   | stepping + lateral weight-shift + torso-attitude feedback     |
-| `capture-point`  | LIPM capture-point footstep placement + leg **inverse kinematics** |
-| `optimized-cp`   | the capture-point gait with parameters found by **optimisation** (CEM), not by hand |
-| `zmp-preview`    | **ZMP preview control** (Kajita) plans a CoM trajectory tracked via IK |
+| algorithm          | idea                                                          |
+|--------------------|---------------------------------------------------------------|
+| `stand-hold`       | hold the standing keyframe (baseline: stable, goes nowhere)   |
+| `open-loop-cpg`    | fixed sinusoidal stepping, **no feedback** (the honest failure) |
+| `balanced-cpg`     | stepping + lateral weight-shift + torso-attitude feedback     |
+| `capture-point`    | LIPM capture-point footstep placement + leg **inverse kinematics** |
+| `optimized-cp`     | the capture-point gait with parameters found by **optimisation** (CEM), not by hand |
+| `zmp-preview`      | **ZMP preview control** (Kajita) plans a CoM trajectory tracked via IK |
+| `learned-feedback` | CPG feedforward + a **learned** linear feedback policy (CEM-trained) |
 
 A representative run (`run_compare.py`, 8 s horizon):
 
@@ -49,6 +50,7 @@ balanced-cpg       fwd=+0.269m  speed=+0.096m/s  survive= 3.09s  drift=0.267m  m
 capture-point      fwd=+0.614m  speed=+0.814m/s  survive= 1.05s  drift=0.038m  minH=0.50m  [FELL]
 optimized-cp       fwd=+1.250m  speed=+1.228m/s  survive= 1.32s  drift=0.128m  minH=0.50m  [FELL]
 zmp-preview        fwd=+0.658m  speed=+0.310m/s  survive= 2.42s  drift=0.194m  minH=0.50m  [FELL]
+learned-feedback   fwd=+0.740m  speed=+0.431m/s  survive= 2.02s  drift=0.100m  minH=0.50m  [FELL]
 
 farthest walker: optimized-cp (+1.250 m, survived 1.32s)
 most stable:     stand-hold (survived 8.00s)
@@ -83,6 +85,12 @@ The story the numbers tell, and the reason a comparison testbed is worth having:
   than `balanced-cpg` *and* survives longer than the reactive `capture-point`,
   because planning ahead lets the CoM sway over the next stance foot *before*
   the step instead of reacting after.
+* **learned-feedback** keeps the CPG feedforward but replaces the hand-tuned
+  ankle gains with a **learned** linear feedback policy (`residual = W @ obs`,
+  `W` trained by CEM, `train_policy.py`). It walks **~2.7× farther** than
+  `balanced-cpg` (0.74 m vs 0.27 m) and far straighter (drift 0.10 m), but does
+  *not* out-survive it — learning the feedback buys distance, not a broken
+  balance ceiling. See *Learning the feedback* below for the (important) caveat.
 
 There is no free lunch here — *farthest walker* and *most stable* are different
 algorithms. None is a robustly-walking controller; that gap is exactly what the
@@ -124,6 +132,37 @@ improves the axis you reward, but it cannot make a reactive scheme balance like 
 planning one. Closing the gap needs a better *algorithm* — `zmp-preview`'s
 look-ahead already survives noticeably longer (2.4 s) — or a learned policy
 behind this same interface.
+
+## Learning the feedback (and a chaos caveat)
+
+`train_policy.py` trains `learned-feedback`'s linear policy (`residual = W @ obs`,
+mapping torso roll/pitch/rates and CoM velocity to ankle/hip corrections) with the
+Cross-Entropy Method, warm-started from balanced-cpg-style ankle gains:
+
+```bash
+python3 train_policy.py --seeds 3 --iters 14   # robust CEM; prints best weights
+```
+
+The learned policy walks much farther and straighter than the hand-tuned feedback
+— but the headline result there is a cautionary tale. **A falling humanoid is
+chaotic.** A first, naive run scored each candidate on a *single* nominal rollout
+and proudly found a policy that "survived 3.4 s" (beating balanced-cpg's 3.1 s)...
+which collapsed back to **1.8 s the moment its weights were rounded to four
+decimals**. It was a fragile fluke sitting in a chaotic basin, not a better gait.
+
+The fix — baked into `train_policy.py` — is to score each candidate on the
+**worst of several perturbed initial states** (`--seeds`: small base tilt + joint
+jitter, via `GaitHarness(..., perturb_seed=...)`). Only genuinely robust feedback
+survives that, and the robustly-trained policy *is* reproducible (and is what's
+baked into `LEARNED_FEEDBACK_WEIGHTS`). The lesson generalises to any sim-based
+gait optimisation/RL: optimise single rollouts of chaotic dynamics and you will
+overfit to noise; evaluate across perturbations or you are measuring luck.
+
+And the through-line holds: learned linear feedback walks farther than hand-tuned
+feedback but tops out at a similar survival — the balance ceiling is a property of
+the *gait class*, not the tuning method. Breaking it is the frontier: richer
+(nonlinear / recurrent) policies, a better feedforward, or end-to-end RL — all of
+which drop in behind the same `GaitController` interface.
 
 ## Running it
 
