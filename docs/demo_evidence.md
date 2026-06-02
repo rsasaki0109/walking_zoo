@@ -16,13 +16,18 @@ ros2 launch walking_zoo_bringup mujoco_g1_runtime_showcase.launch.py
 python3 tools/check_demo_trace.py /tmp/walking_zoo_mujoco_g1_runtime_showcase/demo_trace.json --require-estop
 ```
 
-If Fast DDS shared-memory ports are stale on your machine, run the launch with
-Cyclone DDS and a clean domain:
+If the trace comes back empty (`events: 0`), the default ROS domain is usually
+congested with stale DDS participants or shared-memory port locks from other
+sessions. Re-run the launch on an unused `ROS_DOMAIN_ID`:
 
 ```bash
-export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export ROS_DOMAIN_ID=42
+export ROS_DOMAIN_ID=77
+ros2 launch walking_zoo_bringup mujoco_g1_runtime_showcase.launch.py
 ```
+
+A clean domain gives Fast DDS a fresh shared-memory namespace and lets every node
+discover each other. Cyclone DDS (`export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`)
+is an alternative transport if shared memory is unavailable on your machine.
 
 ## Artifacts
 
@@ -46,6 +51,11 @@ shows the real runtime path:
 /walking_zoo/cmd_vel          twist x=0.22 y=0.00 z=0.00
 /walking_zoo/state            walking state -> WALKING
 
+/walking_zoo/semantic_action  semantic -> walk_backward
+/cmd_vel                      twist x=-0.18 y=0.00 z=0.00
+/walking_zoo/cmd_vel          twist x=-0.18 y=0.00 z=0.00
+/walking_zoo/state            walking state -> WALKING
+
 /walking_zoo/semantic_action  semantic -> turn_left
 /cmd_vel                      twist x=0.00 y=0.00 z=0.55
 /walking_zoo/cmd_vel          twist x=0.00 y=0.00 z=0.55
@@ -56,6 +66,31 @@ shows the real runtime path:
 /walking_zoo/adapter_status   adapter -> ESTOPPED
 /walking_zoo/safety_state     safety -> ESTOPPED
 ```
+
+## Command-to-Visual Traceability
+
+Every gait in the showcase GIF maps to a concrete ROS2 command path, so a
+skeptical viewer can match what the robot does on screen to a row of the trace.
+The runtime collapses fine-grained intent into a small set of locomotion states,
+while `/cmd_vel` and the visual gait carry the direction detail.
+
+| Semantic action | `/cmd_vel` | `/walking_zoo/cmd_vel` (bridge) | Visual gait | Runtime state |
+| --- | --- | --- | --- | --- |
+| `walk_forward` | x=0.22 | x=0.22 | forward walk | WALKING |
+| `run_forward` | x=0.45 | x=0.45 | forward run | WALKING |
+| `walk_backward` | x=-0.18 | x=-0.18 | reverse walk | WALKING |
+| `sidestep_left` | y=0.22 | y=0.22 | sidestep left | WALKING |
+| `sidestep_right` | y=-0.22 | y=-0.22 | sidestep right | WALKING |
+| `turn_left` | z=0.55 | z=0.55 | turn-in-place left | TURNING |
+| `turn_right` | z=-0.55 | z=-0.55 | turn-in-place right | TURNING |
+| `stop` | zero | zero | stand | STANDING |
+| `estop` | (blocked) | (blocked) | estopped pose | ESTOPPED |
+
+Each row is reproducible: the showcase publishes the semantic action and the
+matching `/cmd_vel`, the Nav2 bridge republishes it as `/walking_zoo/cmd_vel`,
+the runtime updates `/walking_zoo/state`, and the visualizer renders the gait.
+The `estop` row is the safety proof: the command path is blocked rather than
+forwarded to the adapter.
 
 ## Safety Proof
 

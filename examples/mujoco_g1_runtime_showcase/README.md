@@ -48,11 +48,18 @@ The trace should show:
 
 ## Troubleshooting
 
-If ROS discovery or Fast DDS shared-memory ports are stale:
+If the trace comes back empty (`events: 0`), the default ROS domain is congested
+with stale DDS participants or shared-memory port locks. Re-run on an unused
+domain so Fast DDS gets a fresh shared-memory namespace:
+
+```bash
+export ROS_DOMAIN_ID=77
+```
+
+Cyclone DDS is an alternative transport if shared memory is unavailable:
 
 ```bash
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export ROS_DOMAIN_ID=42
 ```
 
 If the G1 model is missing:

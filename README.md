@@ -168,6 +168,12 @@ The trace records `/walking_zoo/state`, `/walking_zoo/adapter_status`,
 `/walking_zoo/safety_state`, `/cmd_vel`, `/walking_zoo/cmd_vel`, and
 `/walking_zoo/semantic_action`.
 
+Each gait in the GIF maps to a concrete command path. The
+[command-to-visual traceability table](docs/demo_evidence.md#command-to-visual-traceability)
+shows how every showcase action flows from semantic intent through `/cmd_vel`,
+the Nav2 bridge, the runtime state, and the rendered gait — including the new
+`walk_backward` reverse gait.
+
 See [examples/mujoco_g1_runtime_showcase](examples/mujoco_g1_runtime_showcase)
 for the short example guide.
 
