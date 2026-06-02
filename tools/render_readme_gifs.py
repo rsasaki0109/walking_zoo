@@ -398,7 +398,14 @@ class MujocoUnitreeG1Scene:
         sin_phase = math.sin(phase)
         cos_phase = math.cos(phase)
 
-        if gait == "walk":
+        if gait == "stand":
+            qpos[2] = 0.81 + 0.004 * max(0.0, cos_phase)
+            qpos[3:7] = self._yaw_quat(0.0)
+            self._set_joint(qpos, "left_shoulder_roll_joint", 0.10)
+            self._set_joint(qpos, "right_shoulder_roll_joint", -0.10)
+            self._set_joint(qpos, "left_elbow_joint", 0.40)
+            self._set_joint(qpos, "right_elbow_joint", 0.40)
+        elif gait == "walk":
             qpos[0] = 0.022 * frame_index
             qpos[2] = 0.81 + 0.012 * max(0.0, cos_phase)
             qpos[3:7] = self._yaw_quat(0.0)
@@ -497,14 +504,19 @@ def mujoco_unitree_g1_gait_gallery(scene=None):
     if owns_scene:
         scene = MujocoUnitreeG1Scene()
     gait_specs = [
-        ("walk", "Forward walk", "/cmd_vel x=0.20", GREEN),
+        ("walk", "Forward walk", "/cmd_vel x=0.22", GREEN),
         ("run", "Forward run", "semantic/run", YELLOW),
-        ("sidestep", "Sidestep", "body pose lateral", BLUE),
-        ("turn", "Turn-in-place", "yaw command", PURPLE),
+        ("walk_backward", "Reverse walk", "/cmd_vel x=-0.18", GREEN),
+        ("sidestep", "Sidestep", "/cmd_vel y=0.22", BLUE),
+        ("turn", "Turn-in-place", "/cmd_vel z=0.55", PURPLE),
+        ("stand", "Stand / stop", "zero cmd", MUTED),
     ]
+    columns = 2
+    rows = (len(gait_specs) + columns - 1) // columns
+    gallery_size = (SIZE[0], 270 * rows)
     frames = []
     try:
-        for frame in range(48):
+        for frame in range(36):
             tiles = []
             for gait, title, subtitle, accent in gait_specs:
                 x, y = scene.apply_gait_frame(frame, gait)
@@ -514,9 +526,9 @@ def mujoco_unitree_g1_gait_gallery(scene=None):
                 )
                 draw_small_label(tile, title, subtitle, accent)
                 tiles.append(tile)
-            canvas = Image.new("RGB", SIZE, BG)
+            canvas = Image.new("RGB", gallery_size, BG)
             for index, tile in enumerate(tiles):
-                canvas.paste(tile, ((index % 2) * 480, (index // 2) * 270))
+                canvas.paste(tile, ((index % columns) * 480, (index // columns) * 270))
             frames.append(canvas)
     finally:
         if owns_scene:

@@ -27,7 +27,7 @@ a walking_zoo runtime target.
 ![walking_zoo MuJoCo Unitree G1 humanoid demo](docs/assets/readme/mujoco_unitree_g1_runtime.gif)
 
 The gait gallery shows the command surface walking_zoo is designed to normalize:
-forward walk, forward run, sidestep, and turn-in-place.
+forward walk, forward run, reverse walk, sidestep, turn-in-place, and stand/stop.
 
 ![walking_zoo MuJoCo Unitree G1 gait gallery](docs/assets/readme/mujoco_unitree_g1_gait_gallery.gif)
 
