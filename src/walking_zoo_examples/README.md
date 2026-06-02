@@ -74,6 +74,18 @@ written in the LeRobot v2.1 layout (`meta/info.json`, `meta/tasks.jsonl`,
 `meta/episodes.jsonl`, `meta/stats.json`, and a parquet episode under
 `data/chunk-000/`; a `.jsonl` episode is written if `pyarrow` is unavailable).
 
+Pass several traces to collect them as multiple episodes in one dataset:
+
+```bash
+ros2 run walking_zoo_examples walking_zoo_lerobot_export.py \
+  run_a.json run_b.json run_c.json \
+  --out /tmp/walking_zoo_lerobot --fps 10
+```
+
+Each trace becomes one episode. Tasks are de-duplicated into a shared task
+table, the global frame `index` is continuous across episodes, episodes are
+sharded into `chunk-XYZ` directories, and `stats.json` covers every frame.
+
 Frame mapping:
 
 | LeRobot feature | Source | Vector |

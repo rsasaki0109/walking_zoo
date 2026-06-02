@@ -96,6 +96,83 @@ def test_write_dataset_produces_lerobot_layout(tmp_path):
     assert len(written) == 1
 
 
+def make_turn_trace():
+    """A second, shorter trace with a different semantic action."""
+    return {
+        "schema": "walking_zoo.demo_trace.v1",
+        "generated_by": "walking_zoo_demo_recorder",
+        "duration_sec": 1.0,
+        "latest": {"walking_state": {"robot": "g1"}},
+        "events": [
+            {"t_sec": 0.0, "topic": "/walking_zoo/state",
+             "summary": "", "data": {"state": "STANDING", "mode": 2, "estop_active": False}},
+            {"t_sec": 0.3, "topic": "/cmd_vel",
+             "summary": "", "data": {"linear_x": 0.0, "linear_y": 0.0, "angular_z": 0.4}},
+            {"t_sec": 0.4, "topic": "/walking_zoo/state",
+             "summary": "", "data": {"state": "TURNING", "mode": 3, "estop_active": False}},
+            {"t_sec": 0.6, "topic": "/walking_zoo/semantic_action",
+             "summary": "", "data": {"action": "turn_right"}},
+        ],
+    }
+
+
+def test_build_frames_offsets_index_and_labels_episode():
+    frames = exporter.build_frames(
+        make_turn_trace(), fps=10.0, episode_index=2, task_index=1, global_offset=100)
+    assert frames[0]["index"] == 100
+    assert frames[0]["frame_index"] == 0
+    assert all(f["episode_index"] == 2 for f in frames)
+    assert all(f["task_index"] == 1 for f in frames)
+
+
+def test_write_episodes_dataset_aggregates_two_episodes(tmp_path):
+    traces = [make_trace(), make_turn_trace()]
+    summary = exporter.write_episodes_dataset(traces, tmp_path, fps=10.0)
+    assert summary["episodes"] == 2
+    assert summary["frames"] == 21 + 11  # 2.0s and 1.0s at 10 fps, inclusive of t=0
+    assert len(summary["tasks"]) == 2  # walk_forward and turn_right are distinct
+
+    info = json.loads((tmp_path / "meta" / "info.json").read_text())
+    assert info["total_episodes"] == 2
+    assert info["total_frames"] == 32
+    assert info["total_tasks"] == 2
+    assert info["splits"]["train"] == "0:2"
+
+    episodes = (tmp_path / "meta" / "episodes.jsonl").read_text().strip().splitlines()
+    assert len(episodes) == 2
+    assert json.loads(episodes[0])["episode_index"] == 0
+    assert json.loads(episodes[0])["length"] == 21
+    assert json.loads(episodes[1])["episode_index"] == 1
+    assert json.loads(episodes[1])["length"] == 11
+
+    tasks = (tmp_path / "meta" / "tasks.jsonl").read_text().strip().splitlines()
+    assert len(tasks) == 2
+
+    # Stats cover every frame across both episodes.
+    stats = json.loads((tmp_path / "meta" / "stats.json").read_text())
+    assert stats["action"]["count"] == [32]
+
+    # One episode file per trace.
+    chunk = tmp_path / "data" / "chunk-000"
+    assert (chunk / "episode_000000.parquet").exists() or (chunk / "episode_000000.jsonl").exists()
+    assert (chunk / "episode_000001.parquet").exists() or (chunk / "episode_000001.jsonl").exists()
+
+
+def test_write_episodes_dedupes_identical_tasks(tmp_path):
+    # Two traces with the same semantic action share one task table entry.
+    summary = exporter.write_episodes_dataset([make_trace(), make_trace()], tmp_path, fps=10.0)
+    assert summary["episodes"] == 2
+    assert len(summary["tasks"]) == 1
+    info = json.loads((tmp_path / "meta" / "info.json").read_text())
+    assert info["total_tasks"] == 1
+    assert info["total_episodes"] == 2
+
+
+def test_write_episodes_rejects_empty_list(tmp_path):
+    with pytest.raises(exporter.TraceFormatError):
+        exporter.write_episodes_dataset([], tmp_path, fps=10.0)
+
+
 def test_load_trace_rejects_unknown_schema(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"schema": "something.else", "events": []}))

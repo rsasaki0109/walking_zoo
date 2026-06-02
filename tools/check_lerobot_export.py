@@ -106,6 +106,29 @@ def main() -> int:
             print(f"lerobot export check passed: {len(rows)} frames in jsonl, "
                   f"task={summary['task']!r}")
 
+        # Multi-episode round trip: two traces -> two episodes, aggregated meta.
+        multi_out = Path(tmp) / "multi"
+        multi = exporter.write_episodes_dataset(
+            [synthetic_trace(), synthetic_trace()], multi_out, fps=fps)
+        if multi["episodes"] != 2:
+            print(f"multi episode count {multi['episodes']} != 2", file=sys.stderr)
+            return 1
+        if multi["frames"] != 2 * expected_frames:
+            print(f"multi frame count {multi['frames']} != {2 * expected_frames}",
+                  file=sys.stderr)
+            return 1
+        multi_info = json.loads((multi_out / "meta" / "info.json").read_text())
+        if multi_info["total_episodes"] != 2 or multi_info["splits"]["train"] != "0:2":
+            print("multi info episodes/splits mismatch", file=sys.stderr)
+            return 1
+        chunk = multi_out / "data" / "chunk-000"
+        for ep in ("episode_000000", "episode_000001"):
+            if not list(chunk.glob(f"{ep}.*")):
+                print(f"missing multi episode file: {ep}", file=sys.stderr)
+                return 1
+        print(f"lerobot multi-episode check passed: {multi['episodes']} episodes, "
+              f"{multi['frames']} frames, {len(multi['tasks'])} task(s)")
+
     return 0
 
 

@@ -17,6 +17,11 @@ locomotion state). The output layout mirrors LeRobot v2.1:
     <out>/meta/stats.json
     <out>/data/chunk-000/episode_000000.parquet   (.jsonl fallback if no pyarrow)
 
+Pass several traces to collect them as multiple episodes in one dataset: tasks
+are de-duplicated into a shared table, the global frame ``index`` is continuous
+across episodes, episodes are sharded into ``chunk-XYZ`` directories, and
+``stats.json`` covers every frame.
+
 The trace -> dataset logic is pure Python (no ROS) so it is unit tested.
 """
 
@@ -122,8 +127,18 @@ def derive_task(trace: dict) -> str:
     return "walking_zoo teleop/nav velocity control"
 
 
-def build_frames(trace: dict, fps: float) -> list:
-    """Resample the event trace into fixed-rate (action, observation) frames."""
+def build_frames(
+    trace: dict,
+    fps: float,
+    episode_index: int = 0,
+    task_index: int = 0,
+    global_offset: int = 0,
+) -> list:
+    """Resample the event trace into fixed-rate (action, observation) frames.
+
+    ``frame_index`` is per-episode (0-based), while ``index`` is the global
+    counter across all episodes in the dataset, offset by ``global_offset``.
+    """
     if fps <= 0:
         raise ValueError("fps must be positive")
     events = sorted(
@@ -151,9 +166,9 @@ def build_frames(trace: dict, fps: float) -> list:
             "action": list(state["cmd"]),
             "timestamp": round(t, 6),
             "frame_index": frame_index,
-            "episode_index": 0,
-            "index": frame_index,
-            "task_index": 0,
+            "episode_index": episode_index,
+            "index": global_offset + frame_index,
+            "task_index": task_index,
             "next.done": frame_index == n_ticks - 1,
         })
     return frames
@@ -211,88 +226,141 @@ def _write_jsonl(path: Path, rows: list) -> None:
 
 
 def write_dataset(trace: dict, out_dir: Path, fps: float = 10.0) -> dict:
-    """Write a LeRobot dataset for `trace` under `out_dir`; return a summary."""
+    """Write a single-episode LeRobot dataset for `trace`; return a summary."""
+    summary = write_episodes_dataset([trace], out_dir, fps=fps)
+    # Preserve the single-trace summary shape used by callers and tests.
+    return {
+        "out_dir": summary["out_dir"],
+        "frames": summary["frames"],
+        "fps": summary["fps"],
+        "task": summary["tasks"][0],
+        "data_format": summary["data_format"],
+    }
+
+
+def write_episodes_dataset(traces: list, out_dir: Path, fps: float = 10.0) -> dict:
+    """Write a multi-episode LeRobot dataset, one episode per trace.
+
+    Tasks are de-duplicated across episodes into a shared task table, the global
+    frame ``index`` is continuous across episodes, episodes are sharded into
+    ``chunk-XYZ`` directories, and ``stats.json`` covers every frame.
+    """
     out_dir = Path(out_dir)
-    frames = build_frames(trace, fps)
-    task = derive_task(trace)
-    robot_type = "walking_zoo"
-    latest_state = (trace.get("latest") or {}).get("walking_state") or {}
-    if latest_state.get("robot"):
-        robot_type = str(latest_state["robot"])
+    if not traces:
+        raise TraceFormatError("no traces provided; nothing to export")
 
     meta_dir = out_dir / "meta"
-    data_dir = out_dir / "data" / "chunk-000"
     meta_dir.mkdir(parents=True, exist_ok=True)
-    data_dir.mkdir(parents=True, exist_ok=True)
 
-    data_format, data_path_template = _write_episode(data_dir, frames)
+    tasks: list = []
+    task_to_index: dict = {}
+    episodes_meta: list = []
+    all_frames: list = []
+    data_format = None
+    data_path_template = None
+    global_index = 0
+
+    for episode_index, trace in enumerate(traces):
+        task = derive_task(trace)
+        if task not in task_to_index:
+            task_to_index[task] = len(tasks)
+            tasks.append(task)
+        task_index = task_to_index[task]
+
+        frames = build_frames(
+            trace, fps,
+            episode_index=episode_index,
+            task_index=task_index,
+            global_offset=global_index,
+        )
+        global_index += len(frames)
+        all_frames.extend(frames)
+        episodes_meta.append(
+            {"episode_index": episode_index, "tasks": [task], "length": len(frames)})
+
+        chunk = episode_index // CHUNK_SIZE
+        data_dir = out_dir / "data" / f"chunk-{chunk:03d}"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        data_format, data_path_template = _write_episode(data_dir, frames, episode_index)
+
+    total_chunks = ((len(traces) - 1) // CHUNK_SIZE) + 1
+    robot_type = "walking_zoo"
+    first_latest = (traces[0].get("latest") or {}).get("walking_state") or {}
+    if first_latest.get("robot"):
+        robot_type = str(first_latest["robot"])
 
     info = {
         "codebase_version": LEROBOT_CODEBASE_VERSION,
         "robot_type": robot_type,
-        "total_episodes": 1,
-        "total_frames": len(frames),
-        "total_tasks": 1,
+        "total_episodes": len(traces),
+        "total_frames": len(all_frames),
+        "total_tasks": len(tasks),
         "total_videos": 0,
-        "total_chunks": 1,
+        "total_chunks": total_chunks,
         "chunks_size": CHUNK_SIZE,
         "fps": fps,
-        "splits": {"train": "0:1"},
+        "splits": {"train": f"0:{len(traces)}"},
         "data_path": data_path_template,
         "data_format": data_format,
         "video_path": None,
         "features": _features_schema(),
         "source": {
-            "schema": trace.get("schema"),
-            "generated_by": trace.get("generated_by"),
-            "duration_sec": trace.get("duration_sec"),
+            "schema": traces[0].get("schema"),
+            "generated_by": traces[0].get("generated_by"),
+            "episodes": len(traces),
         },
     }
     (meta_dir / "info.json").write_text(
         json.dumps(info, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    _write_jsonl(meta_dir / "tasks.jsonl", [{"task_index": 0, "task": task}])
     _write_jsonl(
-        meta_dir / "episodes.jsonl",
-        [{"episode_index": 0, "tasks": [task], "length": len(frames)}])
+        meta_dir / "tasks.jsonl",
+        [{"task_index": i, "task": t} for i, t in enumerate(tasks)])
+    _write_jsonl(meta_dir / "episodes.jsonl", episodes_meta)
     (meta_dir / "stats.json").write_text(
-        json.dumps(compute_stats(frames), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        json.dumps(compute_stats(all_frames), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8")
 
     return {
         "out_dir": str(out_dir),
-        "frames": len(frames),
+        "episodes": len(traces),
+        "frames": len(all_frames),
         "fps": fps,
-        "task": task,
+        "tasks": tasks,
         "data_format": data_format,
     }
 
 
-def _write_episode(data_dir: Path, frames: list) -> tuple:
-    """Write episode 0; return (data_format, info data_path template)."""
+def _write_episode(data_dir: Path, frames: list, episode_index: int = 0) -> tuple:
+    """Write one episode file; return (data_format, info data_path template)."""
+    stem = f"episode_{episode_index:06d}"
     try:
         import pandas as pd  # noqa: WPS433 (optional dependency)
 
         frame = pd.DataFrame(frames)
-        frame.to_parquet(data_dir / "episode_000000.parquet", index=False)
+        frame.to_parquet(data_dir / f"{stem}.parquet", index=False)
         return "parquet", "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet"
     except Exception:  # noqa: BLE001 - fall back to a dependency-free format
-        _write_jsonl(data_dir / "episode_000000.jsonl", frames)
+        _write_jsonl(data_dir / f"{stem}.jsonl", frames)
         return "jsonl", "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.jsonl"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("trace", type=Path, help="path to a walking_zoo demo_trace.json")
+    parser.add_argument(
+        "trace", type=Path, nargs="+",
+        help="one or more walking_zoo demo_trace.json files (one episode each)")
     parser.add_argument(
         "--out", type=Path, required=True, help="output LeRobot dataset directory")
     parser.add_argument("--fps", type=float, default=10.0, help="resampling rate (default 10)")
     args = parser.parse_args()
 
-    trace = load_trace(args.trace)
-    summary = write_dataset(trace, args.out, fps=args.fps)
+    traces = [load_trace(path) for path in args.trace]
+    summary = write_episodes_dataset(traces, args.out, fps=args.fps)
     print(
-        f"wrote LeRobot dataset: {summary['frames']} frames @ {summary['fps']} fps "
+        f"wrote LeRobot dataset: {summary['episodes']} episode(s), "
+        f"{summary['frames']} frames @ {summary['fps']} fps "
         f"({summary['data_format']}) -> {summary['out_dir']}")
-    print(f"task: {summary['task']}")
+    print(f"tasks: {', '.join(summary['tasks'])}")
     return 0
 
 
