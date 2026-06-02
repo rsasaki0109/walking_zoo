@@ -17,7 +17,7 @@ the "runtime" is the physics harness.
 
 ## What's included
 
-Four algorithms spanning two classes (CPG and model-based footstep):
+Five algorithms spanning three classes (CPG, model-based footstep, optimised):
 
 | algorithm        | idea                                                          |
 |------------------|---------------------------------------------------------------|
@@ -25,6 +25,7 @@ Four algorithms spanning two classes (CPG and model-based footstep):
 | `open-loop-cpg`  | fixed sinusoidal stepping, **no feedback** (the honest failure) |
 | `balanced-cpg`   | stepping + lateral weight-shift + torso-attitude feedback     |
 | `capture-point`  | LIPM capture-point footstep placement + leg **inverse kinematics** |
+| `optimized-cp`   | the capture-point gait with parameters found by **optimisation** (CEM), not by hand |
 
 A representative run (`run_compare.py`, 6 s horizon):
 
@@ -34,8 +35,9 @@ stand-hold         fwd=-0.000m  speed=-0.000m/s  survive= 6.00s  drift=0.000m  m
 open-loop-cpg      fwd=+0.100m  speed=+0.130m/s  survive= 1.07s  drift=0.168m  minH=0.50m  [FELL]
 balanced-cpg       fwd=+0.269m  speed=+0.096m/s  survive= 3.09s  drift=0.267m  minH=0.50m  [FELL]
 capture-point      fwd=+0.614m  speed=+0.814m/s  survive= 1.05s  drift=0.038m  minH=0.50m  [FELL]
+optimized-cp       fwd=+1.250m  speed=+1.228m/s  survive= 1.32s  drift=0.128m  minH=0.50m  [FELL]
 
-farthest walker: capture-point (+0.614 m, survived 1.05s)
+farthest walker: optimized-cp (+1.250 m, survived 1.32s)
 most stable:     stand-hold (survived 6.00s)
 ```
 
@@ -53,10 +55,34 @@ The story the numbers tell, and the reason a comparison testbed is worth having:
   placement commits to long strides without true dynamic (ZMP/force) balance, so
   it eventually topples.
 
+* **optimized-cp** is the *same algorithm and interface* as `capture-point`,
+  but its parameters were found by **optimisation** (`optimize.py`, a
+  Cross-Entropy Method over physics rollouts) instead of by hand. It walks
+  **~2× farther** than the hand-tuned version (1.25 m vs 0.61 m) — the testbed's
+  concrete answer to "does an optimisation-based gait beat hand-tuning?". Note
+  it optimised the *distance* objective: it does not out-*stabilise*
+  `balanced-cpg`, because that is not what it was rewarded for. Optimisation
+  closes the gap on the axis you optimise.
+
 There is no free lunch here — *farthest walker* and *most stable* are different
 algorithms. None is a robustly-walking controller; that gap is exactly what the
-testbed measures, and the natural next algorithm is a learned or
-optimisation-based gait dropped in behind the same `GaitController` interface.
+testbed measures, and a learned policy plugs in the same way (see below).
+
+## Optimising a gait
+
+`optimize.py` searches a controller's `TUNABLES` parameter space with the
+Cross-Entropy Method, scoring each candidate by a physics rollout (distance
+walked, with a small survival term). It warm-starts at the hand-tuned defaults:
+
+```bash
+python3 optimize.py --iters 10 --pop 18 --seed 0   # ~a few minutes; deterministic
+```
+
+The discovered parameters are baked into `OptimizedCapturePoint`
+(`controllers.OPTIMIZED_CAPTURE_POINT_PARAMS`) so the result is reproducible and
+needs no optimiser at run time. A **learned policy** is the same shape: swap the
+parameter/inference source behind the identical `GaitController` interface —
+load weights in `reset`, run the network in `update`.
 
 ## Running it
 

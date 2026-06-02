@@ -85,6 +85,17 @@
   most stable" tradeoff the testbed surfaces, motivating a learned/optimisation
   gait behind the same interface. Covered by added IK and comparison pytest
   cases.
+- Added an optimisation-based gait to `experiments/gait_lab`. `optimize.py` runs
+  a Cross-Entropy Method over a controller's `TUNABLES` parameter space, scoring
+  each candidate by a physics rollout and warm-starting at the hand-tuned
+  defaults. The parameters it found for the capture-point walker are baked into
+  a new `OptimizedCapturePoint` controller (same algorithm, same
+  `GaitController` interface — only the constants come from optimisation rather
+  than by hand), which walks ~2× farther than the hand-tuned version (1.25 m vs
+  0.61 m). Demonstrates that an optimisation-based gait beats hand-tuning on the
+  objective it was given (distance), and that a learned policy would plug into
+  the same interface. Covered by a pytest case asserting the optimised gait
+  out-walks the hand-tuned one.
 - Captured multi-episode LeRobot datasets from live runtime runs and confirmed
   HuggingFace `datasets.load_dataset` compatibility. Added
   `tools/capture_lerobot_episodes.py`, which brings up the mock runtime and

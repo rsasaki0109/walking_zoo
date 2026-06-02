@@ -186,6 +186,28 @@ class CapturePointWalk(GaitController):
     ankle_roll_kp = 0.30
     ankle_kd = 0.05
 
+    # Search space an optimiser may explore (name -> (low, high)). These are the
+    # hand-tuned constants above; the optimised gait simply overrides them.
+    TUNABLES = {
+        "step_duration": (0.30, 0.60),
+        "forward_speed": (0.0, 0.40),
+        "capture_x": (0.30, 1.50),
+        "capture_y": (0.0, 0.80),
+        "nominal_width": (0.40, 1.10),
+        "step_lift": (0.03, 0.10),
+        "ankle_pitch_kp": (0.0, 0.40),
+        "ankle_roll_kp": (0.0, 0.60),
+    }
+
+    def __init__(self, params: dict | None = None):
+        # Override the hand-tuned class defaults with instance params (the hook
+        # the optimiser uses; a plain CapturePointWalk() keeps the hand defaults).
+        if params:
+            for key, value in params.items():
+                if key not in self.TUNABLES:
+                    raise KeyError(f"unknown tunable {key!r}")
+                setattr(self, key, float(value))
+
     def reset(self, model: G1Model) -> None:
         super().reset(model)
         self.ground = float(model.foot_pos("left")[2])
@@ -242,6 +264,47 @@ class CapturePointWalk(GaitController):
         return ctrl
 
 
+# Parameters discovered by `optimize.py` (Cross-Entropy Method, seed 0, 10
+# generations of 18) maximising distance walked over a 6 s horizon. The optimiser
+# warm-started from the hand-tuned CapturePointWalk defaults and roughly doubled
+# the distance (0.61 m -> 1.27 m). Reproduce with:
+#   python3 optimize.py --iters 10 --pop 18 --seed 0
+OPTIMIZED_CAPTURE_POINT_PARAMS = {
+    "step_duration": 0.4275,
+    "forward_speed": 0.0755,
+    "capture_x": 0.4356,
+    "capture_y": 0.3345,
+    "nominal_width": 0.9126,
+    "step_lift": 0.0464,
+    "ankle_pitch_kp": 0.3676,
+    "ankle_roll_kp": 0.1673,
+}
+
+
+class OptimizedCapturePoint(CapturePointWalk):
+    """CapturePointWalk with parameters found by optimisation, not by hand.
+
+    Same algorithm and same interface as :class:`CapturePointWalk` — only the
+    constants differ, and they came from `optimize.py` (Cross-Entropy Method over
+    physics rollouts) rather than hand-tuning. It walks markedly farther than the
+    hand-tuned version, the testbed's concrete answer to "does an optimisation-
+    based gait beat hand-tuning?" A learned policy would plug in the same way:
+    swap the parameter source (an optimiser, or a trained network) behind this
+    identical `GaitController` surface.
+    """
+
+    name = "optimized-cp"
+
+    def __init__(self):
+        super().__init__(OPTIMIZED_CAPTURE_POINT_PARAMS)
+
+
 # Registry. ``run_compare`` iterates this; tests assert each invariant.
 def CONTROLLERS() -> list[GaitController]:
-    return [StandHold(), OpenLoopCPG(), BalancedCPG(), CapturePointWalk()]
+    return [
+        StandHold(),
+        OpenLoopCPG(),
+        BalancedCPG(),
+        CapturePointWalk(),
+        OptimizedCapturePoint(),
+    ]

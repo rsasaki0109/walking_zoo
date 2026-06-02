@@ -18,6 +18,7 @@ from gait_lab import (  # noqa: E402
     CONTROLLERS,
     BalancedCPG,
     CapturePointWalk,
+    OptimizedCapturePoint,
     Command,
     GaitHarness,
     G1Model,
@@ -93,6 +94,14 @@ def test_capture_point_walks_farthest(model):
     assert cp.forward_distance > 0.4
     # ...and tracks a straighter line than the naive open-loop stepper.
     assert cp.lateral_drift < results["open-loop-cpg"].lateral_drift
+
+
+def test_optimized_gait_beats_hand_tuned(model):
+    hand = rollout(model, CapturePointWalk(), horizon=6.0)
+    opt = rollout(model, OptimizedCapturePoint(), horizon=6.0)
+    # Same algorithm/interface, parameters from CEM optimisation instead of by
+    # hand: it should walk markedly farther (it roughly doubled the distance).
+    assert opt.forward_distance > hand.forward_distance * 1.3
 
 
 def test_metrics_are_finite_and_serializable(model):
