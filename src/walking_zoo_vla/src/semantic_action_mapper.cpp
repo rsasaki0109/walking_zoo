@@ -15,16 +15,34 @@ SemanticMapping SemanticActionMapper::map(
     mapping.status_text = "mapped semantic stop";
     return mapping;
   }
-  if (action.action == "move_forward") {
+  if (action.action == "move_forward" || action.action == "walk_forward") {
     mapping.recognized = true;
     mapping.velocity.twist.linear.x = 0.2;
     mapping.status_text = "mapped move_forward to conservative velocity";
+    return mapping;
+  }
+  if (action.action == "run_forward") {
+    mapping.recognized = true;
+    mapping.velocity.twist.linear.x = 0.35;
+    mapping.status_text = "mapped run_forward to faster forward velocity";
     return mapping;
   }
   if (action.action == "move_backward" || action.action == "walk_backward") {
     mapping.recognized = true;
     mapping.velocity.twist.linear.x = -0.15;
     mapping.status_text = "mapped move_backward to conservative reverse velocity";
+    return mapping;
+  }
+  if (action.action == "sidestep_left") {
+    mapping.recognized = true;
+    mapping.velocity.twist.linear.y = 0.2;
+    mapping.status_text = "mapped sidestep_left to conservative lateral velocity";
+    return mapping;
+  }
+  if (action.action == "sidestep_right") {
+    mapping.recognized = true;
+    mapping.velocity.twist.linear.y = -0.2;
+    mapping.status_text = "mapped sidestep_right to conservative lateral velocity";
     return mapping;
   }
   if (action.action == "turn_left") {
