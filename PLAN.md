@@ -437,16 +437,40 @@ Medium issues:
 - Add command source tagging to runtime debug output.
 - Add body pose command visualization in MuJoCo G1.
 - Add trace validator checks for full state ordering.
-- Add Nav2 BT stub docs and sample recovery tree.
+- [x] Add Nav2 BT stub docs and sample recovery tree (superseded by the live
+  `walking_zoo_bt_recovery_node` and `bt_xml/walking_zoo_recovery_live.xml`).
 - Add runtime diagnostics publisher coverage.
 
-Hard issues:
+Hard issues (completed in the deep-integration pass):
 
-- Optional Unitree SDK2 adapter implementation.
-- Footstep plan execution contract.
-- BehaviorTree.CPP integration without making the default build fragile.
-- Runtime log export design for LeRobot-style datasets.
-- Legged-aware Nav2 integration beyond `cmd_vel`.
+- [x] Optional Unitree SDK2 adapter implementation — SIL by default, with a real
+  vendor-SDK link path behind a `UnitreeLocoBackend` dispatch boundary.
+- [x] Footstep plan execution contract — `ExecuteFootstepPlan` action with a
+  feasibility gate, plus a terrain-aware `FootstepPlanner` (keep-out avoidance,
+  curb step-up).
+- [x] BehaviorTree.CPP integration without making the default build fragile — a
+  live `walking_zoo_bt_recovery_node` that calls `/walking_zoo/clear_fault`.
+- [x] Runtime log export design for LeRobot-style datasets — single- and
+  multi-episode exporter (`walking_zoo_lerobot_export.py`).
+- [x] Legged-aware Nav2 integration beyond `cmd_vel` — `LeggedVelocityShaper`
+  plus a readiness-gated bridge.
+
+Each landed wired into the real runtime/pipeline, with gtest/pytest coverage and
+an end-to-end check, not as an orphan utility.
+
+## Next Phase
+
+With the hard issues closed, the next phase widens the runtime rather than
+deepening single features:
+
+- A second real adapter (ANYmal / Go2 / Digit) to give the "adapter hub" real
+  breadth and validate the dispatch-backend pattern across vendors.
+- Embed the `walking_zoo_bt` recovery nodes inside an actual Nav2 BT navigator
+  recovery branch (not just the standalone recovery node).
+- Terrain-aware footstep planning fed from a real elevation/cost source instead
+  of hand-authored boxes.
+- Capture multi-episode LeRobot datasets from live showcase runs and confirm
+  HuggingFace `load_dataset` compatibility.
 
 ## Definition Of Done For The Next Push
 
