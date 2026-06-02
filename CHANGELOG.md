@@ -19,3 +19,4 @@
 - Runtime trace recorder and MuJoCo G1 runtime showcase launch with JSON/Markdown demo artifacts.
 - Demo evidence documentation and richer runtime trace validator output.
 - Improved MuJoCo Unitree G1 run gait pose, cadence, body lean, and README GIF assets.
+- Added `walk_backward` reverse gait to the MuJoCo Unitree G1 visualizer, gait showcase sequence, hero showcase GIF, and a `move_backward` semantic-to-velocity runtime mapping.

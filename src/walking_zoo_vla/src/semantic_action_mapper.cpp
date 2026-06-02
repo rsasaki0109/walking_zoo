@@ -21,6 +21,12 @@ SemanticMapping SemanticActionMapper::map(
     mapping.status_text = "mapped move_forward to conservative velocity";
     return mapping;
   }
+  if (action.action == "move_backward" || action.action == "walk_backward") {
+    mapping.recognized = true;
+    mapping.velocity.twist.linear.x = -0.15;
+    mapping.status_text = "mapped move_backward to conservative reverse velocity";
+    return mapping;
+  }
   if (action.action == "turn_left") {
     mapping.recognized = true;
     mapping.velocity.twist.angular.z = 0.3;

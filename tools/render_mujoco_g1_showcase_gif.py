@@ -183,6 +183,25 @@ class G1ShowcaseScene:
             qpos[2] = 0.815 + 0.026 * (0.5 + 0.5 * math.cos(2.0 * phase))
             qpos[3:7] = self.body_quat(0.0, -0.07 + 0.012 * sin_phase, 0.0)
             self.forward_gait(qpos, sin_phase, cos_phase, fast=True)
+        elif gait == "walk_backward":
+            qpos[0] = -0.016 * frame_index
+            qpos[2] = 0.806 + 0.010 * max(0.0, cos_phase)
+            qpos[3:7] = self.body_quat(0.0, 0.06, 0.0)
+            for side, value in (("left", sin_phase), ("right", -sin_phase)):
+                swing = max(0.0, value)
+                self.set_joint(qpos, f"{side}_hip_pitch_joint", 0.20 * value)
+                self.set_joint(qpos, f"{side}_knee_joint", 0.16 + 0.30 * swing)
+                self.set_joint(qpos, f"{side}_ankle_pitch_joint", -0.06 - 0.10 * swing + 0.08 * value)
+            self.set_joint(qpos, "left_hip_roll_joint", 0.04 * cos_phase)
+            self.set_joint(qpos, "right_hip_roll_joint", -0.04 * cos_phase)
+            self.set_joint(qpos, "waist_pitch_joint", 0.05)
+            self.set_joint(qpos, "waist_yaw_joint", 0.04 * sin_phase)
+            self.set_joint(qpos, "left_shoulder_pitch_joint", 0.10 - 0.18 * sin_phase)
+            self.set_joint(qpos, "right_shoulder_pitch_joint", 0.10 + 0.18 * sin_phase)
+            self.set_joint(qpos, "left_shoulder_roll_joint", 0.12)
+            self.set_joint(qpos, "right_shoulder_roll_joint", -0.12)
+            self.set_joint(qpos, "left_elbow_joint", 0.55)
+            self.set_joint(qpos, "right_elbow_joint", 0.55)
         elif gait in ("sidestep_left", "sidestep_right"):
             direction = 1.0 if gait == "sidestep_left" else -1.0
             qpos[1] = direction * 0.018 * frame_index
@@ -265,6 +284,7 @@ def draw_overlay(img, spec, step_name):
     labels = [
         ("walk", GREEN),
         ("run", YELLOW),
+        ("back", GREEN),
         ("left", BLUE),
         ("right", BLUE),
         ("turn", PURPLE),
@@ -282,6 +302,7 @@ def build_sequence():
     return [
         {"step": "walk", "gait": "walk", "input": "semantic/walk", "state": "WALKING", "safety": "passed", "accent": GREEN, "frames": 14},
         {"step": "run", "gait": "run", "input": "semantic/run", "state": "RUNNING", "safety": "passed", "accent": YELLOW, "frames": 14},
+        {"step": "back", "gait": "walk_backward", "input": "semantic/back", "state": "REVERSE", "safety": "passed", "accent": GREEN, "frames": 13},
         {"step": "left", "gait": "sidestep_left", "input": "semantic/sidestep_left", "state": "SIDESTEP", "safety": "passed", "accent": BLUE, "frames": 12},
         {"step": "right", "gait": "sidestep_right", "input": "semantic/sidestep_right", "state": "SIDESTEP", "safety": "passed", "accent": BLUE, "frames": 12},
         {"step": "turn", "gait": "turn_left", "input": "semantic/turn_left", "state": "TURNING", "safety": "passed", "accent": PURPLE, "frames": 14},

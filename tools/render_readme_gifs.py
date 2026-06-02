@@ -408,6 +408,25 @@ class MujocoUnitreeG1Scene:
             qpos[2] = 0.815 + 0.026 * (0.5 + 0.5 * math.cos(2.0 * phase))
             qpos[3:7] = self._body_quat(0.0, -0.07 + 0.012 * sin_phase, 0.0)
             self._set_forward_gait(qpos, sin_phase, cos_phase, 0.62, 0.30, 0.74, -0.22, 0.22, 0.58)
+        elif gait == "walk_backward":
+            qpos[0] = -0.016 * frame_index
+            qpos[2] = 0.806 + 0.010 * max(0.0, cos_phase)
+            qpos[3:7] = self._body_quat(0.0, 0.06, 0.0)
+            for side, value in (("left", sin_phase), ("right", -sin_phase)):
+                swing = max(0.0, value)
+                self._set_joint(qpos, f"{side}_hip_pitch_joint", 0.20 * value)
+                self._set_joint(qpos, f"{side}_knee_joint", 0.16 + 0.30 * swing)
+                self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.06 - 0.10 * swing + 0.08 * value)
+            self._set_joint(qpos, "left_hip_roll_joint", 0.04 * cos_phase)
+            self._set_joint(qpos, "right_hip_roll_joint", -0.04 * cos_phase)
+            self._set_joint(qpos, "waist_pitch_joint", 0.05)
+            self._set_joint(qpos, "waist_yaw_joint", 0.04 * sin_phase)
+            self._set_joint(qpos, "left_shoulder_pitch_joint", 0.10 - 0.18 * sin_phase)
+            self._set_joint(qpos, "right_shoulder_pitch_joint", 0.10 + 0.18 * sin_phase)
+            self._set_joint(qpos, "left_shoulder_roll_joint", 0.12)
+            self._set_joint(qpos, "right_shoulder_roll_joint", -0.12)
+            self._set_joint(qpos, "left_elbow_joint", 0.55)
+            self._set_joint(qpos, "right_elbow_joint", 0.55)
         elif gait == "sidestep":
             qpos[1] = 0.018 * frame_index
             qpos[2] = 0.81 + 0.012 * max(0.0, cos_phase)

@@ -53,6 +53,7 @@ class MujocoG1GaitShowcase(Node):
         actions = [
             "walk_forward",
             "run_forward",
+            "walk_backward",
             "sidestep_left",
             "sidestep_right",
             "turn_left",
@@ -88,6 +89,8 @@ class MujocoG1GaitShowcase(Node):
             msg.linear.x = 0.22
         elif action == "run_forward":
             msg.linear.x = 0.45
+        elif action == "walk_backward":
+            msg.linear.x = -0.18
         elif action == "sidestep_left":
             msg.linear.y = 0.22
         elif action == "sidestep_right":

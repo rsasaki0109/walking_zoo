@@ -137,6 +137,7 @@ ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.25}, angular: {z
 Or switch gaits through semantic actions:
 
 ```bash
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'walk_backward'}" --once
 ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'sidestep_left'}" --once
 ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'turn_right'}" --once
 ```
@@ -151,8 +152,8 @@ Run the one-command gait showcase to capture multiple walking styles:
 ros2 launch walking_zoo_bringup mujoco_g1_gait_showcase.launch.py
 ```
 
-The showcase automatically steps through forward walk, forward run, sidestep,
-turn-in-place, stop, and the runtime e-stop gate. It writes
+The showcase automatically steps through forward walk, forward run, reverse
+walk, sidestep, turn-in-place, stop, and the runtime e-stop gate. It writes
 `/tmp/walking_zoo_mujoco_g1_showcase/latest.png` and `live.gif`.
 
 Run the runtime proof version to capture the GIF plus ROS2 topic trace:
