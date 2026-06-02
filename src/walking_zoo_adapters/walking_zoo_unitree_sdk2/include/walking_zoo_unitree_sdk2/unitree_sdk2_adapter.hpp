@@ -1,7 +1,11 @@
 #ifndef WALKING_ZOO_UNITREE_SDK2__UNITREE_SDK2_ADAPTER_HPP_
 #define WALKING_ZOO_UNITREE_SDK2__UNITREE_SDK2_ADAPTER_HPP_
 
+#include <memory>
+#include <string>
+
 #include "walking_zoo_core/walking_adapter.hpp"
+#include "walking_zoo_unitree_sdk2/loco_backend.hpp"
 #include "walking_zoo_unitree_sdk2/unitree_loco_command.hpp"
 
 namespace walking_zoo_unitree_sdk2
@@ -12,6 +16,11 @@ class UnitreeSdk2Adapter : public walking_zoo_core::WalkingAdapter
 public:
   UnitreeSdk2Adapter();
   ~UnitreeSdk2Adapter() override = default;
+
+  // Movable (it owns a unique_ptr backend); copying a live adapter is not
+  // meaningful. pluginlib only ever default-constructs it on the heap.
+  UnitreeSdk2Adapter(UnitreeSdk2Adapter &&) = default;
+  UnitreeSdk2Adapter & operator=(UnitreeSdk2Adapter &&) = default;
 
   walking_zoo_core::CallbackReturn configure(
     const walking_zoo_core::AdapterContext & context) override;
@@ -34,11 +43,18 @@ public:
   walking_zoo_core::CommandResult emergency_stop() override;
   walking_zoo_core::CommandResult clear_fault() override;
 
+  // Read-only access to the dispatch backend (sil or unitree_sdk2), for status
+  // reporting and tests that verify what was forwarded to hardware.
+  const UnitreeLocoBackend * backend() const {return backend_.get();}
+
 private:
-  // Whether commands are actually dispatched to hardware. True only when built
-  // against the vendor SDK *and* motion is allowed; otherwise the adapter runs
-  // as a software-in-the-loop model that translates and tracks commands.
+  // Whether commands actually reach motors: only when the backend dispatches to
+  // hardware (the SDK2 backend) *and* motion is allowed. The SIL backend never
+  // reports true here, but still records commands for inspection.
   bool dispatch_to_hardware() const;
+  // Whether a command should be forwarded to the backend at all: always for the
+  // SIL backend (so it can record), and for hardware only when motion is allowed.
+  bool should_forward() const;
   void enter_mode(LocoMode mode);
 
   walking_zoo_core::RobotProfile profile_;
@@ -53,6 +69,9 @@ private:
   G1PostureLimits posture_limits_;
   LocoVelocityCommand last_velocity_;
   bool has_velocity_command_{false};
+
+  std::unique_ptr<UnitreeLocoBackend> backend_;
+  std::string network_interface_{"lo"};
 };
 
 }  // namespace walking_zoo_unitree_sdk2

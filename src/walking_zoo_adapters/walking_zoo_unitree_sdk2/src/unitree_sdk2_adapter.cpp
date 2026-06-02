@@ -12,17 +12,23 @@ UnitreeSdk2Adapter::UnitreeSdk2Adapter() = default;
 
 bool UnitreeSdk2Adapter::dispatch_to_hardware() const
 {
-#ifdef WALKING_ZOO_WITH_UNITREE_SDK2
-  return allow_motion_;
-#else
-  return false;
-#endif
+  return backend_ && backend_->dispatches_to_hardware() && allow_motion_;
+}
+
+bool UnitreeSdk2Adapter::should_forward() const
+{
+  // SIL backend: always forward so it records the command. Hardware backend:
+  // forward only when motion is allowed.
+  return backend_ && (!backend_->dispatches_to_hardware() || allow_motion_);
 }
 
 void UnitreeSdk2Adapter::enter_mode(LocoMode mode)
 {
   if (loco_transition_allowed(loco_mode_, mode)) {
     loco_mode_ = mode;
+    if (should_forward()) {
+      backend_->set_mode(mode);
+    }
   }
 }
 
@@ -36,6 +42,11 @@ walking_zoo_core::CallbackReturn UnitreeSdk2Adapter::configure(
   loco_mode_ = LocoMode::ZERO_TORQUE;
   has_velocity_command_ = false;
 
+  // Select the dispatch backend at compile time (SDK2 when built with vendor
+  // support, otherwise software-in-the-loop) and bring its channel up.
+  backend_ = make_loco_backend();
+  backend_->connect(network_interface_);
+
   // Derive the G1 command envelopes from the robot profile so the runtime's
   // configured limits also bound what we translate toward the vendor controller.
   velocity_limits_.max_forward = std::abs(profile_.max_linear_x);
@@ -45,13 +56,13 @@ walking_zoo_core::CallbackReturn UnitreeSdk2Adapter::configure(
   posture_limits_.max_roll = std::abs(profile_.max_body_roll);
   posture_limits_.max_pitch = std::abs(profile_.max_body_pitch);
 
-#ifdef WALKING_ZOO_WITH_UNITREE_SDK2
-  status_text_ = allow_motion_ ?
-    "Unitree SDK2 adapter configured with motion enabled" :
-    "Unitree SDK2 adapter configured with motion disabled";
-#else
-  status_text_ = "Unitree SDK2 adapter configured (software-in-the-loop: SDK not linked)";
-#endif
+  if (backend_->dispatches_to_hardware()) {
+    status_text_ = allow_motion_ ?
+      "Unitree SDK2 adapter configured with motion enabled" :
+      "Unitree SDK2 adapter configured with motion disabled";
+  } else {
+    status_text_ = "Unitree SDK2 adapter configured (software-in-the-loop: SDK not linked)";
+  }
   return walking_zoo_core::CallbackReturn::SUCCESS;
 }
 
@@ -179,16 +190,16 @@ walking_zoo_core::CommandResult UnitreeSdk2Adapter::command_velocity(
   last_velocity_ = loco;
   has_velocity_command_ = true;
 
-#ifdef WALKING_ZOO_WITH_UNITREE_SDK2
-  if (dispatch_to_hardware()) {
-    // loco_client_->Move(loco.vx, loco.vy, loco.vyaw);  // vendor LocoClient call
-    status_text_ = "Unitree Move dispatched";
-  } else {
-    status_text_ = "Unitree Move withheld (allow_motion is false)";
+  if (should_forward()) {
+    backend_->send_velocity(loco);
   }
-#else
-  status_text_ = "Unitree Move translated (software-in-the-loop)";
-#endif
+  if (dispatch_to_hardware()) {
+    status_text_ = "Unitree Move dispatched";
+  } else if (backend_->dispatches_to_hardware()) {
+    status_text_ = "Unitree Move withheld (allow_motion is false)";
+  } else {
+    status_text_ = "Unitree Move translated (software-in-the-loop)";
+  }
 
   if (loco.clamped) {
     return walking_zoo_core::CommandResult::limited("velocity clamped to G1 envelope");
@@ -210,17 +221,16 @@ walking_zoo_core::CommandResult UnitreeSdk2Adapter::command_body_pose(
   enter_mode(LocoMode::BALANCE_STAND);
   has_velocity_command_ = false;
 
-#ifdef WALKING_ZOO_WITH_UNITREE_SDK2
-  if (dispatch_to_hardware()) {
-    // loco_client_->SetBalanceMode / posture call goes here.
-    status_text_ = "Unitree body pose dispatched";
-  } else {
-    status_text_ = "Unitree body pose withheld (allow_motion is false)";
+  if (should_forward()) {
+    backend_->send_posture(posture);
   }
-#else
-  status_text_ = "Unitree body pose translated (software-in-the-loop)";
-#endif
-  (void)posture;
+  if (dispatch_to_hardware()) {
+    status_text_ = "Unitree body pose dispatched";
+  } else if (backend_->dispatches_to_hardware()) {
+    status_text_ = "Unitree body pose withheld (allow_motion is false)";
+  } else {
+    status_text_ = "Unitree body pose translated (software-in-the-loop)";
+  }
 
   if (posture.clamped) {
     return walking_zoo_core::CommandResult::limited("body pose clamped to G1 posture envelope");
@@ -260,6 +270,11 @@ walking_zoo_core::CommandResult UnitreeSdk2Adapter::emergency_stop()
   estop_active_ = true;
   has_velocity_command_ = false;
   enter_mode(LocoMode::DAMP);
+  // Emergency damp goes to hardware regardless of allow_motion: stopping is
+  // always permitted.
+  if (backend_) {
+    backend_->emergency_damp();
+  }
   status_text_ = "Unitree emergency stop requested";
   return walking_zoo_core::CommandResult::success(status_text_);
 }

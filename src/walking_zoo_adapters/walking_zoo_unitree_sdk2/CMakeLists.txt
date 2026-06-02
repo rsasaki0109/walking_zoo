@@ -16,6 +16,8 @@ find_package(walking_zoo_msgs REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   src/unitree_loco_command.cpp
+  src/sil_loco_backend.cpp
+  src/sdk2_loco_backend.cpp
   src/unitree_sdk2_adapter.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
@@ -32,7 +34,18 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 
 if(WALKING_ZOO_WITH_UNITREE_SDK2)
+  # Link the vendor Unitree SDK2. Point CMake at the SDK install with either
+  # -Dunitree_sdk2_DIR=<sdk>/lib/cmake/unitree_sdk2 or by adding the SDK prefix to
+  # CMAKE_PREFIX_PATH. find_package fails loudly when it is missing, so an ON
+  # build never silently degrades to the software-in-the-loop backend.
+  find_package(unitree_sdk2 REQUIRED)
   target_compile_definitions(${PROJECT_NAME} PRIVATE WALKING_ZOO_WITH_UNITREE_SDK2=1)
+  target_link_libraries(${PROJECT_NAME} unitree_sdk2)
+  message(STATUS "walking_zoo_unitree_sdk2: building with vendor Unitree SDK2 support")
+else()
+  message(STATUS
+    "walking_zoo_unitree_sdk2: software-in-the-loop build; configure with "
+    "-DWALKING_ZOO_WITH_UNITREE_SDK2=ON to link the vendor SDK")
 endif()
 
 pluginlib_export_plugin_description_file(walking_zoo_core plugins.xml)
@@ -56,6 +69,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_unitree_loco_command test/test_unitree_loco_command.cpp)
   if(TARGET test_unitree_loco_command)
     target_link_libraries(test_unitree_loco_command ${PROJECT_NAME})
+  endif()
+
+  ament_add_gtest(test_loco_backend test/test_loco_backend.cpp)
+  if(TARGET test_loco_backend)
+    target_link_libraries(test_loco_backend ${PROJECT_NAME})
   endif()
 
   ament_add_gtest(test_unitree_sdk2_adapter test/test_unitree_sdk2_adapter.cpp)

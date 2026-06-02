@@ -3,8 +3,10 @@
 #include "rclcpp/clock.hpp"
 #include "rclcpp/logger.hpp"
 #include "walking_zoo_core/adapter_context.hpp"
+#include "walking_zoo_unitree_sdk2/loco_backend.hpp"
 #include "walking_zoo_unitree_sdk2/unitree_sdk2_adapter.hpp"
 
+using walking_zoo_unitree_sdk2::SilLocoBackend;
 using walking_zoo_unitree_sdk2::UnitreeSdk2Adapter;
 using walking_zoo_core::CommandStatus;
 using WalkingState = walking_zoo_msgs::msg::WalkingState;
@@ -70,6 +72,30 @@ TEST(UnitreeSdk2Adapter, VelocityEntersLocomotionAndReportsWalking)
   const auto state = adapter.read_state();
   EXPECT_EQ(state.locomotion_state, WalkingState::STATE_WALKING);
   EXPECT_EQ(state.locomotion_mode, WalkingState::MODE_WALK);
+}
+
+TEST(UnitreeSdk2Adapter, DefaultBuildUsesSilBackend)
+{
+  auto adapter = make_active_adapter();
+  ASSERT_NE(adapter.backend(), nullptr);
+#ifdef WALKING_ZOO_WITH_UNITREE_SDK2
+  EXPECT_TRUE(adapter.backend()->dispatches_to_hardware());
+#else
+  EXPECT_FALSE(adapter.backend()->dispatches_to_hardware());
+#endif
+}
+
+TEST(UnitreeSdk2Adapter, ForwardsTranslatedVelocityToBackend)
+{
+  // The SIL backend records what *would* be sent to hardware; verify the
+  // adapter actually forwards the clamped command through the backend boundary.
+  auto adapter = make_active_adapter();
+  adapter.command_velocity(twist(5.0, 0.0, 0.0));  // beyond envelope -> clamped
+
+  const auto * sil = dynamic_cast<const SilLocoBackend *>(adapter.backend());
+  ASSERT_NE(sil, nullptr);
+  EXPECT_GT(sil->last_velocity().vx, 0.0);
+  EXPECT_LE(sil->last_velocity().vx, 0.6 + 1e-9);  // clamped to forward envelope
 }
 
 TEST(UnitreeSdk2Adapter, VelocityBeyondEnvelopeIsLimited)
