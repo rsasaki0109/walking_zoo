@@ -139,6 +139,27 @@ def test_zmp_preview_walks_and_balances(model):
     assert zmp.survival_time > cap.survival_time
 
 
+def test_optimizer_objectives_reward_their_axis():
+    # Pure-function check (no physics): each objective should prefer the gait that
+    # is good on its own axis. A far-but-falls gait vs. a sustained-but-slower one.
+    from types import SimpleNamespace
+
+    from optimize import OBJECTIVES
+
+    horizon = 8.0
+    far_faller = SimpleNamespace(forward_distance=1.2, survival_time=1.3)
+    sustained = SimpleNamespace(forward_distance=0.8, survival_time=8.0)
+    # 'distance' rewards raw ground covered -> prefers the far faller.
+    assert OBJECTIVES["distance"](far_faller, horizon) > OBJECTIVES["distance"](
+        sustained, horizon
+    )
+    # 'balanced' rewards distance sustained without falling -> prefers the
+    # sustained walker (the gap-closing axis).
+    assert OBJECTIVES["balanced"](sustained, horizon) > OBJECTIVES["balanced"](
+        far_faller, horizon
+    )
+
+
 def test_metrics_are_finite_and_serializable(model):
     m = rollout(model, BalancedCPG(), horizon=3.0)
     d = m.as_dict()

@@ -110,6 +110,18 @@
   next stance foot before the step. SciPy-gated: the controller and its tests
   skip cleanly where SciPy is absent, and `run_compare.py` skips it rather than
   aborting. Covered by offline preview-tracking and in-physics pytest cases.
+- Probed whether optimisation can close the gait_lab "farthest walker vs. most
+  stable" gap. `optimize.py` gained an `--objective` switch (`distance` vs.
+  `balanced`, the latter rewarding distance scaled by the fraction of the horizon
+  survived, so only ground covered *without* falling counts). The honest finding,
+  now documented in the README: no — not by tuning a reactive gait. Whatever the
+  objective, the best `capture-point` parameters top out around a ~1.5 s survival
+  ceiling (distance-optimised → 1.25 m/1.3 s; sustained-optimised → ~1.3 m/1.5 s),
+  a structural limit of one-step-lookahead foot placement rather than a tuning
+  problem. Optimisation reliably improves the axis it is rewarded on, but closing
+  the gap needs a better algorithm (the `zmp-preview` look-ahead already survives
+  longer) or a learned policy behind the same interface. Added a pure-function
+  pytest case asserting each objective prefers the gait good on its own axis.
 - Captured multi-episode LeRobot datasets from live runtime runs and confirmed
   HuggingFace `datasets.load_dataset` compatibility. Added
   `tools/capture_lerobot_episodes.py`, which brings up the mock runtime and

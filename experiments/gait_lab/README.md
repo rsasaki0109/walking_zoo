@@ -94,6 +94,27 @@ needs no optimiser at run time. A **learned policy** is the same shape: swap the
 parameter/inference source behind the identical `GaitController` interface —
 load weights in `reset`, run the network in `update`.
 
+### Does optimisation close the "farthest vs. most stable" gap?
+
+`optimize.py --objective` lets you reward different things:
+
+```bash
+python3 optimize.py --objective distance   # walk far (the default)
+python3 optimize.py --objective balanced    # distance × fraction-of-horizon-survived
+```
+
+Tried both ways, the answer is a clean **no — not by tuning a reactive gait**.
+Optimising `capture-point` for raw distance doubles it (→ 1.25 m) but it still
+falls at ~1.3 s; optimising for *sustained* walking (the `balanced` objective,
+which only rewards ground covered without falling) lands in the same place
+(~1.3 m, ~1.5 s). Whatever the objective, the best capture-point parameters top
+out around a **~1.5 s survival ceiling** — it is a *structural* limit of a
+one-step-lookahead reactive gait, not a tuning problem. Optimisation reliably
+improves the axis you reward, but it cannot make a reactive scheme balance like a
+planning one. Closing the gap needs a better *algorithm* — `zmp-preview`'s
+look-ahead already survives noticeably longer (2.4 s) — or a learned policy
+behind this same interface.
+
 ## Running it
 
 `gait_lab` needs `mujoco` and the menagerie G1 model — neither is part of the

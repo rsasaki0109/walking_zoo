@@ -24,17 +24,30 @@ import numpy as np
 from gait_lab import CapturePointWalk, GaitHarness, G1Model
 
 
-def score_params(harness: GaitHarness, controller_cls, names, vec) -> tuple[float, object]:
+# Objectives the optimiser can maximise. Each takes the rollout metrics and the
+# horizon and returns a scalar fitness. They express *what we reward*, which is
+# the whole point: optimisation improves the axis you optimise.
+OBJECTIVES = {
+    # Distance walked; a tiny survival term breaks ties (a faller stops
+    # accumulating distance, so distance already rewards not falling).
+    "distance": lambda m, h: m.forward_distance + 0.05 * m.survival_time,
+    # Sustained walking: distance scaled by the fraction of the horizon survived,
+    # so a gait is only rewarded for ground it covers *without* falling. Standing
+    # still scores ~0 (no distance); a faller is capped by its short survival.
+    # Directly probes whether optimisation can close the "farthest walker vs.
+    # most stable" gap with a single gait.
+    "balanced": lambda m, h: m.forward_distance * (m.survival_time / h)
+    + 0.05 * m.survival_time,
+}
+
+
+def score_params(harness, objective, controller_cls, names, vec) -> tuple[float, object]:
     params = dict(zip(names, vec))
     metrics, _ = harness.rollout(controller_cls(params), render=False)
-    # Maximise distance walked over the horizon; a tiny survival term breaks ties
-    # toward staying upright (a faller stops accumulating distance, so distance
-    # already rewards not falling within the horizon).
-    fitness = metrics.forward_distance + 0.05 * metrics.survival_time
-    return fitness, metrics
+    return objective(metrics, harness.horizon), metrics
 
 
-def cem(controller_cls, model, *, horizon, iters, pop, elite_frac, seed):
+def cem(controller_cls, model, objective, *, horizon, iters, pop, elite_frac, seed):
     names = list(controller_cls.TUNABLES)
     lo = np.array([controller_cls.TUNABLES[n][0] for n in names])
     hi = np.array([controller_cls.TUNABLES[n][1] for n in names])
@@ -51,7 +64,7 @@ def cem(controller_cls, model, *, horizon, iters, pop, elite_frac, seed):
         samples = np.clip(rng.normal(mean, std, size=(pop, len(names))), lo, hi)
         scored = []
         for s in samples:
-            fit, met = score_params(harness, controller_cls, names, s)
+            fit, met = score_params(harness, objective, controller_cls, names, s)
             scored.append((fit, s, met))
             if fit > best_fit:
                 best_fit, best_vec, best_metrics = fit, s.copy(), met
@@ -75,18 +88,23 @@ def main() -> int:
     ap.add_argument("--pop", type=int, default=18)
     ap.add_argument("--elite-frac", type=float, default=0.25)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--objective", choices=sorted(OBJECTIVES), default="distance",
+                    help="what to maximise: 'distance' (walk far) or 'balanced' "
+                         "(stay up first, then walk)")
     ap.add_argument("--json", default=None, help="write best params here")
     args = ap.parse_args()
 
     model = G1Model(args.menagerie)
     cls = CapturePointWalk
+    objective = OBJECTIVES[args.objective]
+    print(f"objective: {args.objective}  horizon: {args.horizon}s\n")
 
     base, _ = GaitHarness(model, horizon=args.horizon).rollout(cls(), render=False)
     print(f"hand-tuned baseline: fwd={base.forward_distance:+.3f}m "
           f"surv={base.survival_time:.2f}s\n")
 
     names, best_vec, best = cem(
-        cls, model, horizon=args.horizon, iters=args.iters, pop=args.pop,
+        cls, model, objective, horizon=args.horizon, iters=args.iters, pop=args.pop,
         elite_frac=args.elite_frac, seed=args.seed,
     )
     params = {n: round(float(v), 4) for n, v in zip(names, best_vec)}
