@@ -28,10 +28,14 @@ import os
 import sys
 from pathlib import Path
 
+import math
+
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import TransformStamped, TwistStamped
+from nav_msgs.msg import Odometry
 from std_msgs.msg import String
+from tf2_ros import TransformBroadcaster
 from walking_zoo_msgs.msg import WalkingState
 
 
@@ -66,6 +70,16 @@ class GaitLabSilSim(Node):
         self.declare_parameter("move_threshold", 0.02)  # |cmd| below this = hold
         self.declare_parameter("fall_height", 0.5)
         self.declare_parameter("render", False)
+        # Capture rendered frames to disk (for the live ROS-driven filmstrip): a
+        # directory to write numbered PNGs into, and how many control ticks to skip
+        # between saved frames.
+        self.declare_parameter("save_frames_dir", "")
+        self.declare_parameter("frame_stride", 4)
+        # Odometry / TF: Nav2 needs a continuous odom->base_link transform and an
+        # /odom topic to navigate. The MuJoCo base pose is real world odometry.
+        self.declare_parameter("publish_odom", True)
+        self.declare_parameter("odom_frame", "odom")
+        self.declare_parameter("base_frame", "base_link")
 
         controller_name = self.get_parameter("controller").value
         self.substeps = int(self.get_parameter("substeps").value)
@@ -122,6 +136,13 @@ class GaitLabSilSim(Node):
         latched.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self.create_subscription(String, "gait_lab_sil/control", self._on_control, latched)
         self.state_pub = self.create_publisher(WalkingState, "gait_lab_sil/robot_state", 10)
+
+        self.publish_odom = bool(self.get_parameter("publish_odom").value)
+        self.odom_frame = str(self.get_parameter("odom_frame").value)
+        self.base_frame = str(self.get_parameter("base_frame").value)
+        if self.publish_odom:
+            self.odom_pub = self.create_publisher(Odometry, "gait_lab_sil/odom", 10)
+            self.tf_broadcaster = TransformBroadcaster(self)
 
         hz = float(self.get_parameter("control_hz").value)
         self.timer = self.create_timer(1.0 / hz, self._tick)
@@ -192,7 +213,12 @@ class GaitLabSilSim(Node):
             self.gait_t = 0.0
         self.walking_prev = walking
 
-        cmd = self._Command(forward_speed=float(self.cmd_speed))
+        # Forward both the sagittal speed and the yaw rate: a steerable controller
+        # (rl-steerable) acts on yaw_rate so Nav2 can turn the robot; the straight
+        # controllers (rl-residual etc.) simply ignore it.
+        cmd = self._Command(
+            forward_speed=float(self.cmd_speed),
+            yaw_rate=float(self.cmd_yaw))
         for _ in range(self.substeps):
             if walking:
                 obs = self.model.observe(self.gait_t)
@@ -207,7 +233,58 @@ class GaitLabSilSim(Node):
             self.fallen = True
         if self.renderer is not None:
             self._render()
+        if self.publish_odom:
+            self._publish_odom()
         self._publish_state(walking)
+
+    # -- odometry / TF -----------------------------------------------------
+    def _publish_odom(self):
+        """Publish the MuJoCo base pose as odom->base_link TF + an Odometry msg.
+
+        The free-joint base qpos (world x/y/z + quaternion) is genuine odometry;
+        Nav2 localises and navigates off this. Linear velocity is rotated into the
+        base frame (the Odometry twist convention)."""
+        d = self.model.data
+        px, py, pz = float(d.qpos[0]), float(d.qpos[1]), float(d.qpos[2])
+        qw, qx, qy, qz = (float(d.qpos[3]), float(d.qpos[4]),
+                          float(d.qpos[5]), float(d.qpos[6]))
+        yaw = math.atan2(2.0 * (qw * qz + qx * qy),
+                         1.0 - 2.0 * (qy * qy + qz * qz))
+        wvx, wvy = float(d.qvel[0]), float(d.qvel[1])
+        cy, sy = math.cos(-yaw), math.sin(-yaw)
+        bvx = cy * wvx - sy * wvy        # world linear vel -> base frame
+        bvy = sy * wvx + cy * wvy
+        wz = float(d.qvel[5])
+        stamp = self.get_clock().now().to_msg()
+
+        tf = TransformStamped()
+        tf.header.stamp = stamp
+        tf.header.frame_id = self.odom_frame
+        tf.child_frame_id = self.base_frame
+        tf.transform.translation.x = px
+        tf.transform.translation.y = py
+        tf.transform.translation.z = pz
+        tf.transform.rotation.x = qx
+        tf.transform.rotation.y = qy
+        tf.transform.rotation.z = qz
+        tf.transform.rotation.w = qw
+        self.tf_broadcaster.sendTransform(tf)
+
+        odom = Odometry()
+        odom.header.stamp = stamp
+        odom.header.frame_id = self.odom_frame
+        odom.child_frame_id = self.base_frame
+        odom.pose.pose.position.x = px
+        odom.pose.pose.position.y = py
+        odom.pose.pose.position.z = pz
+        odom.pose.pose.orientation.x = qx
+        odom.pose.pose.orientation.y = qy
+        odom.pose.pose.orientation.z = qz
+        odom.pose.pose.orientation.w = qw
+        odom.twist.twist.linear.x = bvx
+        odom.twist.twist.linear.y = bvy
+        odom.twist.twist.angular.z = wz
+        self.odom_pub.publish(odom)
 
     # -- bridge output -----------------------------------------------------
     def _publish_state(self, walking: bool):
@@ -257,7 +334,20 @@ class GaitLabSilSim(Node):
             self._cam.distance = 3.0
             self._cam.elevation = -18.0
             self._cam.azimuth = 120.0
-            self.get_logger().info("gait_lab SIL render: on (offscreen)")
+            self._frame_dir = str(self.get_parameter("save_frames_dir").value)
+            self._frame_stride = max(1, int(self.get_parameter("frame_stride").value))
+            self._frame_i = 0
+            self._frames = []          # in-memory ring buffer of recent frames
+            self._frame_cap = 240
+            if self._frame_dir:
+                os.makedirs(self._frame_dir, exist_ok=True)
+                import numpy as np      # noqa: E402
+                from gait_lab.pngio import save_png  # noqa: E402
+                self._np = np
+                self._save_png = save_png
+            self.get_logger().info(
+                "gait_lab SIL render: on (offscreen)"
+                + (f", filmstrip -> {self._frame_dir}/filmstrip.png" if self._frame_dir else ""))
         except Exception as exc:                     # noqa: BLE001
             self.get_logger().warn(f"render unavailable: {exc}")
             self.renderer = None
@@ -265,7 +355,33 @@ class GaitLabSilSim(Node):
     def _render(self):
         self._cam.lookat[:] = [self.model.data.qpos[0], self.model.data.qpos[1], 0.6]
         self.renderer.update_scene(self.model.data, camera=self._cam)
-        self.renderer.render()
+        pixels = self.renderer.render()
+        if not self._frame_dir:
+            return
+        if self._frame_i % self._frame_stride == 0:
+            self._frames.append(pixels.copy())
+            if len(self._frames) > self._frame_cap:
+                self._frames.pop(0)
+            # Refresh a rolling filmstrip of the recent motion every so often, so
+            # the latest ROS-driven trajectory is always captured on disk.
+            if len(self._frames) >= 10 and len(self._frames) % 12 == 0:
+                self._write_filmstrip()
+        self._frame_i += 1
+
+    def _write_filmstrip(self, cols: int = 10):
+        np = self._np
+        idx = np.linspace(0, len(self._frames) - 1, cols).round().astype(int)
+        h, w, _ = self._frames[0].shape
+        gap = 4
+        strip = np.full((h, cols * w + (cols - 1) * gap, 3), 255, np.uint8)
+        for k, i in enumerate(idx):
+            x = k * (w + gap)
+            strip[:, x:x + w] = self._frames[i]
+        # Orange ribbon on top (the rl gait colour from the comparison montage).
+        ribbon = np.zeros((10, strip.shape[1], 3), np.uint8)
+        ribbon[:, :] = (255, 87, 34)
+        image = np.vstack([ribbon, strip])
+        self._save_png(os.path.join(self._frame_dir, "filmstrip.png"), image)
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
