@@ -26,7 +26,16 @@ TEST(MockWalkingAdapter, StateTransitions)
   EXPECT_EQ(
     adapter.read_state().locomotion_state,
     walking_zoo_msgs::msg::WalkingState::STATE_ESTOPPED);
-  EXPECT_FALSE(adapter.clear_fault().accepted);
+  EXPECT_TRUE(adapter.read_state().estop_active);
+
+  // clear_fault re-enables the driver: it clears the estop latch and returns the
+  // robot to standing. The operator-estop interlock is enforced by the runtime,
+  // not the adapter, so at this layer the call succeeds.
+  EXPECT_TRUE(adapter.clear_fault().accepted);
+  EXPECT_FALSE(adapter.read_state().estop_active);
+  EXPECT_EQ(
+    adapter.read_state().locomotion_state,
+    walking_zoo_msgs::msg::WalkingState::STATE_STANDING);
 
   rclcpp::shutdown();
 }

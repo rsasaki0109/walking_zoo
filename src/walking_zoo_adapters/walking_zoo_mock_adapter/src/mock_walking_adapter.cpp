@@ -166,10 +166,11 @@ walking_zoo_core::CommandResult MockWalkingAdapter::emergency_stop()
 
 walking_zoo_core::CommandResult MockWalkingAdapter::clear_fault()
 {
-  if (estop_active_) {
-    return walking_zoo_core::CommandResult::blocked(
-      "mock fault cannot be cleared while estop is active");
-  }
+  // clear_fault re-enables the driver: it clears the adapter fault and releases
+  // the emergency-stop latch so the robot can stand again. The operator-estop
+  // interlock (do not re-enable while the runtime estop is still engaged) lives
+  // one layer up in the runtime, not in the adapter.
+  estop_active_ = false;
   fault_active_ = false;
   locomotion_state_ = active_ ?
     walking_zoo_msgs::msg::WalkingState::STATE_STANDING :

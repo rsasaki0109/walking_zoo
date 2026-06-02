@@ -376,6 +376,15 @@ void WalkingRuntimeManager::handle_clear_fault(
     response->status_text = "adapter not loaded";
     return;
   }
+  // Operator-estop interlock: a fault may not be cleared while the runtime estop
+  // is still engaged. The operator must release the estop first; only then may a
+  // recovery policy (e.g. the BehaviorTree recovery node) re-enable the robot.
+  if (safety_pipeline_.estop_active()) {
+    response->success = false;
+    response->status_text = "clear_fault blocked: estop engaged";
+    publish_state();
+    return;
+  }
   const auto result = adapter_->clear_fault();
   response->success = result.accepted;
   response->status_text = result.message;

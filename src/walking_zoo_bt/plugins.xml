@@ -10,5 +10,9 @@
         walking_state input port reports the robot ready to walk.
       - ClearWalkingFault (Action): SUCCESS when the clear_succeeded input port
         indicates the clear-fault service call succeeded.
+
+    The walking_zoo_bt_recovery_node additionally registers a ROS-integrated
+    ClearWalkingFaultService action that calls /walking_zoo/clear_fault directly
+    and drives the live recovery tree (bt_xml/walking_zoo_recovery_live.xml).
   </description>
 </root>

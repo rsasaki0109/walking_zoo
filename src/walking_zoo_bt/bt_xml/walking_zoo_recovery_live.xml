@@ -1,0 +1,16 @@
+<root BTCPP_format="4" main_tree_to_execute="WalkingZooRecoveryLive">
+  <!--
+    Live recovery tree driven by walking_zoo_bt_recovery_node. The node refreshes
+    the `walking_state` blackboard entry from /walking_zoo/state before each tick.
+    Unlike the port-only recovery tree, ClearWalkingFaultService here actually
+    calls the /walking_zoo/clear_fault service and only reports SUCCESS when the
+    runtime confirms the fault is cleared, after which readiness is re-checked on
+    the next refreshed state.
+  -->
+  <BehaviorTree ID="WalkingZooRecoveryLive">
+    <Fallback name="walking_zoo_recovery_live">
+      <CheckWalkingReady walking_state="{walking_state}"/>
+      <ClearWalkingFaultService reason="bt_recovery" status_text="{clear_status}"/>
+    </Fallback>
+  </BehaviorTree>
+</root>
