@@ -10,6 +10,7 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "walking_zoo_core/robot_profile.hpp"
 #include "walking_zoo_core/walking_adapter.hpp"
+#include "walking_zoo_msgs/action/execute_footstep_plan.hpp"
 #include "walking_zoo_msgs/action/execute_velocity.hpp"
 #include "walking_zoo_msgs/msg/adapter_status.hpp"
 #include "walking_zoo_msgs/msg/safety_state.hpp"
@@ -20,6 +21,7 @@
 #include "walking_zoo_runtime/adapter_loader.hpp"
 #include "walking_zoo_runtime/command_arbiter.hpp"
 #include "walking_zoo_runtime/mode_manager.hpp"
+#include "walking_zoo_runtime/step_feasibility_checker.hpp"
 #include "walking_zoo_safety/safety_pipeline.hpp"
 
 namespace walking_zoo_runtime
@@ -30,6 +32,8 @@ class WalkingRuntimeManager : public rclcpp_lifecycle::LifecycleNode
 public:
   using ExecuteVelocity = walking_zoo_msgs::action::ExecuteVelocity;
   using GoalHandleExecuteVelocity = rclcpp_action::ServerGoalHandle<ExecuteVelocity>;
+  using ExecuteFootstepPlan = walking_zoo_msgs::action::ExecuteFootstepPlan;
+  using GoalHandleExecuteFootstepPlan = rclcpp_action::ServerGoalHandle<ExecuteFootstepPlan>;
   using LifecycleCallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -72,12 +76,23 @@ private:
   void execute_velocity_goal(
     const std::shared_ptr<GoalHandleExecuteVelocity> goal_handle);
 
+  rclcpp_action::GoalResponse handle_footstep_goal(
+    const rclcpp_action::GoalUUID & uuid,
+    std::shared_ptr<const ExecuteFootstepPlan::Goal> goal);
+  rclcpp_action::CancelResponse handle_footstep_cancel(
+    const std::shared_ptr<GoalHandleExecuteFootstepPlan> goal_handle);
+  void handle_footstep_accepted(
+    const std::shared_ptr<GoalHandleExecuteFootstepPlan> goal_handle);
+  void execute_footstep_goal(
+    const std::shared_ptr<GoalHandleExecuteFootstepPlan> goal_handle);
+
   std::unique_ptr<AdapterLoader> adapter_loader_;
   std::shared_ptr<walking_zoo_core::WalkingAdapter> adapter_;
   walking_zoo_core::RobotProfile robot_profile_;
   walking_zoo_safety::SafetyPipeline safety_pipeline_;
   CommandArbiter command_arbiter_;
   ModeManager mode_manager_;
+  StepFeasibilityChecker feasibility_checker_;
 
   rclcpp_lifecycle::LifecyclePublisher<walking_zoo_msgs::msg::WalkingState>::SharedPtr state_pub_;
   rclcpp_lifecycle::LifecyclePublisher<walking_zoo_msgs::msg::AdapterStatus>::SharedPtr adapter_status_pub_;
@@ -87,6 +102,7 @@ private:
   rclcpp::Service<walking_zoo_msgs::srv::ClearFault>::SharedPtr clear_fault_srv_;
   rclcpp::Service<walking_zoo_msgs::srv::SetLocomotionMode>::SharedPtr set_mode_srv_;
   rclcpp_action::Server<ExecuteVelocity>::SharedPtr execute_velocity_server_;
+  rclcpp_action::Server<ExecuteFootstepPlan>::SharedPtr execute_footstep_server_;
   rclcpp::TimerBase::SharedPtr state_timer_;
 
   walking_zoo_msgs::msg::WalkingState last_state_;

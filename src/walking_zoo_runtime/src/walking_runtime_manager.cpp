@@ -136,6 +136,26 @@ WalkingRuntimeManager::LifecycleCallbackReturn WalkingRuntimeManager::on_configu
       this,
       std::placeholders::_1));
 
+  execute_footstep_server_ = rclcpp_action::create_server<ExecuteFootstepPlan>(
+    get_node_base_interface(),
+    get_node_clock_interface(),
+    get_node_logging_interface(),
+    get_node_waitables_interface(),
+    "/walking_zoo/execute_footstep_plan",
+    std::bind(
+      &WalkingRuntimeManager::handle_footstep_goal,
+      this,
+      std::placeholders::_1,
+      std::placeholders::_2),
+    std::bind(
+      &WalkingRuntimeManager::handle_footstep_cancel,
+      this,
+      std::placeholders::_1),
+    std::bind(
+      &WalkingRuntimeManager::handle_footstep_accepted,
+      this,
+      std::placeholders::_1));
+
   try {
     adapter_ = adapter_loader_->load(adapter_plugin_);
   } catch (const std::exception & error) {
@@ -204,6 +224,7 @@ WalkingRuntimeManager::LifecycleCallbackReturn WalkingRuntimeManager::on_cleanup
   adapter_.reset();
   state_timer_.reset();
   execute_velocity_server_.reset();
+  execute_footstep_server_.reset();
   cmd_vel_sub_.reset();
   estop_srv_.reset();
   clear_fault_srv_.reset();
@@ -421,6 +442,114 @@ void WalkingRuntimeManager::execute_velocity_goal(
   }
   result->success = true;
   result->status_text = "velocity goal complete";
+  goal_handle->succeed(result);
+}
+
+rclcpp_action::GoalResponse WalkingRuntimeManager::handle_footstep_goal(
+  const rclcpp_action::GoalUUID & uuid,
+  std::shared_ptr<const ExecuteFootstepPlan::Goal> goal)
+{
+  (void)uuid;
+  if (!is_active() || goal->plan.footsteps.empty()) {
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse WalkingRuntimeManager::handle_footstep_cancel(
+  const std::shared_ptr<GoalHandleExecuteFootstepPlan> goal_handle)
+{
+  (void)goal_handle;
+  if (adapter_) {
+    adapter_->stop(walking_zoo_core::StopMode::QUICK);
+  }
+  return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void WalkingRuntimeManager::handle_footstep_accepted(
+  const std::shared_ptr<GoalHandleExecuteFootstepPlan> goal_handle)
+{
+  std::thread{std::bind(&WalkingRuntimeManager::execute_footstep_goal, this, goal_handle)}.detach();
+}
+
+void WalkingRuntimeManager::execute_footstep_goal(
+  const std::shared_ptr<GoalHandleExecuteFootstepPlan> goal_handle)
+{
+  auto result = std::make_shared<ExecuteFootstepPlan::Result>();
+  if (!adapter_ || !is_active()) {
+    result->success = false;
+    result->status_text = "runtime inactive";
+    goal_handle->abort(result);
+    return;
+  }
+
+  if (safety_pipeline_.estop_active()) {
+    result->success = false;
+    result->status_text = "footstep plan blocked: estop active";
+    goal_handle->abort(result);
+    return;
+  }
+
+  const auto goal = goal_handle->get_goal();
+  const auto & plan = goal->plan;
+
+  // Reject obviously out-of-range plans before touching the adapter.
+  const auto feasibility = feasibility_checker_.evaluate(plan, StepFeasibilityLimits{});
+  if (!feasibility.feasible) {
+    std::string reason = "footstep plan infeasible";
+    for (std::size_t i = 0; i < feasibility.steps.size(); ++i) {
+      if (!feasibility.steps[i].feasible) {
+        reason += " (step " + std::to_string(i) + ": " + feasibility.steps[i].reason + ")";
+        break;
+      }
+    }
+    result->success = false;
+    result->status_text = reason;
+    goal_handle->abort(result);
+    return;
+  }
+
+  const auto adapter_result = adapter_->execute_footstep_plan(plan);
+  if (!adapter_result.accepted) {
+    result->success = false;
+    result->status_text = adapter_result.message;
+    goal_handle->abort(result);
+    return;
+  }
+
+  mode_manager_.set_mode(walking_zoo_msgs::msg::WalkingState::MODE_FOOTSTEP);
+
+  const std::size_t total_steps = plan.footsteps.size();
+  const double per_step_sec = plan.footsteps.front().duration > 0.0F ?
+    static_cast<double>(plan.footsteps.front().duration) : 0.5;
+
+  for (std::size_t completed = 0; completed < total_steps; ++completed) {
+    const auto step_start = now();
+    while (rclcpp::ok() && (now() - step_start).seconds() < per_step_sec) {
+      if (goal_handle->is_canceling()) {
+        if (adapter_) {
+          adapter_->stop(walking_zoo_core::StopMode::QUICK);
+        }
+        result->success = false;
+        result->status_text = "footstep plan canceled";
+        goal_handle->canceled(result);
+        return;
+      }
+      std::this_thread::sleep_for(20ms);
+    }
+
+    auto feedback = std::make_shared<ExecuteFootstepPlan::Feedback>();
+    feedback->header.stamp = now();
+    feedback->state = adapter_->read_state();
+    feedback->completed_steps = static_cast<std::uint32_t>(completed + 1);
+    goal_handle->publish_feedback(feedback);
+  }
+
+  if (adapter_) {
+    adapter_->stop(walking_zoo_core::StopMode::NORMAL);
+  }
+  result->success = true;
+  result->status_text = "footstep plan complete";
   goal_handle->succeed(result);
 }
 

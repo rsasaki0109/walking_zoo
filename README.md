@@ -214,8 +214,20 @@ and matching `visualization_msgs/MarkerArray` foot markers on
 fixed frame set to `base_link`). Left and right feet are colored blue and green,
 and any step the placeholder feasibility check rejects (over-long stride, too far
 lateral, or too high a swing) turns red. Try `lateral_shift:=0.3` to push later
-steps out of range and see them flagged. The planner does not command motion or
-check terrain; it is a placeholder for `ExecuteFootstepPlan`.
+steps out of range and see them flagged.
+
+The runtime itself accepts footstep plans through the `ExecuteFootstepPlan`
+action on `/walking_zoo/execute_footstep_plan`. The runtime runs the same
+feasibility gate before dispatching the plan to the adapter, publishes per-step
+feedback, and aborts infeasible plans instead of executing them. End-to-end:
+
+```bash
+python3 tools/check_footstep_action_e2e.py
+```
+
+This launches the mock runtime, executes a feasible plan, and confirms an
+infeasible plan is rejected. The stub planner does not command real motion or
+check terrain; it is a placeholder for a real footstep controller.
 
 Regenerate the README GIFs:
 

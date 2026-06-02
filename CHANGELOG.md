@@ -34,3 +34,4 @@
 - Added a `footstep_marker_publisher` node and launch file that publish the stub `FootstepPlan` and matching RViz `MarkerArray` foot/path markers on `/walking_zoo/footstep_plan` and `/walking_zoo/footstep_markers`.
 - Added a placeholder `StepFeasibilityChecker` (max stride distance, lateral offset, and swing height) with gtest coverage, and used it to flag infeasible footsteps in red in the marker preview.
 - Added a placeholder `FallDetector` (upright/tilted/fallen bands from body tilt) with gtest coverage, plus a fall-detected visualization pose in the live MuJoCo Unitree G1 demo.
+- Implemented the `ExecuteFootstepPlan` action in the runtime manager: it runs the `StepFeasibilityChecker` gate, dispatches feasible plans to the adapter with per-step feedback and cancellation, aborts infeasible plans, and is covered by an end-to-end check (`tools/check_footstep_action_e2e.py`).
