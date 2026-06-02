@@ -463,8 +463,14 @@ an end-to-end check, not as an orphan utility.
 With the hard issues closed, the next phase widens the runtime rather than
 deepening single features:
 
-- A second real adapter (ANYmal / Go2 / Digit) to give the "adapter hub" real
-  breadth and validate the dispatch-backend pattern across vendors.
+- [x] A second real adapter to give the "adapter hub" real breadth and validate
+  the dispatch-backend pattern across robot classes. **Done:**
+  `walking_zoo_unitree_go2` adds a Unitree Go2 quadruped sport-mode adapter
+  (`UnitreeGo2Adapter`) reusing the `Go2SportBackend` SIL/SDK2 dispatch pattern,
+  with a genuinely quadruped FSM (lie-down rest, recovery-stand, sit on quick
+  stop, four-foot `SUPPORT_QUADRUPED`) and a real `find_package(unitree_sdk2
+  REQUIRED)` link path. Covered by gtest and
+  `tools/check_unitree_go2_adapter_e2e.py`.
 - Embed the `walking_zoo_bt` recovery nodes inside an actual Nav2 BT navigator
   recovery branch (not just the standalone recovery node).
 - Terrain-aware footstep planning fed from a real elevation/cost source instead

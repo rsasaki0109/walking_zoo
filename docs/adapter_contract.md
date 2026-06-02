@@ -34,7 +34,11 @@ Required methods:
 
 Keep command translation and FSM/state logic pure and SDK-free, and put every
 call that touches hardware behind a small backend interface. The Unitree G1
-adapter is the reference: a `UnitreeLocoBackend` with two implementations.
+adapter is the reference: a `UnitreeLocoBackend` with two implementations. The
+Unitree Go2 quadruped adapter follows the same shape with a `Go2SportBackend`
+(SIL + `SportClient`), confirming the pattern is robot-class agnostic — the
+backend interface is identical even though the Go2 has a quadruped FSM (lie-down
+rest, recovery-stand, four-foot support) and a different vendor client.
 
 - A software-in-the-loop (SIL) backend is always built. It records the
   mode/velocity/posture that *would* be sent, so the adapter and its tests run

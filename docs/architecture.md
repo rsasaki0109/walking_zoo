@@ -34,9 +34,12 @@ configuration instead of relying on hard-coded defaults.
 - Safety layer: velocity limiter, watchdog, estop gate, `FallDetector`, and the
   body-pose / footstep feasibility gates.
 - Adapter layer: pluginlib `WalkingAdapter` contract hiding vendor SDKs. Adapters
-  dispatch through a backend boundary (e.g. the Unitree adapter's
-  `UnitreeLocoBackend` — a software-in-the-loop backend by default, the vendor
-  `LocoClient` when built with the SDK).
+  dispatch through a backend boundary, validated across robot classes: the
+  Unitree G1 humanoid (`UnitreeLocoBackend` → `LocoClient`) and the Unitree Go2
+  quadruped (`Go2SportBackend` → `SportClient`), each a software-in-the-loop
+  backend by default and the vendor client when built with the SDK. The Go2
+  models a genuinely quadruped FSM (lie-down rest, recovery-stand, sit on quick
+  stop, four-foot support).
 - Planning layer: deterministic, terrain-aware `FootstepPlanner` (keep-out
   avoidance and curb step-up) feeding the footstep markers and action.
 - Integration layer: legged-aware Nav2 `cmd_vel` bridge, a live BehaviorTree.CPP
