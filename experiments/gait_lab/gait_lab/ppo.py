@@ -109,7 +109,11 @@ def compute_gae(rewards, values, terminals, last_value, gamma=0.99, lam=0.95):
 
 
 def ppo_update(net, opt, batch, *, clip=0.2, epochs=10, minibatch=512,
-               vf_coef=0.5, ent_coef=0.0, device="cpu"):
+               vf_coef=0.5, ent_coef=0.0, pg_coef=1.0, device="cpu"):
+    """One PPO update. ``pg_coef=0`` trains the value function ONLY (actor frozen):
+    used to warm up a fresh critic before it is allowed to drive policy-gradient
+    steps, so a *warm-started* actor is not wrecked by a random critic's garbage
+    advantages on the first joint updates."""
     obs = torch.as_tensor(batch["obs"], dtype=torch.float32, device=device)
     act = torch.as_tensor(batch["act"], dtype=torch.float32, device=device)
     old_lp = torch.as_tensor(batch["logp"], dtype=torch.float32, device=device)
@@ -128,7 +132,7 @@ def ppo_update(net, opt, batch, *, clip=0.2, epochs=10, minibatch=512,
             a = adv[mb]
             pg = -torch.min(ratio * a, torch.clamp(ratio, 1 - clip, 1 + clip) * a).mean()
             vloss = ((val - ret[mb]) ** 2).mean()
-            loss = pg + vf_coef * vloss - ent_coef * ent.mean()
+            loss = pg_coef * (pg - ent_coef * ent.mean()) + vf_coef * vloss
             opt.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(net.parameters(), 0.5)

@@ -267,6 +267,51 @@ feedforward — the gait-class ceiling again, one level up. The benchmark and th
 `--push-*` training hooks are kept so the next substrate can be measured against
 them.
 
+## Steering (a substrate ladder, and where position control runs out)
+
+The `rl-residual` gait breaks the *survival* ceiling, but it only ever walks one
+fixed direction. For a robot Nav2 can actually drive — vary the forward speed,
+turn to a goal — the gait has to **track a velocity + yaw command**. Chasing that
+mapped out a clean ladder of substrates (each rung covered by a test):
+
+1. **CPG + learned residual → cannot steer.** `train_rl.py --steerable` feeds the
+   command `(forward_speed, yaw_rate)` into the policy observation and rewards
+   tracking it, on the same `BalancedCPG` rhythm (a hip-yaw "turn knob" added as
+   `SteerableCPG`). A small residual on a *fixed leg sinusoid* has no lever on
+   *where the feet land*, so the policy cannot actually turn. It converges to a
+   **robust-but-spiralling** gait: it survives the full horizon under every
+   command (good) but ignores the command — ~170° of spin even when told to walk
+   straight, yaw error stuck. `RLSteerableWalk` runs it; the honest result is
+   pinned by `test_rl_steerable_is_robust_but_does_not_track`. (Getting even this
+   far needed three real RL-plumbing fixes — a double-applied normaliser epsilon,
+   a swamped warm-start normaliser, and a random critic wrecking a warm-started
+   actor; see `train_rl.py`.)
+
+2. **Footstep placement → actually steers.** Turning a biped is about *foot
+   placement*: you step around a rotating heading. `SteerableFootstepGait` reuses
+   the capture-point footstep walker (the most stable model-based gait here) but
+   resolves it in a **rotating heading frame** — `yaw_rate` advances the heading
+   each step, curving the footsteps. At `yaw_rate=0` it is exactly `capture-point`;
+   a turn command genuinely bends the heading (a left command swings the heading
+   CCW; under RL the yaw-tracking error *drops*, where the CPG's plateaued). The
+   steering lever the CPG lacked is real — `test_steerable_footstep_steers`.
+
+3. **…but kinematic footsteps top out at ~2 s.** Like every footstep walker here,
+   it has no force/ZMP dynamic balance, so it topples in ~1.5–2 s no matter how
+   it is tuned. A learned residual on top (`train_rl.py --steerable --footstep`,
+   `RLSteerableFootstepWalk`) *improves the steering* but cannot carry the
+   unstable base to the full horizon — survival stays pinned near 1.5 s. CPG is
+   stable-but-unsteerable; footstep is steerable-but-unstable.
+
+So clean steerable walking needs footstep placement **and** force-aware balance —
+i.e. leaving pure position control (torque/ZMP) — the very same frontier the push
+-recovery negative result lands on, one level up. The steering substrates, the
+command-conditioned RL, and `eval_steerable.py` are kept so the next (force-aware)
+substrate can be measured against them. This is also what gates the full Nav2 SIL
+autonomy demo (`walking_zoo_bringup gait_lab_sil_nav2.launch.py`): the whole stack
+plans and the drive chain is verified end-to-end, but a robot that cannot turn
+cannot be steered to an arbitrary goal.
+
 ## Running it
 
 `gait_lab` needs `mujoco` and the menagerie G1 model — neither is part of the

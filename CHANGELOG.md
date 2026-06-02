@@ -260,3 +260,36 @@
   failed weights are not shipped (the nominal forward-walking policy stays the
   default) and only the benchmark + training hooks are kept. Push-determinism
   pytest added; suite at 20 gait_lab tests.
+- Investigated a **steerable** gait_lab gait (track forward speed + yaw rate, so
+  Nav2 can drive the SIL G1) and mapped a substrate ladder, each rung tested:
+  (1) command-conditioned RL on the CPG substrate (`SteerableCPG`/`RLSteerableWalk`,
+  `train_rl.py --steerable`) becomes robust-but-spiralling — survives every command
+  but cannot turn, because a leg residual on a fixed sinusoid has no lever on foot
+  placement; (2) a footstep substrate (`SteerableFootstepGait`: capture-point in a
+  rotating heading frame) *does* steer — a yaw command genuinely curves the
+  footsteps and the learned yaw-tracking error drops; (3) but kinematic footstep
+  walkers top out near a ~2 s balance ceiling, so the residual cannot carry the
+  steering base the full horizon (`RLSteerableFootstepWalk`,
+  `train_rl.py --steerable --footstep`). Honest conclusion: clean steering needs
+  foot placement **and** force-aware (ZMP/torque) balance — beyond position
+  control, the same frontier as push recovery. Added `eval_steerable.py`, three
+  RL-plumbing fixes in `train_rl.py` (double-applied normaliser epsilon,
+  swamped/under-counted warm-start normaliser, critic-warmup so a random critic
+  cannot wreck a warm-started actor) plus a cross-dimension warm-start, and tests
+  pinning both the negative (CPG can't steer) and the positive (footstep does);
+  suite at 25 gait_lab tests.
+- Added a software-in-the-loop **Nav2 navigation** stack for the gait_lab SIL G1:
+  `gait_lab_sil_nav2.launch.py` brings up map server + NavFn planner + Regulated
+  Pure Pursuit controller + behaviour tree + lifecycle over the runtime/safety
+  pipeline and the MuJoCo sim (with a static identity `map->odom`, since the sim
+  publishes true `odom` + TF). The sim node now publishes `nav_msgs/Odometry` and
+  the `odom->base_link` transform. Added an arena map + `params/nav2_sil.yaml`,
+  taught `cmd_vel_bridge` to accept a `TwistStamped` input (Nav2 Jazzy publishes
+  stamped `cmd_vel`), and an end-to-end goal-navigation check
+  (`tools/check_gait_lab_sil_nav2_nav_e2e.py`). The full stack plans and the drive
+  chain is verified end-to-end; reaching arbitrary goals is gated on a steering
+  gait (above).
+- Added a **live ROS-driven SIL filmstrip**: the sim node can capture rendered
+  frames and write a rolling filmstrip, and `tools/capture_sil_live.py` drives the
+  robot through a command sequence over the real runtime + safety + bridge path
+  and saves the SIL G1 as actually driven through ROS, not a harness rollout.

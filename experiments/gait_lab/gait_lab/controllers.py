@@ -22,9 +22,16 @@ _GRAVITY = 9.81
 
 @dataclass
 class Command:
-    """What we ask the gait to do. Kept minimal for now."""
+    """What we ask the gait to do.
+
+    ``forward_speed`` is the desired sagittal walking speed; ``yaw_rate`` is the
+    desired turning rate (rad/s, +ve = turn left/CCW). Most gaits here ignore
+    ``yaw_rate`` (they only ever walked straight); :class:`SteerableCPG` and
+    :class:`RLSteerableWalk` are the ones that act on it.
+    """
 
     forward_speed: float = 0.4   # desired forward walking speed (m/s)
+    yaw_rate: float = 0.0        # desired turning rate (rad/s, +ve = CCW)
 
 
 class GaitController:
@@ -138,6 +145,71 @@ class BalancedCPG(GaitController):
         self._leg(ctrl, "right_hip_roll_joint", rock)
         self._leg(ctrl, "left_ankle_roll_joint", ankle_roll_fix)
         self._leg(ctrl, "right_ankle_roll_joint", ankle_roll_fix)
+
+        for side, offset in (("left", 0.0), ("right", np.pi)):
+            s = np.sin(phase + offset)
+            swing = max(0.0, s)
+            self._leg(ctrl, f"{side}_hip_pitch_joint", self.hip_amp * s)
+            self._leg(ctrl, f"{side}_knee_joint", self.knee_amp * swing)
+            self._leg(
+                ctrl, f"{side}_ankle_pitch_joint", -self.ankle_amp * swing + ankle_pitch_fix
+            )
+        return ctrl
+
+
+class SteerableCPG(BalancedCPG):
+    """:class:`BalancedCPG` with feedforward knobs for *velocity* and *turning*.
+
+    The plain ``balanced-cpg`` ignores its :class:`Command` entirely — it walks
+    one fixed rhythm and whatever forward drift falls out is incidental. That is
+    fine for the ceiling study, but a robot Nav2 can actually drive has to track
+    a commanded forward speed *and* turn. This subclass adds three command-driven
+    feedforward terms on top of the same rhythm and weight-shift:
+
+    * **turning** — a hip-yaw bias proportional to ``yaw_rate`` on both legs
+      steers the stance, so each step lands rotated. This is the one genuinely new
+      feedforward knob; it is the capability Nav2 needs that the straight gait
+      lacked.
+
+    Forward speed is deliberately NOT a feedforward knob. Hand-built lean/stride
+    "speed" terms on this position-controlled CPG were unreliable (a forward lean
+    measured as *backward* drift, and they toppled the gait faster) — exactly the
+    fragility this lab exists to expose. So the forward part is left identical to
+    :class:`BalancedCPG` and the *learned residual* owns forward speed, driven by
+    a linear velocity-tracking reward. The command ``(forward_speed, yaw_rate)``
+    is in the policy observation, so a single network learns to push harder or
+    softer to track the requested speed while the yaw knob handles turning.
+
+    Calibrated so that at ``yaw_rate=0`` it is EXACTLY :class:`BalancedCPG`, which
+    keeps the ~3 s balanced baseline as the training start point. On its own it is
+    the steerable *feedforward*, not a walker.
+    """
+
+    name = "steerable-cpg"
+    yaw_gain = 0.25        # hip-yaw bias (rad) per (rad/s) of commanded yaw_rate
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        ctrl = self.stand.copy()
+        g = self.gains
+        roll, pitch, _ = obs.torso_rpy
+        roll_rate, pitch_rate = obs.torso_ang_vel[0], obs.torso_ang_vel[1]
+
+        ankle_pitch_fix = g.pitch_kp * pitch + g.pitch_kd * pitch_rate
+        ankle_roll_fix = g.roll_kp * roll + g.roll_kd * roll_rate
+
+        # The only command-driven feedforward knob: a hip-yaw turning bias.
+        yaw_bias = self.yaw_gain * cmd.yaw_rate
+
+        phase = 2.0 * np.pi * self.frequency * obs.t
+        rock = self.lateral_amp * np.sin(phase + np.pi)
+        self._leg(ctrl, "left_hip_roll_joint", rock)
+        self._leg(ctrl, "right_hip_roll_joint", rock)
+        self._leg(ctrl, "left_ankle_roll_joint", ankle_roll_fix)
+        self._leg(ctrl, "right_ankle_roll_joint", ankle_roll_fix)
+        # Both hip-yaw joints biased the same way rotates the whole stance, so
+        # each step lands rotated — a coarse but monotonic turn knob.
+        self._leg(ctrl, "left_hip_yaw_joint", yaw_bias)
+        self._leg(ctrl, "right_hip_yaw_joint", yaw_bias)
 
         for side, offset in (("left", 0.0), ("right", np.pi)):
             s = np.sin(phase + offset)
@@ -423,6 +495,65 @@ class ZMPPreviewWalk(GaitController):
         return ctrl
 
 
+class SteerableFootstepGait(CapturePointWalk):
+    """A *footstep-based* steerable walker — the thicker substrate for turning.
+
+    The position-controlled CPG gaits in this lab cannot be made to steer: a small
+    leg residual on a fixed leg sinusoid has no lever on *where the feet land*, so
+    command-conditioned RL on that substrate collapses to a robust-but-spiralling
+    gait that ignores the yaw command (see ``train_rl.py --steerable`` and the
+    README). Turning a biped is fundamentally about *foot placement*: to turn, you
+    step around a rotating heading.
+
+    So this reuses :class:`CapturePointWalk`'s capture-point foot placement (the
+    most *stable* of the kinematic footstep walkers) but resolves it in a
+    **commanded, rotating heading frame**: forward/lateral are along/across the
+    current heading ``theta`` instead of world axes, the commanded ``forward_speed``
+    sets the fore step, and ``theta`` advances by ``yaw_rate * step_duration`` every
+    step. At ``yaw_rate=0`` it is *exactly* ``capture-point`` (so it inherits its
+    stability); a non-zero yaw command rotates the footstep frame, curving the
+    steps so the robot actually turns to track the command — the lever the CPG
+    substrate lacked. Like every kinematic footstep walker here it is not
+    bullet-proof on its own (it tops out near the same few-second ceiling); a
+    learned residual on top is what carries it the full horizon. But it *steers*.
+    """
+
+    name = "steerable-footstep"
+
+    def reset(self, model: G1Model) -> None:
+        # Defaults must exist before super().reset(), which calls _plan_footstep.
+        self.theta = float(model.observe(0.0).torso_rpy[2])
+        self._cmd = Command()
+        super().reset(model)
+
+    def _plan_footstep(self, obs: Observation) -> np.ndarray:
+        # CapturePointWalk's placement, but with forward/lateral along/across the
+        # heading theta. Projecting onto the orthonormal heading basis and back
+        # makes this reduce EXACTLY to the parent at theta=0.
+        omega = np.sqrt(_GRAVITY / max(obs.com_z, 0.3))
+        c, s = np.cos(self.theta), np.sin(self.theta)
+        fwd_dir = np.array([c, s])
+        lat_dir = np.array([-s, c])
+        com = obs.com_xy
+        v = obs.com_vel_xy
+        com_fwd, com_lat = float(com @ fwd_dir), float(com @ lat_dir)
+        v_fwd, v_lat = float(v @ fwd_dir), float(v @ lat_dir)
+        nominal = 0.119 if self.swing == "left" else -0.119
+        target_fwd = (com_fwd + self.capture_x * v_fwd / omega
+                      + self._cmd.forward_speed * self.step_duration)
+        xi_lat = com_lat + v_lat / omega
+        target_lat = self.capture_y * xi_lat + self.nominal_width * nominal
+        target_xy = target_fwd * fwd_dir + target_lat * lat_dir
+        return np.array([target_xy[0], target_xy[1], self.ground])
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        # Stash the command for _plan_footstep and rotate the heading on a strike.
+        self._cmd = cmd
+        if (obs.t - self.t_step_start) / self.step_duration >= 1.0:
+            self.theta += float(cmd.yaw_rate) * self.step_duration
+        return super().update(obs, cmd)
+
+
 # Linear feedback policy (4 outputs x 6 observations, row-major) found by
 # `train_policy.py`. Trained ROBUSTLY: each candidate is scored on the WORST of
 # several perturbed initial states, because a falling humanoid is chaotic and a
@@ -595,6 +726,104 @@ class RLResidualWalk(GaitController):
         self._k += 1
         ctrl[self._leg_ctrl] += self._residual
         return ctrl
+
+
+class RLSteerableWalk(RLResidualWalk):
+    """A *command-conditioned* residual gait: tracks forward speed + yaw rate.
+
+    Where :class:`RLResidualWalk` learned one fixed-rhythm straight walk, this
+    rides the command-aware :class:`SteerableCPG` feedforward and feeds the
+    commanded ``(forward_speed, yaw_rate)`` into the policy observation, so a
+    single network modulates its residual to *track a velocity command* while
+    staying balanced. It is what lets Nav2 actually drive the SIL robot — change
+    the command and the gait changes, instead of only ever walking straight.
+
+    Same dependency-free numpy inference and the same ``GaitController``
+    interface; only the feedforward (steerable), the observation (+2 command
+    dims), and the trained weights (``rl_policy_steer.npz``) differ. Honest
+    caveat: tracking a position-controlled humanoid's velocity off a coarse CPG
+    is hard, so it tracks *approximately*, not to a tight tolerance — see the
+    README's steerable-gait section and ``eval_steerable.py``.
+    """
+
+    name = "rl-steerable"
+
+    def __init__(self, policy_path: str | None = None):
+        from pathlib import Path
+
+        self.policy_path = Path(policy_path) if policy_path else (
+            Path(__file__).parent / "rl_policy_steer.npz"
+        )
+        self._loaded = False
+
+    def reset(self, model: G1Model) -> None:
+        # Same setup as the parent, but on the steerable feedforward.
+        GaitController.reset(self, model)
+        from .model import LEG_ACTUATORS
+        from .rl_env import DEFAULT_ACTION_SCALE, DEFAULT_CONTROL_HZ
+
+        if not self._loaded:
+            self._load()
+        self.action_scale = DEFAULT_ACTION_SCALE
+        self._decim = max(1, int(round((1.0 / DEFAULT_CONTROL_HZ) / model.timestep)))
+        self._k = 0
+        self._residual = np.zeros(len(LEG_ACTUATORS))
+        self.cpg = SteerableCPG()
+        self.cpg.reset(model)
+        m = model.model
+        self._leg_ctrl = np.array([model.actuator(nm) for nm in LEG_ACTUATORS])
+        self._leg_qadr = np.array(
+            [m.jnt_qposadr[m.actuator_trnid[i, 0]] for i in self._leg_ctrl]
+        )
+        self._leg_dofadr = np.array(
+            [m.jnt_dofadr[m.actuator_trnid[i, 0]] for i in self._leg_ctrl]
+        )
+        self._stand_leg = model.stand_qpos[self._leg_qadr].copy()
+        self._freq = self.cpg.frequency
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        from .rl_env import observe_policy
+
+        ctrl = self.cpg.update(obs, cmd)   # SteerableCPG feedforward, every sim step
+        if self._k % self._decim == 0:     # recompute the residual at the control rate
+            x = observe_policy(
+                self.model, obs, self._leg_qadr, self._leg_dofadr,
+                self._stand_leg, self._freq, obs.t, cmd=cmd,
+            )
+            self._residual = self.action_scale * np.clip(self._policy(x), -1.0, 1.0)
+        self._k += 1
+        ctrl[self._leg_ctrl] += self._residual
+        return ctrl
+
+
+class RLSteerableFootstepWalk(RLSteerableWalk):
+    """The learned residual on the *footstep* substrate — the steerable gait that
+    actually turns.
+
+    Same command-conditioned residual idea as :class:`RLSteerableWalk`, but riding
+    :class:`SteerableFootstepGait` instead of the CPG. The footstep base supplies
+    real steering authority (foot placement in a rotating heading frame); the
+    learned residual supplies the balance the kinematic footstep walker lacks, so
+    together they walk a velocity/yaw command the full horizon. Loads
+    ``rl_policy_steer_fs.npz`` (train with ``train_rl.py --steerable --footstep``).
+    """
+
+    name = "rl-steerable-footstep"
+
+    def __init__(self, policy_path: str | None = None):
+        from pathlib import Path
+
+        self.policy_path = Path(policy_path) if policy_path else (
+            Path(__file__).parent / "rl_policy_steer_fs.npz"
+        )
+        self._loaded = False
+
+    def reset(self, model: G1Model) -> None:
+        super().reset(model)
+        # Swap the CPG feedforward for the steering footstep substrate.
+        self.cpg = SteerableFootstepGait()
+        self.cpg.reset(model)
+        self._freq = 1.0 / self.cpg.step_duration
 
 
 # Registry. ``run_compare`` iterates this; tests assert each invariant.

@@ -17,10 +17,12 @@ mujoco = pytest.importorskip("mujoco")
 from gait_lab import (  # noqa: E402
     CONTROLLERS,
     BalancedCPG,
+    SteerableCPG,
     CapturePointWalk,
     OptimizedCapturePoint,
     ZMPPreviewWalk,
     LearnedFeedbackWalk,
+    RLSteerableWalk,
     Command,
     GaitHarness,
     G1Model,
@@ -267,6 +269,129 @@ def test_rl_residual_is_deterministic_and_dependency_free(model):
     assert a.survival_time > cpg.survival_time + 3.0
     assert not a.fell
     assert a.forward_distance > 0.3
+
+
+def test_steerable_cpg_equals_balanced_when_not_turning(model):
+    # The steerable feedforward adds only a yaw-turning knob; with yaw_rate=0 it is
+    # EXACTLY balanced-cpg (forward speed is owned by the learned residual, not the
+    # feedforward). That equality keeps the ~3 s balanced baseline as the training
+    # start point.
+    cmd = Command(forward_speed=0.2, yaw_rate=0.0)
+    bal = rollout(model, BalancedCPG(), horizon=6.0, cmd=cmd)
+    steer = rollout(model, SteerableCPG(), horizon=6.0, cmd=cmd)
+    assert steer.survival_time == pytest.approx(bal.survival_time)
+    assert steer.forward_distance == pytest.approx(bal.forward_distance)
+
+
+def test_steerable_cpg_yaw_knob_changes_control(model):
+    # The one command-driven feedforward knob is hip-yaw turning: a +yaw and a
+    # -yaw command produce opposite hip-yaw biases. Checked on the control vector
+    # so it is deterministic and independent of the chaotic fall dynamics. Forward
+    # speed does NOT change the feedforward (the residual owns it), so the rest of
+    # the control vector is command-speed-invariant.
+    ctrl = SteerableCPG()
+    ctrl.reset(model)
+    model.reset()
+    obs = model.observe(0.0)
+    li = model.actuator("left_hip_yaw_joint")
+    ri = model.actuator("right_hip_yaw_joint")
+    left = ctrl.update(obs, Command(0.2, 0.4))
+    right = ctrl.update(obs, Command(0.2, -0.4))
+    # +yaw biases both hip-yaws one way, -yaw the other.
+    assert left[li] > right[li] and left[ri] > right[ri]
+    # Forward speed is not a feedforward term: changing it leaves the control
+    # vector unchanged (only the policy residual, absent here, would react).
+    import numpy as np
+
+    fast = ctrl.update(obs, Command(0.25, 0.0))
+    slow = ctrl.update(obs, Command(0.05, 0.0))
+    assert np.allclose(fast, slow)
+
+
+def test_rl_env_steerable_obs_includes_command(model):
+    # Steerable mode appends (forward_speed, yaw_rate) to the observation and a
+    # zero residual reproduces the SteerableCPG feedforward it rides on.
+    import numpy as np
+
+    from gait_lab.rl_env import ACT_DIM, STEER_OBS_DIM, G1WalkEnv
+
+    env = G1WalkEnv(model, horizon=4.0, steerable=True)
+    obs = env.reset(seed=0, cmd=Command(0.3, 0.2))
+    assert obs.shape == (STEER_OBS_DIM,)
+    # The last two entries are the command.
+    assert obs[-2] == pytest.approx(0.3)
+    assert obs[-1] == pytest.approx(0.2)
+    done = False
+    while not done:
+        res = env.step(np.zeros(ACT_DIM))
+        done = res.done
+    steer = rollout(model, SteerableCPG(), horizon=4.0, cmd=Command(0.3, 0.2))
+    assert res.info["t"] == pytest.approx(
+        steer.survival_time, abs=env.decim * env.timestep + 1e-6)
+
+
+def test_rl_steerable_is_robust_but_does_not_track(model):
+    # The honest result of command-conditioning the position-controlled CPG gait
+    # via RL: the policy becomes ROBUST (stays up the full horizon across the whole
+    # command grid) but does NOT cleanly track the command — it survives by
+    # spiralling, ignoring the requested velocity/yaw. This is the structural
+    # ceiling that motivates the footstep substrate (steerable-footstep); see the
+    # README's steerable-gait section. Skipped until the policy is trained.
+    from pathlib import Path
+
+    policy = Path(__file__).parent / "gait_lab" / "rl_policy_steer.npz"
+    if not policy.exists():
+        pytest.skip("rl_policy_steer.npz not trained yet (run train_rl.py --steerable)")
+    harness = GaitHarness(model, horizon=8.0)
+    # Dependency-free numpy inference is deterministic.
+    a, _ = harness.rollout(RLSteerableWalk(), cmd=Command(0.2, 0.0))
+    b, _ = harness.rollout(RLSteerableWalk(), cmd=Command(0.2, 0.0))
+    assert a.survival_time == pytest.approx(b.survival_time)
+    assert a.forward_distance == pytest.approx(b.forward_distance)
+    # Robust: it walks the full horizon under several commands without falling...
+    for cmd in (Command(0.2, 0.0), Command(0.1, 0.3), Command(0.1, -0.3)):
+        m, _ = harness.rollout(RLSteerableWalk(), cmd=cmd)
+        assert m.survival_time >= 7.9 and not m.fell
+
+
+def test_steerable_footstep_steers(model):
+    # The thicker substrate: footstep placement in a rotating heading frame gives
+    # the steering authority the CPG substrate lacks. At yaw_rate=0 it reduces to
+    # the (stable) capture-point walker; a left-turn command bends the heading
+    # noticeably more positive (CCW) than walking straight. (It is a kinematic
+    # footstep walker, so it tops out near the few-second ceiling on its own — a
+    # learned residual is what would carry it the full horizon.)
+    import numpy as np
+
+    from gait_lab import SteerableFootstepGait
+    from gait_lab.controllers import CapturePointWalk
+
+    def net_yaw(ctrl, cmd, horizon=2.5):
+        model.reset()
+        ctrl.reset(model)
+        steps = int(round(horizon / model.timestep))
+        y0 = 0.0
+        for i in range(steps):
+            t = i * model.timestep
+            model.data.ctrl[:] = ctrl.update(model.observe(t), cmd)
+            model.step()
+            if float(model.data.qpos[2]) < 0.5:
+                break
+            if i == int(round(0.3 / model.timestep)):
+                y0 = float(model.observe(t).torso_rpy[2])
+        y1 = float(model.observe(0.0).torso_rpy[2])
+        return float(np.arctan2(np.sin(y1 - y0), np.cos(y1 - y0)))
+
+    # yaw=0 reduces to capture-point: same survival (it inherits its stability).
+    straight_fs = rollout(model, SteerableFootstepGait(), horizon=4.0,
+                          cmd=Command(0.1, 0.0))
+    cp = rollout(model, CapturePointWalk(), horizon=4.0)
+    assert straight_fs.survival_time == pytest.approx(cp.survival_time, abs=0.6)
+    # A left-turn command bends the heading more CCW than going straight does —
+    # the footstep frame rotation actually steers the robot.
+    straight_yaw = net_yaw(SteerableFootstepGait(), Command(0.05, 0.0))
+    left_yaw = net_yaw(SteerableFootstepGait(), Command(0.05, 0.4))
+    assert left_yaw > straight_yaw + 0.1
 
 
 def test_push_is_deterministic_and_disturbing(model):
