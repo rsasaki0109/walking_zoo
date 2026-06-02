@@ -15,6 +15,16 @@ This mirrors the walking_zoo thesis: a gait generator is just another command
 source behind a stable interface. Here that interface is `GaitController` and
 the "runtime" is the physics harness.
 
+![gait_lab comparison montage](assets/gait_comparison.png)
+
+*Same robot, same 4 s, one row per algorithm (time runs left→right). Top to
+bottom by the left colour bar: **grey** `stand-hold` (stays upright, goes
+nowhere), **red** `open-loop-cpg` (topples in ~1 s), **blue** `balanced-cpg`
+(steps and stays up longest of the CPGs), **yellow** `capture-point` (walks then
+falls), **green** `optimized-cp` (walks farthest), **purple** `zmp-preview`
+(planned, balanced walking). Regenerate with `MUJOCO_GL=egl python3
+render_montage.py`.*
+
 ## What's included
 
 Six algorithms spanning four classes (CPG, reactive model-based, optimised,

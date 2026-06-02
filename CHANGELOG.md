@@ -122,6 +122,15 @@
   the gap needs a better algorithm (the `zmp-preview` look-ahead already survives
   longer) or a learned policy behind the same interface. Added a pure-function
   pytest case asserting each objective prefers the gait good on its own axis.
+- Visualised the gait_lab comparison. `render_montage.py` rolls out every
+  algorithm with rendering and tiles the frames into one image (a row per
+  algorithm, time left→right, a colour swatch per row), making the qualitative
+  difference obvious at a glance: `stand-hold` stays upright, the steppers topple
+  at different rates, `optimized-cp` walks farthest, `zmp-preview` stays balanced.
+  Because the MuJoCo environments ship no image encoder, added `gait_lab.pngio`,
+  a dependency-free PNG writer (stdlib `zlib`/`struct` only), and embedded the
+  generated `assets/gait_comparison.png` in the README with a colour legend.
+  Covered by a PNG round-trip pytest case.
 - Captured multi-episode LeRobot datasets from live runtime runs and confirmed
   HuggingFace `datasets.load_dataset` compatibility. Added
   `tools/capture_lerobot_episodes.py`, which brings up the mock runtime and

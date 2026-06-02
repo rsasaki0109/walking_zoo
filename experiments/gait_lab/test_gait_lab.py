@@ -139,6 +139,24 @@ def test_zmp_preview_walks_and_balances(model):
     assert zmp.survival_time > cap.survival_time
 
 
+def test_png_writer_roundtrip(tmp_path):
+    # Pure stdlib + numpy (no mujoco): the montage asset writer makes a valid PNG.
+    import struct
+
+    import numpy as np
+
+    from gait_lab.pngio import save_png
+
+    img = np.zeros((12, 20, 3), np.uint8)
+    img[:, :, 1] = 128
+    path = tmp_path / "t.png"
+    save_png(str(path), img)
+    data = path.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", data[16:24])
+    assert (width, height) == (20, 12)
+
+
 def test_optimizer_objectives_reward_their_axis():
     # Pure-function check (no physics): each objective should prefer the gait that
     # is good on its own axis. A far-but-falls gait vs. a sustained-but-slower one.
