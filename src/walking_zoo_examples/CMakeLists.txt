@@ -8,6 +8,7 @@ install(
   PROGRAMS
     scripts/mujoco_g1_gait_demo.py
     scripts/mujoco_g1_gait_showcase.py
+    scripts/gait_lab_sil_sim.py
     scripts/send_estop.py
     scripts/send_mock_cmd_vel.py
     scripts/walking_zoo_demo_recorder.py

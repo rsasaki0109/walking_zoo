@@ -213,3 +213,27 @@
   and walks forward, deterministically and torch-free). README documents the
   ceiling, the RL result, and both lessons; the 8-row comparison montage is
   regenerated with `rl-residual` as the only gait still walking at 6 s.
+- Brought the gait_lab RL gait into the runtime as a software-in-the-loop
+  adapter (experiment → product). New package `walking_zoo_gait_lab_sil` adds
+  `GaitLabSilAdapter`, a `walking_zoo_core::WalkingAdapter` pluginlib plugin that
+  drives a MuJoCo Unitree G1 through a gait_lab controller (default: the
+  reinforcement-learned `rl-residual` policy) behind the real runtime + safety
+  pipeline. To keep MuJoCo an optional dependency of one node (never of
+  walking_zoo), it is a thin ROS bridge — no MuJoCo/Python build dependency: the
+  adapter forwards the runtime's safety-filtered velocity + lifecycle to a
+  companion Python sim (`walking_zoo_examples/scripts/gait_lab_sil_sim.py`, rclpy
+  + MuJoCo + gait_lab) and reports the simulated robot's WalkingState back. The
+  adapter owns a small internal node drained non-blockingly from `read_state()`
+  via `spin_some` (no background thread); all command gating / state fusion lives
+  in the ROS-free `GaitLabSilModel` (8 gtest cases). Added a
+  `gait_lab_sil_runtime.launch.py` (runtime + cmd_vel bridge + sim) and an
+  end-to-end check (`tools/check_gait_lab_sil_e2e.py`) that brings up the runtime
+  with the adapter + sim, drives an `ExecuteVelocity` goal through the safety
+  pipeline, and confirms the RL gait walks the full command without falling.
+  Three integration bugs found and fixed along the way: the initial "activate"
+  was missed by the late-loading sim until the control topic was made latched
+  (transient-local); numpy bools leaked into the WalkingState message until cast
+  to native bool; and the runtime sends a velocity once and expects persistence,
+  so the sim must hold the commanded velocity (the stale-command watchdog belongs
+  to the runtime's safety pipeline, not the sim) — re-expiring it mid-walk
+  snapped the robot to a stand pose and toppled it.

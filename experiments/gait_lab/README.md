@@ -313,6 +313,11 @@ finite and deterministic).
 
 It depends on MuJoCo and a model checkout that the hardware-free ROS 2 build must
 not require. Keeping it under `experiments/` lets the runtime stay lean while
-still giving an honest, runnable answer to "can I try gait algorithms here?" A
-future step is to expose the best controller as a walking_zoo adapter so a gait
-algorithm validated here can drive the real runtime/safety pipeline.
+still giving an honest, runnable answer to "can I try gait algorithms here?"
+
+That experiment → product step is now wired: the `walking_zoo_gait_lab_sil`
+package exposes a gait_lab controller (default the `rl-residual` policy) as a
+software-in-the-loop walking_zoo adapter, so a gait validated here drives a
+MuJoCo G1 behind the real runtime + safety pipeline. MuJoCo stays optional — the
+C++ adapter is a thin ROS bridge with no MuJoCo build dependency; the physics and
+the learned policy run in a companion Python sim node. See that package's README.
