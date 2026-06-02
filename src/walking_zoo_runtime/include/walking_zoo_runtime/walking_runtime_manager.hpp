@@ -10,6 +10,7 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "walking_zoo_core/robot_profile.hpp"
 #include "walking_zoo_core/walking_adapter.hpp"
+#include "walking_zoo_msgs/action/execute_body_pose.hpp"
 #include "walking_zoo_msgs/action/execute_footstep_plan.hpp"
 #include "walking_zoo_msgs/action/execute_velocity.hpp"
 #include "walking_zoo_msgs/msg/adapter_status.hpp"
@@ -34,6 +35,8 @@ public:
   using GoalHandleExecuteVelocity = rclcpp_action::ServerGoalHandle<ExecuteVelocity>;
   using ExecuteFootstepPlan = walking_zoo_msgs::action::ExecuteFootstepPlan;
   using GoalHandleExecuteFootstepPlan = rclcpp_action::ServerGoalHandle<ExecuteFootstepPlan>;
+  using ExecuteBodyPose = walking_zoo_msgs::action::ExecuteBodyPose;
+  using GoalHandleExecuteBodyPose = rclcpp_action::ServerGoalHandle<ExecuteBodyPose>;
   using LifecycleCallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -86,6 +89,16 @@ private:
   void execute_footstep_goal(
     const std::shared_ptr<GoalHandleExecuteFootstepPlan> goal_handle);
 
+  rclcpp_action::GoalResponse handle_body_pose_goal(
+    const rclcpp_action::GoalUUID & uuid,
+    std::shared_ptr<const ExecuteBodyPose::Goal> goal);
+  rclcpp_action::CancelResponse handle_body_pose_cancel(
+    const std::shared_ptr<GoalHandleExecuteBodyPose> goal_handle);
+  void handle_body_pose_accepted(
+    const std::shared_ptr<GoalHandleExecuteBodyPose> goal_handle);
+  void execute_body_pose_goal(
+    const std::shared_ptr<GoalHandleExecuteBodyPose> goal_handle);
+
   std::unique_ptr<AdapterLoader> adapter_loader_;
   std::shared_ptr<walking_zoo_core::WalkingAdapter> adapter_;
   walking_zoo_core::RobotProfile robot_profile_;
@@ -103,6 +116,7 @@ private:
   rclcpp::Service<walking_zoo_msgs::srv::SetLocomotionMode>::SharedPtr set_mode_srv_;
   rclcpp_action::Server<ExecuteVelocity>::SharedPtr execute_velocity_server_;
   rclcpp_action::Server<ExecuteFootstepPlan>::SharedPtr execute_footstep_server_;
+  rclcpp_action::Server<ExecuteBodyPose>::SharedPtr execute_body_pose_server_;
   rclcpp::TimerBase::SharedPtr state_timer_;
 
   walking_zoo_msgs::msg::WalkingState last_state_;

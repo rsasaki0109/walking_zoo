@@ -59,6 +59,11 @@ if(BUILD_TESTING)
   if(TARGET test_fall_detector)
     target_link_libraries(test_fall_detector ${PROJECT_NAME})
   endif()
+
+  ament_add_gtest(test_safety_pipeline_body_pose test/test_safety_pipeline_body_pose.cpp)
+  if(TARGET test_safety_pipeline_body_pose)
+    target_link_libraries(test_safety_pipeline_body_pose ${PROJECT_NAME})
+  endif()
 endif()
 
 ament_package()

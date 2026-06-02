@@ -1,5 +1,7 @@
 #include "walking_zoo_safety/safety_pipeline.hpp"
 
+#include <cmath>
+
 namespace walking_zoo_safety
 {
 
@@ -25,6 +27,37 @@ SafetyResult SafetyPipeline::filter_velocity(
   return {walking_zoo_core::CommandResult::success("safety passed"), sanitized};
 }
 
+BodyPoseSafetyResult SafetyPipeline::filter_body_pose(
+  const walking_zoo_msgs::msg::BodyPoseCommand & command) const
+{
+  if (!estop_gate_.permits_motion()) {
+    return {walking_zoo_core::CommandResult::blocked("estop active"), command};
+  }
+
+  // Reject gross over-tilt on the raw request: a pose that would put the torso
+  // into the fall band is unsafe no matter how the axes are clamped.
+  if (fall_detector_.classify(command.roll, command.pitch) == FallState::FALLEN) {
+    return {
+      walking_zoo_core::CommandResult::rejected("body pose tilt exceeds fall threshold"),
+      command};
+  }
+
+  auto clamped = command;
+  bool limited = false;
+  if (std::abs(command.roll) > max_body_roll_) {
+    clamped.roll = std::copysign(static_cast<float>(max_body_roll_), command.roll);
+    limited = true;
+  }
+  if (std::abs(command.pitch) > max_body_pitch_) {
+    clamped.pitch = std::copysign(static_cast<float>(max_body_pitch_), command.pitch);
+    limited = true;
+  }
+  if (limited) {
+    return {walking_zoo_core::CommandResult::limited("body pose clamped to safe tilt"), clamped};
+  }
+  return {walking_zoo_core::CommandResult::success("safety passed"), clamped};
+}
+
 walking_zoo_msgs::msg::SafetyState SafetyPipeline::make_state_msg() const
 {
   walking_zoo_msgs::msg::SafetyState state;
@@ -45,6 +78,22 @@ walking_zoo_msgs::msg::SafetyState SafetyPipeline::make_state_msg() const
 void SafetyPipeline::set_limits(const VelocityLimits & limits)
 {
   velocity_limiter_.set_limits(limits);
+}
+
+void SafetyPipeline::set_body_pose_limits(double max_roll_rad, double max_pitch_rad)
+{
+  max_body_roll_ = std::abs(max_roll_rad);
+  max_body_pitch_ = std::abs(max_pitch_rad);
+}
+
+void SafetyPipeline::set_fall_thresholds(double tilt_warn_rad, double tilt_fall_rad)
+{
+  fall_detector_ = FallDetector(tilt_warn_rad, tilt_fall_rad);
+}
+
+FallState SafetyPipeline::classify_tilt(double roll, double pitch) const
+{
+  return fall_detector_.classify(roll, pitch);
 }
 
 void SafetyPipeline::set_estop_active(bool active)

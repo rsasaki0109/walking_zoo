@@ -40,6 +40,8 @@ void WalkingRuntimeManager::declare_parameters()
   declare_parameter<double>("limits.max_body_roll", 0.2);
   declare_parameter<double>("limits.max_body_pitch", 0.2);
   declare_parameter<double>("limits.command_timeout_sec", 0.25);
+  declare_parameter<double>("limits.body_tilt_warn_rad", 0.35);
+  declare_parameter<double>("limits.body_tilt_fall_rad", 0.70);
 }
 
 walking_zoo_core::RobotProfile WalkingRuntimeManager::profile_from_parameters()
@@ -81,6 +83,10 @@ WalkingRuntimeManager::LifecycleCallbackReturn WalkingRuntimeManager::on_configu
   safety_pipeline_.set_limits(
     {robot_profile_.max_linear_x, robot_profile_.max_linear_y, robot_profile_.max_angular_z});
   safety_pipeline_.set_command_timeout_sec(robot_profile_.command_timeout_sec);
+  safety_pipeline_.set_body_pose_limits(robot_profile_.max_body_roll, robot_profile_.max_body_pitch);
+  safety_pipeline_.set_fall_thresholds(
+    get_parameter("limits.body_tilt_warn_rad").as_double(),
+    get_parameter("limits.body_tilt_fall_rad").as_double());
 
   state_pub_ = create_publisher<walking_zoo_msgs::msg::WalkingState>(
     "/walking_zoo/state", rclcpp::SystemDefaultsQoS());
@@ -156,6 +162,26 @@ WalkingRuntimeManager::LifecycleCallbackReturn WalkingRuntimeManager::on_configu
       this,
       std::placeholders::_1));
 
+  execute_body_pose_server_ = rclcpp_action::create_server<ExecuteBodyPose>(
+    get_node_base_interface(),
+    get_node_clock_interface(),
+    get_node_logging_interface(),
+    get_node_waitables_interface(),
+    "/walking_zoo/execute_body_pose",
+    std::bind(
+      &WalkingRuntimeManager::handle_body_pose_goal,
+      this,
+      std::placeholders::_1,
+      std::placeholders::_2),
+    std::bind(
+      &WalkingRuntimeManager::handle_body_pose_cancel,
+      this,
+      std::placeholders::_1),
+    std::bind(
+      &WalkingRuntimeManager::handle_body_pose_accepted,
+      this,
+      std::placeholders::_1));
+
   try {
     adapter_ = adapter_loader_->load(adapter_plugin_);
   } catch (const std::exception & error) {
@@ -225,6 +251,7 @@ WalkingRuntimeManager::LifecycleCallbackReturn WalkingRuntimeManager::on_cleanup
   state_timer_.reset();
   execute_velocity_server_.reset();
   execute_footstep_server_.reset();
+  execute_body_pose_server_.reset();
   cmd_vel_sub_.reset();
   estop_srv_.reset();
   clear_fault_srv_.reset();
@@ -315,6 +342,11 @@ void WalkingRuntimeManager::publish_state()
   if (safety_state_pub_ && safety_state_pub_->is_activated()) {
     auto safety_state = safety_pipeline_.make_state_msg();
     safety_state.header.stamp = now();
+    safety_state.fall_detected = state.is_fallen;
+    if (state.is_fallen && !safety_state.estop_active) {
+      safety_state.state = walking_zoo_msgs::msg::SafetyState::STATE_FAULT;
+      safety_state.status_text = "fall detected";
+    }
     safety_state_pub_->publish(safety_state);
   }
 }
@@ -550,6 +582,109 @@ void WalkingRuntimeManager::execute_footstep_goal(
   }
   result->success = true;
   result->status_text = "footstep plan complete";
+  goal_handle->succeed(result);
+}
+
+rclcpp_action::GoalResponse WalkingRuntimeManager::handle_body_pose_goal(
+  const rclcpp_action::GoalUUID & uuid,
+  std::shared_ptr<const ExecuteBodyPose::Goal> goal)
+{
+  (void)uuid;
+  (void)goal;
+  if (!is_active()) {
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse WalkingRuntimeManager::handle_body_pose_cancel(
+  const std::shared_ptr<GoalHandleExecuteBodyPose> goal_handle)
+{
+  (void)goal_handle;
+  if (adapter_) {
+    adapter_->stop(walking_zoo_core::StopMode::QUICK);
+  }
+  return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void WalkingRuntimeManager::handle_body_pose_accepted(
+  const std::shared_ptr<GoalHandleExecuteBodyPose> goal_handle)
+{
+  std::thread{std::bind(&WalkingRuntimeManager::execute_body_pose_goal, this, goal_handle)}.detach();
+}
+
+void WalkingRuntimeManager::execute_body_pose_goal(
+  const std::shared_ptr<GoalHandleExecuteBodyPose> goal_handle)
+{
+  auto result = std::make_shared<ExecuteBodyPose::Result>();
+  if (!adapter_ || !is_active()) {
+    result->success = false;
+    result->status_text = "runtime inactive";
+    goal_handle->abort(result);
+    return;
+  }
+
+  if (safety_pipeline_.estop_active()) {
+    result->success = false;
+    result->status_text = "body pose blocked: estop active";
+    goal_handle->abort(result);
+    return;
+  }
+
+  const auto goal = goal_handle->get_goal();
+
+  // Fall-aware safety gate: reject over-tilt that would topple the torso, clamp
+  // anything still beyond the per-axis body limits.
+  const auto safety = safety_pipeline_.filter_body_pose(goal->command);
+  if (!safety.result.accepted) {
+    result->success = false;
+    result->status_text = safety.result.message;
+    goal_handle->abort(result);
+    return;
+  }
+
+  const auto adapter_result = adapter_->command_body_pose(safety.command);
+  if (!adapter_result.accepted) {
+    result->success = false;
+    result->status_text = adapter_result.message;
+    goal_handle->abort(result);
+    return;
+  }
+
+  mode_manager_.set_mode(walking_zoo_msgs::msg::WalkingState::MODE_BODY_POSE);
+
+  const auto start = now();
+  const double duration_sec = std::max(0.0F, goal->command.duration_sec);
+  rclcpp::Rate rate(10.0);
+  bool first = true;
+  while (rclcpp::ok() && (first || (now() - start).seconds() < duration_sec)) {
+    first = false;
+    if (goal_handle->is_canceling()) {
+      if (adapter_) {
+        adapter_->stop(walking_zoo_core::StopMode::QUICK);
+      }
+      result->success = false;
+      result->status_text = "body pose canceled";
+      goal_handle->canceled(result);
+      return;
+    }
+    auto feedback = std::make_shared<ExecuteBodyPose::Feedback>();
+    feedback->header.stamp = now();
+    feedback->state = adapter_->read_state();
+    feedback->elapsed_sec = static_cast<float>((now() - start).seconds());
+    goal_handle->publish_feedback(feedback);
+    if ((now() - start).seconds() >= duration_sec) {
+      break;
+    }
+    rate.sleep();
+  }
+
+  if (adapter_) {
+    adapter_->stop(walking_zoo_core::StopMode::NORMAL);
+  }
+  result->success = true;
+  result->status_text = safety.result.status == walking_zoo_core::CommandStatus::LIMITED ?
+    safety.result.message : "body pose complete";
   goal_handle->succeed(result);
 }
 
