@@ -45,8 +45,9 @@ def main() -> int:
             metrics, frames = harness.rollout(
                 controller, cmd=cmd, render=gif_dir is not None
             )
-        except ImportError as exc:
-            # e.g. zmp-preview needs scipy; skip rather than abort the comparison.
+        except (ImportError, FileNotFoundError) as exc:
+            # e.g. zmp-preview needs scipy; rl-residual needs a trained
+            # rl_policy.npz. Skip the unavailable gait rather than abort.
             print(f"{controller.name:18s} skipped ({exc})")
             continue
         print(metrics.as_row())
@@ -59,6 +60,13 @@ def main() -> int:
     print(f"\nfarthest walker: {walker.name} "
           f"({walker.forward_distance:+.3f} m, survived {walker.survival_time:.2f}s)")
     print(f"most stable:     {sturdy.name} (survived {sturdy.survival_time:.2f}s)")
+    # The interesting cell: a gait that both survives the full horizon AND travels
+    # (stand-hold survives but goes nowhere; the steppers travel but fall).
+    survivors = [r for r in results if not r.fell and abs(r.forward_distance) > 0.05]
+    if survivors:
+        best = max(survivors, key=lambda r: r.forward_distance)
+        print(f"survives & walks: {best.name} "
+              f"({best.forward_distance:+.3f} m over the full {best.survival_time:.2f}s)")
 
     if args.json:
         Path(args.json).parent.mkdir(parents=True, exist_ok=True)

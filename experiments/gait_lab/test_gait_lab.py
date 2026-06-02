@@ -204,6 +204,71 @@ def test_optimizer_objectives_reward_their_axis():
     )
 
 
+def test_gae_advantages_are_correct():
+    # Pure-function check of the PPO GAE (needs only numpy, not mujoco/torch).
+    pytest.importorskip("numpy")
+    import numpy as np
+
+    from gait_lab.ppo import compute_gae
+
+    rewards = np.array([1.0, 1.0, 1.0])
+    values = np.array([0.5, 0.5, 0.5])
+    # No terminal inside the segment; bootstrap from last_value.
+    adv, ret = compute_gae(rewards, values, [False, False, False], last_value=0.5,
+                           gamma=1.0, lam=1.0)
+    # With gamma=lam=1 and constant value 0.5, the advantage at step t is the
+    # sum of future rewards + bootstrap - V(t).
+    assert adv[2] == pytest.approx(1.0 + 0.5 - 0.5)
+    assert adv[1] == pytest.approx(2.0 + 0.5 - 0.5)
+    assert adv[0] == pytest.approx(3.0 + 0.5 - 0.5)
+    assert ret == pytest.approx(adv + values)
+    # A true terminal stops the bootstrap from leaking past it.
+    adv2, _ = compute_gae(rewards, values, [False, True, False], last_value=99.0,
+                          gamma=1.0, lam=1.0)
+    assert adv2[1] == pytest.approx(1.0 - 0.5)  # no bootstrap past terminal
+
+
+def test_rl_env_zero_action_reproduces_cpg(model):
+    # The residual env's feedforward IS balanced-cpg, so a zero residual must
+    # reproduce its rollout exactly (the contract the learned residual builds on).
+    import numpy as np
+
+    from gait_lab.rl_env import ACT_DIM, OBS_DIM, G1WalkEnv
+
+    env = G1WalkEnv(model, horizon=6.0)
+    obs = env.reset()
+    assert obs.shape == (OBS_DIM,)
+    done = False
+    while not done:
+        res = env.step(np.zeros(ACT_DIM))
+        done = res.done
+    cpg = rollout(model, BalancedCPG(), horizon=6.0)
+    # Same survival time (the env stops at the same fall), within one control step.
+    assert res.info["t"] == pytest.approx(cpg.survival_time, abs=env.decim * env.timestep + 1e-6)
+
+
+def test_rl_residual_is_deterministic_and_dependency_free(model):
+    # RLResidualWalk runs the trained actor with numpy only (no torch at inference).
+    from pathlib import Path
+
+    from gait_lab import RLResidualWalk
+
+    policy = Path(__file__).parent / "gait_lab" / "rl_policy.npz"
+    if not policy.exists():
+        pytest.skip("rl_policy.npz not trained yet (run train_rl.py)")
+    a = rollout(model, RLResidualWalk(), horizon=8.0)
+    b = rollout(model, RLResidualWalk(), horizon=8.0)
+    assert a.survival_time == pytest.approx(b.survival_time)
+    assert a.forward_distance == pytest.approx(b.forward_distance)
+    # The headline: the RL residual BREAKS the ~3 s kinematic stability ceiling
+    # that every hand-tuned / model-based gait hits. It survives the full horizon
+    # (where balanced-cpg falls at ~3 s) and walks forward while doing so.
+    cpg = rollout(model, BalancedCPG(), horizon=8.0)
+    assert a.survival_time > cpg.survival_time + 3.0
+    assert not a.fell
+    assert a.forward_distance > 0.3
+
+
 def test_metrics_are_finite_and_serializable(model):
     m = rollout(model, BalancedCPG(), horizon=3.0)
     d = m.as_dict()

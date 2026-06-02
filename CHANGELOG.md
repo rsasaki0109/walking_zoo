@@ -180,3 +180,36 @@
   statically guards the droppable navigate tree. The operator-estop interlock
   still holds through the Nav2 path.
 - Added a second real-robot adapter, `walking_zoo_unitree_go2`, giving the adapter hub breadth beyond humanoids: a Unitree Go2 quadruped sport-mode adapter (`UnitreeGo2Adapter`) that reuses the dispatch-backend pattern with a `Go2SportBackend` (always-built software-in-the-loop `SilSportBackend`, plus an `Sdk2SportBackend` behind `-DWALKING_ZOO_WITH_UNITREE_SDK2=ON` driving the Go2 `SportClient` `Move`/`Euler`/`BodyHeight`/`RecoveryStand`/`StandDown`/`Damp`). The model is genuinely quadruped: it rests lying down (`STATE_SITTING`), stands up on activate and lies back down on deactivate, self-rights into balance-stand via recovery-stand, sits on a quick stop, reports four-foot `SUPPORT_QUADRUPED`, and tilts its torso via Euler angles. The vendor link is gated behind a real `find_package(unitree_sdk2 REQUIRED)` that fails loudly when the SDK is absent. Covered by gtest and an end-to-end runtime-load check (`tools/check_unitree_go2_adapter_e2e.py`) that loads the plugin, autostarts to a quadruped stand, and trots via the real `ExecuteVelocity` action.
+- Broke the gait_lab stability ceiling with reinforcement learning. First made
+  the ceiling explicit: `stability_ceiling.py` sweeps each gait *class* over its
+  own parameters and shows that the best-tuned hand/model-based gait tops out at
+  ~2.85 s (no setting walks the full 8 s horizon) — a position-controlled
+  humanoid in single support is a laterally-unstable inverted pendulum, and
+  reactive position feedback cannot arrest the fall regardless of gains. Then
+  added `rl-residual`, the first gait in the lab to break it: the same
+  `BalancedCPG` rhythm `learned-feedback` uses, but the correction is a neural
+  policy (a two-hidden-layer MLP) trained by PPO instead of a linear CEM map. New
+  modules: `gait_lab/rl_env.py` (a framework-free residual-gait env — BalancedCPG
+  feedforward + a learned position-target residual on the 12 leg actuators, 50 Hz
+  control decimation, survival-dominated reward with upright-gated forward
+  progress), `gait_lab/ppo.py` (a self-contained PPO — actor-critic MLPs,
+  GAE, clipped objective, obs normaliser; no SB3/RLlib), `train_rl.py` (PPO
+  training with 12 parallel CPU rollout workers feeding one GPU learner — pin
+  `OMP_NUM_THREADS=1` per worker or thread oversubscription is ~8× slower),
+  `eval_policy.py` (robust evaluation across perturbed starts), and the
+  `RLResidualWalk` controller (dependency-free numpy inference from an exported
+  `gait_lab/rl_policy.npz`, registered in `CONTROLLERS`). The trained policy is
+  the only gait besides `stand-hold` to survive the full 8 s horizon (`[ok]`,
+  `minH` 0.77 m — never near a fall) while walking forward (0.73 m); evaluated
+  from a nominal start plus eight perturbed ones, 8/9 reach the full horizon
+  (mean 7.55 s). Two lessons baked in: robustness must be in the objective
+  (saving on the worst of several perturbed starts + domain randomisation, or the
+  `learned-feedback` chaos trap recurs one level up — a policy that aces one lucky
+  rollout is a fluke), and inference must match the training control rate (a
+  silent 50 Hz-train / 500 Hz-infer mismatch turned a robust full-horizon walker
+  into a 5 s faller until `RLResidualWalk` decimated identically). Covered by
+  added pytest cases (GAE correctness, the env's zero-residual reproduces
+  balanced-cpg, and `rl-residual` breaks the ceiling — survives the full horizon
+  and walks forward, deterministically and torch-free). README documents the
+  ceiling, the RL result, and both lessons; the 8-row comparison montage is
+  regenerated with `rl-residual` as the only gait still walking at 6 s.

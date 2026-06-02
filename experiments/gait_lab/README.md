@@ -17,18 +17,19 @@ the "runtime" is the physics harness.
 
 ![gait_lab comparison montage](assets/gait_comparison.png)
 
-*Same robot, same 4 s, one row per algorithm (time runs left→right). Top to
+*Same robot, same 6 s, one row per algorithm (time runs left→right). Top to
 bottom by the left colour bar: **grey** `stand-hold` (stays upright, goes
 nowhere), **red** `open-loop-cpg` (topples in ~1 s), **blue** `balanced-cpg`
-(steps and stays up longest of the CPGs), **yellow** `capture-point` (walks then
-falls), **green** `optimized-cp` (walks farthest), **purple** `zmp-preview`
-(planned, balanced walking), **teal** `learned-feedback` (learned feedback,
-walks far). Regenerate with `MUJOCO_GL=egl python3 render_montage.py`.*
+(steps and stays up longest of the CPGs, ~3 s), **yellow** `capture-point` (walks
+then falls), **green** `optimized-cp` (walks farthest, then falls), **purple**
+`zmp-preview` (planned walking), **teal** `learned-feedback` (learned linear
+feedback), **orange** `rl-residual` (the RL policy — the only gait still walking
+at 6 s). Regenerate with `MUJOCO_GL=egl python3 render_montage.py --horizon 6`.*
 
 ## What's included
 
-Seven algorithms spanning five classes (CPG, reactive model-based, optimised,
-preview model-based, learned):
+Eight algorithms spanning six classes (CPG, reactive model-based, optimised,
+preview model-based, learned-linear, **reinforcement-learned**):
 
 | algorithm          | idea                                                          |
 |--------------------|---------------------------------------------------------------|
@@ -39,6 +40,7 @@ preview model-based, learned):
 | `optimized-cp`     | the capture-point gait with parameters found by **optimisation** (CEM), not by hand |
 | `zmp-preview`      | **ZMP preview control** (Kajita) plans a CoM trajectory tracked via IK |
 | `learned-feedback` | CPG feedforward + a **learned** linear feedback policy (CEM-trained) |
+| `rl-residual`      | CPG feedforward + a **reinforcement-learned** neural residual (PPO) — the only gait that walks the full horizon |
 
 A representative run (`run_compare.py`, 8 s horizon):
 
@@ -51,9 +53,11 @@ capture-point      fwd=+0.614m  speed=+0.814m/s  survive= 1.05s  drift=0.038m  m
 optimized-cp       fwd=+1.250m  speed=+1.228m/s  survive= 1.32s  drift=0.128m  minH=0.50m  [FELL]
 zmp-preview        fwd=+0.658m  speed=+0.310m/s  survive= 2.42s  drift=0.194m  minH=0.50m  [FELL]
 learned-feedback   fwd=+0.740m  speed=+0.431m/s  survive= 2.02s  drift=0.100m  minH=0.50m  [FELL]
+rl-residual        fwd=+0.728m  speed=+0.095m/s  survive= 8.00s  drift=0.158m  minH=0.77m  [ok]
 
 farthest walker: optimized-cp (+1.250 m, survived 1.32s)
 most stable:     stand-hold (survived 8.00s)
+survives & walks: rl-residual (+0.728 m over the full 8.00s)
 ```
 
 The story the numbers tell, and the reason a comparison testbed is worth having:
@@ -91,10 +95,24 @@ The story the numbers tell, and the reason a comparison testbed is worth having:
   `balanced-cpg` (0.74 m vs 0.27 m) and far straighter (drift 0.10 m), but does
   *not* out-survive it — learning the feedback buys distance, not a broken
   balance ceiling. See *Learning the feedback* below for the (important) caveat.
+* **rl-residual** is the one that finally **breaks the ceiling**. Same CPG
+  feedforward, but the correction is a *neural* policy trained by
+  **reinforcement learning** (PPO, `train_rl.py`) instead of a linear map. It is
+  the **only gait here that survives the full 8 s horizon** (`[ok]`, like
+  `stand-hold`) *and* walks forward while doing so (0.73 m) — it never even
+  approaches a fall (`minH` 0.77 m vs 0.50 m = fallen for every stepper). Where
+  every hand-tuned, optimised, and linearly-learned gait tops out at the ~3 s
+  lateral ceiling, the RL residual just keeps walking. See *Breaking the ceiling*
+  below.
 
-There is no free lunch here — *farthest walker* and *most stable* are different
-algorithms. None is a robustly-walking controller; that gap is exactly what the
-testbed measures, and a learned policy plugs in the same way (see below).
+So there *is* a controller here that both walks and stays up — but only the
+reinforcement-learned one. Every hand-designed, optimised, and linearly-learned
+gait faces the same structural choice (*farthest walker* vs *most stable* are
+different algorithms, and none of them survives the horizon); learning a
+nonlinear closed-loop policy with full RL credit assignment is what it took to
+have both at once. That gap, and what closes it, is exactly what the testbed
+exists to surface — and every one of these drops in behind the same
+`GaitController` interface.
 
 ## Optimising a gait
 
@@ -160,17 +178,81 @@ overfit to noise; evaluate across perturbations or you are measuring luck.
 
 And the through-line holds: learned linear feedback walks farther than hand-tuned
 feedback but tops out at a similar survival — the balance ceiling is a property of
-the *gait class*, not the tuning method. Breaking it is the frontier: richer
-(nonlinear / recurrent) policies, a better feedforward, or end-to-end RL — all of
-which drop in behind the same `GaitController` interface.
+the *gait class*, not the tuning method. Breaking it is the frontier — and the
+next section does exactly that, with a nonlinear RL policy behind the same
+`GaitController` interface.
+
+## The stability ceiling (and breaking it with RL)
+
+Before reaching for RL, it is worth proving the ceiling is real and not just
+mistuning. `stability_ceiling.py` sweeps each gait *class* over its own
+parameters and reports the best survival any setting reaches:
+
+```bash
+python3 stability_ceiling.py            # ~3-5 min
+```
+
+```
+  balanced-cpg     best survival 2.85s  ...
+  capture-point    best survival 1.17s  ...
+  zmp-preview      best survival 2.42s  ...
+  Best survival of any tuned model-based / CPG gait: 2.85s (horizon 8s).
+```
+
+No setting walks the full 8 s horizon. A position-controlled humanoid in single
+support is a laterally-unstable inverted pendulum, and reactive ankle/hip
+*position* feedback cannot inject the ground-reaction impulse to arrest the
+sideways fall — so no choice of gains breaks the **~3 s ceiling**. It is a
+property of the control *class*, not the tuning.
+
+`rl-residual` breaks it. `train_rl.py` trains a small neural policy (a
+two-hidden-layer MLP) with **PPO** (`gait_lab/ppo.py` — a self-contained PPO, no
+RL framework) to output a position-target residual on the 12 leg actuators, on
+top of the same `BalancedCPG` rhythm `learned-feedback` uses. So the *only* thing
+that changed from `learned-feedback` is the policy's capacity — a nonlinear
+network learned with full RL credit assignment over whole episodes, instead of a
+linear map fit by CEM:
+
+```bash
+# self-contained PPO; 12 parallel CPU rollout workers feed one GPU learner.
+# IMPORTANT: pin BLAS/OpenMP to 1 thread per worker or oversubscription is ~8x slower.
+OMP_NUM_THREADS=1 MUJOCO_GL=egl python3 train_rl.py --iters 400 --workers 12 --perturb 0.012
+python3 eval_policy.py --seeds 8        # robustly evaluate the trained policy
+```
+
+That capacity is enough: `rl-residual` survives the **full 8 s horizon** and
+walks forward (0.73 m) — the only gait here, other than standing still, that does
+not fall. Evaluated robustly from a nominal start plus eight perturbed ones
+(`eval_policy.py`), **8 of 9 reach the full horizon** (mean survival 7.55 s, worst
+case 3.94 s — still above the kinematic ceiling), all walking forward. Two lessons
+fell out of getting there:
+
+* **Robustness must be in the objective, not hoped for.** Saving the policy with
+  the best *single* nominal rollout reproduced the `learned-feedback` chaos trap
+  one level up: a policy that aced one lucky 8 s rollout (or two fixed perturbed
+  seeds) was a fluke that toppled on other perturbations. The fix is the same —
+  score on the **worst of several perturbed starts** (and train with domain
+  randomisation, `--perturb`) so only genuinely robust policies are kept.
+* **Inference must match the training control rate.** The policy is trained at
+  50 Hz (the residual held across the intervening `mj_step`s). A first cut
+  recomputed it every 2 ms sim step at inference — a silent control-rate mismatch
+  that turned a robust full-horizon walker into a 5 s faller. `RLResidualWalk`
+  now decimates identically. A reminder that a learned controller carries its
+  control rate as part of its contract.
+
+Inference is dependency-free: training exports the actor to `rl_policy.npz`
+(weights + observation normaliser) and `RLResidualWalk` runs it with numpy only —
+the same convention the linear `learned-feedback` policy follows.
 
 ## Running it
 
 `gait_lab` needs `mujoco` and the menagerie G1 model — neither is part of the
 ROS 2 workspace, so run it from a Python environment that has MuJoCo. The
 `zmp-preview` controller additionally needs `scipy` (for the Riccati solve behind
-the preview gains); every other algorithm is numpy-only and the comparison skips
-`zmp-preview` cleanly if scipy is absent.
+the preview gains); `rl-residual` *inference* is numpy-only (the trained
+`gait_lab/rl_policy.npz` ships with the repo), and only *training* it
+(`train_rl.py`) needs `torch`. Every other algorithm is numpy-only, and the
+comparison skips any gait whose dependency or trained weights are absent.
 
 ```bash
 # one-time: a local mujoco_menagerie checkout (the G1 scene)
@@ -222,8 +304,10 @@ env -u PYTHONPATH MUJOCO_GL=egl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
 
 The suite skips cleanly if mujoco or the G1 model is unavailable, and asserts the
 core comparison invariants (stand survives the full horizon, open-loop topples
-early, `balanced-cpg` out-survives and out-walks it, metrics are finite and
-deterministic).
+early, `balanced-cpg` out-survives and out-walks it, the optimised gait beats
+hand-tuning, the ZMP preview servo tracks and leads, `rl-residual` breaks the
+kinematic ceiling — survives the full horizon and walks forward — and metrics are
+finite and deterministic).
 
 ## Why this is separate from the ROS packages
 

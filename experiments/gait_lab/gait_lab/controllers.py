@@ -497,6 +497,106 @@ class LearnedFeedbackWalk(GaitController):
         return ctrl
 
 
+class RLResidualWalk(GaitController):
+    """A reinforcement-learned residual on top of the CPG rhythm.
+
+    This is the answer to the ceiling that ``stability_ceiling.py`` measures: a
+    hand-tuned / model-based position-controlled gait tops out near ~3 s because
+    reactive position feedback cannot arrest the lateral inverted-pendulum fall.
+    Here a neural policy (a two-hidden-layer MLP) is *trained by PPO*
+    (:mod:`gait_lab.ppo`, ``train_rl.py``) to output a small position-target
+    residual on the 12 leg actuators each control tick, on top of the same
+    :class:`BalancedCPG` rhythm the linear ``learned-feedback`` gait uses.
+
+    Same ``GaitController`` interface, same feedforward — the only thing that
+    changed from ``learned-feedback`` is the policy's *capacity* (a nonlinear
+    network, learned with full RL credit assignment over whole episodes, rather
+    than a linear map fit by CEM). Whether that capacity is enough to break the
+    structural balance ceiling — to actually walk the full horizon — is the
+    headline question this controller exists to settle; see the README.
+
+    Inference is dependency-free (numpy only): the trained actor is exported to
+    ``rl_policy.npz`` (weights + observation normaliser) by ``train_rl.py``. Run
+    that first; without the file this controller raises ``FileNotFoundError``.
+    """
+
+    name = "rl-residual"
+
+    def __init__(self, policy_path: str | None = None):
+        from pathlib import Path
+
+        self.policy_path = Path(policy_path) if policy_path else (
+            Path(__file__).parent / "rl_policy.npz"
+        )
+        self._loaded = False
+
+    def _load(self) -> None:
+        if not self.policy_path.exists():
+            raise FileNotFoundError(
+                f"RL policy not found at {self.policy_path}. Train it first:\n"
+                "  python3 train_rl.py --iters 400 --steps 4096"
+            )
+        d = np.load(self.policy_path)
+        n = int(d["n_layers"][0])
+        self._W = [d[f"W{i}"] for i in range(n)]
+        self._b = [d[f"b{i}"] for i in range(n)]
+        self._obs_mean = d["obs_mean"]
+        self._obs_std = d["obs_std"]
+        self._loaded = True
+
+    def reset(self, model: G1Model) -> None:
+        super().reset(model)
+        from .model import LEG_ACTUATORS
+        from .rl_env import DEFAULT_ACTION_SCALE, DEFAULT_CONTROL_HZ
+
+        if not self._loaded:
+            self._load()
+        self.action_scale = DEFAULT_ACTION_SCALE
+        # The policy was trained at DEFAULT_CONTROL_HZ with the residual held
+        # across the intervening sim steps. The harness calls update() every sim
+        # step, so we must decimate identically — recompute the residual every
+        # `decim` steps and hold it — or the policy runs at the wrong control
+        # rate and the behaviour diverges from training.
+        self._decim = max(1, int(round((1.0 / DEFAULT_CONTROL_HZ) / model.timestep)))
+        self._k = 0
+        self._residual = np.zeros(len(LEG_ACTUATORS))
+        self.cpg = BalancedCPG()
+        self.cpg.reset(model)
+        m = model.model
+        self._leg_ctrl = np.array([model.actuator(nm) for nm in LEG_ACTUATORS])
+        self._leg_qadr = np.array(
+            [m.jnt_qposadr[m.actuator_trnid[i, 0]] for i in self._leg_ctrl]
+        )
+        self._leg_dofadr = np.array(
+            [m.jnt_dofadr[m.actuator_trnid[i, 0]] for i in self._leg_ctrl]
+        )
+        self._stand_leg = model.stand_qpos[self._leg_qadr].copy()
+        self._freq = self.cpg.frequency
+
+    def _policy(self, x: np.ndarray) -> np.ndarray:
+        """Deterministic actor: normalise, MLP (tanh), return the mean action."""
+        h = (x - self._obs_mean) / self._obs_std
+        for i, (W, b) in enumerate(zip(self._W, self._b)):
+            h = W @ h + b
+            if i < len(self._W) - 1:
+                h = np.tanh(h)
+        return h
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        from .rl_env import observe_policy
+
+        ctrl = self.cpg.update(obs, cmd)   # BalancedCPG feedforward, every sim step
+        if self._k % self._decim == 0:     # recompute the residual at the control rate
+            x = observe_policy(
+                self.model, obs, self._leg_qadr, self._leg_dofadr,
+                self._stand_leg, self._freq, obs.t,
+            )
+            self._residual = self.action_scale * np.clip(self._policy(x), -1.0, 1.0)
+        self._k += 1
+        ctrl[self._leg_ctrl] += self._residual
+        return ctrl
+
+
 # Registry. ``run_compare`` iterates this; tests assert each invariant.
 def CONTROLLERS() -> list[GaitController]:
     return [
@@ -507,4 +607,5 @@ def CONTROLLERS() -> list[GaitController]:
         OptimizedCapturePoint(),
         ZMPPreviewWalk(),
         LearnedFeedbackWalk(),
+        RLResidualWalk(),
     ]

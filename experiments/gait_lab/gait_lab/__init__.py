@@ -22,6 +22,7 @@ from .controllers import (
     OptimizedCapturePoint,
     ZMPPreviewWalk,
     LearnedFeedbackWalk,
+    RLResidualWalk,
     CONTROLLERS,
 )
 from .harness import GaitHarness, rollout
@@ -38,6 +39,7 @@ __all__ = [
     "OptimizedCapturePoint",
     "ZMPPreviewWalk",
     "LearnedFeedbackWalk",
+    "RLResidualWalk",
     "CONTROLLERS",
     "GaitHarness",
     "rollout",

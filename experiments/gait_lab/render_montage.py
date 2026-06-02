@@ -29,6 +29,7 @@ SWATCHES = {
     "optimized-cp": (52, 168, 83),
     "zmp-preview": (162, 94, 224),
     "learned-feedback": (0, 191, 196),
+    "rl-residual": (255, 87, 34),
 }
 
 
@@ -65,7 +66,7 @@ def main() -> int:
                 width=args.width, height=args.height,
                 camera_distance=args.camera_distance,
             )
-        except ImportError as exc:
+        except (ImportError, FileNotFoundError) as exc:
             print(f"{controller.name}: skipped ({exc})")
             continue
         cells = sample(frames, args.cols)
