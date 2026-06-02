@@ -31,6 +31,7 @@ set(dependencies
 add_library(${PROJECT_NAME}
   src/adapter_loader.cpp
   src/command_arbiter.cpp
+  src/footstep_planner.cpp
   src/mode_manager.cpp
   src/walking_runtime_manager.cpp
 )
@@ -69,6 +70,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_mode_manager test/test_mode_manager.cpp)
   if(TARGET test_mode_manager)
     target_link_libraries(test_mode_manager ${PROJECT_NAME})
+  endif()
+
+  ament_add_gtest(test_footstep_planner test/test_footstep_planner.cpp)
+  if(TARGET test_footstep_planner)
+    target_link_libraries(test_footstep_planner ${PROJECT_NAME})
   endif()
 endif()
 
