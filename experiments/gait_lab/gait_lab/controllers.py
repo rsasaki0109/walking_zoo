@@ -299,6 +299,130 @@ class OptimizedCapturePoint(CapturePointWalk):
         super().__init__(OPTIMIZED_CAPTURE_POINT_PARAMS)
 
 
+class ZMPPreviewWalk(GaitController):
+    """The most principled model-based walker here: ZMP preview control + IK.
+
+    Where ``capture-point`` reacts one footstep at a time, this plans a whole
+    walk up front and tracks it:
+
+    1. Lay down a footstep schedule that marches forward, alternating feet at a
+       nominal stance width.
+    2. Turn that into a Zero-Moment-Point reference (where the support foot is)
+       and run **Kajita preview control** (:mod:`gait_lab.zmp_preview`) to get a
+       smooth centre-of-mass trajectory whose induced ZMP tracks the reference
+       and *leads* it — the CoM sways over the next stance foot before the step.
+    3. Each control tick, place both feet relative to that planned CoM via leg
+       IK (so commanding the feet drives the pelvis along the planned sway), with
+       light ankle attitude feedback on top.
+
+    Needs SciPy (for the Riccati solve behind the preview gains). It produces the
+    smoothest, most balance-aware motion of the model-based controllers.
+    """
+
+    name = "zmp-preview"
+    plan_dt = 0.01
+    preview_horizon = 200    # 2.0 s of ZMP look-ahead
+    com_height = 0.70
+    step_length = 0.10       # forward advance per footstep (m)
+    step_duration = 0.55     # single-support time per step (s)
+    double_support = 0.90    # initial settle in double support (s)
+    nominal_y = 0.119        # half stance width (m)
+    step_lift = 0.05         # swing-foot apex (m)
+    plan_seconds = 14.0      # precomputed plan length (>= any rollout)
+    ankle_pitch_kp = 0.20
+    ankle_roll_kp = 0.20
+    ankle_kd = 0.05
+
+    def reset(self, model: G1Model) -> None:
+        super().reset(model)
+        from .zmp_preview import PreviewAxis, design_preview
+
+        left0 = model.foot_pos("left")
+        right0 = model.foot_pos("right")
+        self.ground = float(left0[2])
+        self.base0 = model.data.qpos[0:2].copy()
+        self._init_foot = {"left": left0[:2].copy(), "right": right0[:2].copy()}
+
+        # Footstep schedule: stance foot per single-support step s (right on even
+        # s, left on odd), marching forward by step_length each step.
+        self._foot_plants = []
+        sx = float(self.base0[0])
+        for s in range(int(self.plan_seconds / self.step_duration) + 4):
+            y = -self.nominal_y if s % 2 == 0 else self.nominal_y
+            self._foot_plants.append(np.array([sx, float(self.base0[1]) + y]))
+            sx += self.step_length
+
+        # ZMP reference (centre during the initial double support, then the
+        # support foot) and the preview-tracked CoM trajectory.
+        n = int(self.plan_seconds / self.plan_dt)
+        N = self.preview_horizon
+        zmp = np.zeros((n + N, 2))
+        for k in range(n + N):
+            t = k * self.plan_dt
+            if t >= self.double_support:
+                s = int((t - self.double_support) // self.step_duration)
+                zmp[k] = self._foot_plants[min(s, len(self._foot_plants) - 1)]
+            else:
+                zmp[k] = self.base0
+        gains = design_preview(self.plan_dt, self.com_height, N)
+        ax, ay = PreviewAxis(gains), PreviewAxis(gains)
+        ax.reset(float(self.base0[0]))
+        ay.reset(float(self.base0[1]))
+        self._com = np.zeros((n, 2))
+        for k in range(n):
+            self._com[k, 0] = ax.step(zmp[k:k + N, 0])
+            self._com[k, 1] = ay.step(zmp[k:k + N, 1])
+        self._n = n
+
+    def _foot_world(self, foot: str, t: float) -> np.ndarray:
+        """Planned world position (x, y, z) of a foot at plan time ``t``."""
+        if t < self.double_support:
+            xy = self._init_foot[foot]
+            return np.array([xy[0], xy[1], self.ground])
+        s = int((t - self.double_support) // self.step_duration)
+        phase = ((t - self.double_support) % self.step_duration) / self.step_duration
+        stance_parity = s % 2                      # 0 -> right is stance
+        foot_parity = 0 if foot == "right" else 1
+        if foot_parity == stance_parity:
+            xy = self._foot_plants[min(s, len(self._foot_plants) - 1)]
+            return np.array([xy[0], xy[1], self.ground])
+        # Swing foot: from its previous plant to its next plant, with a lift arc.
+        prev = self._init_foot[foot] if s == 0 else self._foot_plants[s - 1]
+        nxt = self._foot_plants[min(s + 1, len(self._foot_plants) - 1)]
+        xy = (1.0 - phase) * np.asarray(prev) + phase * np.asarray(nxt)
+        z = self.ground + self.step_lift * np.sin(np.pi * phase)
+        return np.array([xy[0], xy[1], z])
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        model = self.model
+        k = min(int(obs.t / self.plan_dt), self._n - 1)
+        com_plan = self._com[k]
+        base_now = model.data.qpos[0:2]
+
+        roll, pitch, _ = obs.torso_rpy
+        roll_rate, pitch_rate = obs.torso_ang_vel[0], obs.torso_ang_vel[1]
+        ankle_pitch_fix = self.ankle_pitch_kp * pitch + self.ankle_kd * pitch_rate
+        ankle_roll_fix = self.ankle_roll_kp * roll + self.ankle_kd * roll_rate
+
+        ctrl = self.stand.copy()
+        for foot in ("left", "right"):
+            fw = self._foot_world(foot, obs.t)
+            # Place the foot relative to the *planned* CoM: commanding the feet
+            # this way drives the actual pelvis along the planned sway. Vertical
+            # stays absolute (reach for the ground / lift height).
+            target = np.array([
+                base_now[0] + (fw[0] - com_plan[0]),
+                base_now[1] + (fw[1] - com_plan[1]),
+                fw[2],
+            ])
+            angles = model.solve_leg_ik(foot, target)
+            for joint, value in zip(LEG_JOINTS[foot], angles):
+                ctrl[model.actuator(joint)] = value
+            ctrl[model.actuator(f"{foot}_ankle_pitch_joint")] += ankle_pitch_fix
+            ctrl[model.actuator(f"{foot}_ankle_roll_joint")] += ankle_roll_fix
+        return ctrl
+
+
 # Registry. ``run_compare`` iterates this; tests assert each invariant.
 def CONTROLLERS() -> list[GaitController]:
     return [
@@ -307,4 +431,5 @@ def CONTROLLERS() -> list[GaitController]:
         BalancedCPG(),
         CapturePointWalk(),
         OptimizedCapturePoint(),
+        ZMPPreviewWalk(),
     ]

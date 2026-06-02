@@ -96,6 +96,20 @@
   objective it was given (distance), and that a learned policy would plug into
   the same interface. Covered by a pytest case asserting the optimised gait
   out-walks the hand-tuned one.
+- Added the most principled model-based gait to `experiments/gait_lab`: a
+  `zmp-preview` walker using Kajita preview control. New `gait_lab.zmp_preview`
+  designs the cart-table LIPM preview gains via the discrete algebraic Riccati
+  equation (SciPy) so a future ZMP reference produces a smooth CoM trajectory
+  whose induced ZMP tracks — and leads — the footstep plan. `ZMPPreviewWalk`
+  lays down a forward-marching footstep schedule, preview-tracks it into a CoM
+  trajectory, and realises both feet relative to that planned CoM via the leg IK
+  (so commanding the feet drives the pelvis along the planned sway), with ankle
+  attitude feedback on top. It is the best all-rounder among the steppers — it
+  walks farther than `balanced-cpg` and survives longer than the reactive
+  `capture-point` (0.66 m, 2.4 s) because planning ahead sways the CoM over the
+  next stance foot before the step. SciPy-gated: the controller and its tests
+  skip cleanly where SciPy is absent, and `run_compare.py` skips it rather than
+  aborting. Covered by offline preview-tracking and in-physics pytest cases.
 - Captured multi-episode LeRobot datasets from live runtime runs and confirmed
   HuggingFace `datasets.load_dataset` compatibility. Added
   `tools/capture_lerobot_episodes.py`, which brings up the mock runtime and

@@ -41,7 +41,14 @@ def main() -> int:
     results = []
     print(HEADER)
     for controller in CONTROLLERS():
-        metrics, frames = harness.rollout(controller, cmd=cmd, render=gif_dir is not None)
+        try:
+            metrics, frames = harness.rollout(
+                controller, cmd=cmd, render=gif_dir is not None
+            )
+        except ImportError as exc:
+            # e.g. zmp-preview needs scipy; skip rather than abort the comparison.
+            print(f"{controller.name:18s} skipped ({exc})")
+            continue
         print(metrics.as_row())
         results.append(metrics)
         if gif_dir is not None and frames:

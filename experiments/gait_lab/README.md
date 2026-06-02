@@ -17,7 +17,8 @@ the "runtime" is the physics harness.
 
 ## What's included
 
-Five algorithms spanning three classes (CPG, model-based footstep, optimised):
+Six algorithms spanning four classes (CPG, reactive model-based, optimised,
+preview model-based):
 
 | algorithm        | idea                                                          |
 |------------------|---------------------------------------------------------------|
@@ -26,19 +27,21 @@ Five algorithms spanning three classes (CPG, model-based footstep, optimised):
 | `balanced-cpg`   | stepping + lateral weight-shift + torso-attitude feedback     |
 | `capture-point`  | LIPM capture-point footstep placement + leg **inverse kinematics** |
 | `optimized-cp`   | the capture-point gait with parameters found by **optimisation** (CEM), not by hand |
+| `zmp-preview`    | **ZMP preview control** (Kajita) plans a CoM trajectory tracked via IK |
 
-A representative run (`run_compare.py`, 6 s horizon):
+A representative run (`run_compare.py`, 8 s horizon):
 
 ```
 algorithm           forward     speed       survival  drift     minH   status
-stand-hold         fwd=-0.000m  speed=-0.000m/s  survive= 6.00s  drift=0.000m  minH=0.79m  [ok]
+stand-hold         fwd=-0.000m  speed=-0.000m/s  survive= 8.00s  drift=0.000m  minH=0.79m  [ok]
 open-loop-cpg      fwd=+0.100m  speed=+0.130m/s  survive= 1.07s  drift=0.168m  minH=0.50m  [FELL]
 balanced-cpg       fwd=+0.269m  speed=+0.096m/s  survive= 3.09s  drift=0.267m  minH=0.50m  [FELL]
 capture-point      fwd=+0.614m  speed=+0.814m/s  survive= 1.05s  drift=0.038m  minH=0.50m  [FELL]
 optimized-cp       fwd=+1.250m  speed=+1.228m/s  survive= 1.32s  drift=0.128m  minH=0.50m  [FELL]
+zmp-preview        fwd=+0.658m  speed=+0.310m/s  survive= 2.42s  drift=0.194m  minH=0.50m  [FELL]
 
 farthest walker: optimized-cp (+1.250 m, survived 1.32s)
-most stable:     stand-hold (survived 6.00s)
+most stable:     stand-hold (survived 8.00s)
 ```
 
 The story the numbers tell, and the reason a comparison testbed is worth having:
@@ -63,6 +66,13 @@ The story the numbers tell, and the reason a comparison testbed is worth having:
   it optimised the *distance* objective: it does not out-*stabilise*
   `balanced-cpg`, because that is not what it was rewarded for. Optimisation
   closes the gap on the axis you optimise.
+* **zmp-preview** is the most *principled* model-based walker: it plans a whole
+  CoM trajectory up front with **Kajita preview control** (a cart-table LIPM
+  whose induced ZMP tracks — and leads — the footstep reference), then realises
+  it via IK. It is the best all-rounder among the steppers: it walks farther
+  than `balanced-cpg` *and* survives longer than the reactive `capture-point`,
+  because planning ahead lets the CoM sway over the next stance foot *before*
+  the step instead of reacting after.
 
 There is no free lunch here — *farthest walker* and *most stable* are different
 algorithms. None is a robustly-walking controller; that gap is exactly what the
@@ -87,7 +97,10 @@ load weights in `reset`, run the network in `update`.
 ## Running it
 
 `gait_lab` needs `mujoco` and the menagerie G1 model — neither is part of the
-ROS 2 workspace, so run it from a Python environment that has MuJoCo:
+ROS 2 workspace, so run it from a Python environment that has MuJoCo. The
+`zmp-preview` controller additionally needs `scipy` (for the Riccati solve behind
+the preview gains); every other algorithm is numpy-only and the comparison skips
+`zmp-preview` cleanly if scipy is absent.
 
 ```bash
 # one-time: a local mujoco_menagerie checkout (the G1 scene)

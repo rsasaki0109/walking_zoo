@@ -19,6 +19,7 @@ from gait_lab import (  # noqa: E402
     BalancedCPG,
     CapturePointWalk,
     OptimizedCapturePoint,
+    ZMPPreviewWalk,
     Command,
     GaitHarness,
     G1Model,
@@ -102,6 +103,40 @@ def test_optimized_gait_beats_hand_tuned(model):
     # Same algorithm/interface, parameters from CEM optimisation instead of by
     # hand: it should walk markedly farther (it roughly doubled the distance).
     assert opt.forward_distance > hand.forward_distance * 1.3
+
+
+def test_zmp_preview_control_tracks_and_leads():
+    # Offline check of the preview servo (needs scipy, not mujoco).
+    pytest.importorskip("scipy")
+    import numpy as np
+
+    from gait_lab.zmp_preview import PreviewAxis, design_preview
+
+    dt, horizon = 0.01, 200
+    gains = design_preview(dt, 0.70, horizon)
+    n = 400
+    ref = np.array(
+        [0.1 if (int((k * dt) // 0.5)) % 2 == 0 else -0.1 for k in range(n + horizon)]
+    )
+    ax = PreviewAxis(gains)
+    com = np.array([ax.step(ref[k:k + horizon]) for k in range(n)])
+    # The induced ZMP tracks the reference...
+    zmp = com - (0.70 / 9.81) * np.gradient(np.gradient(com, dt), dt)
+    assert np.abs(zmp[80:] - ref[80:n]).mean() < 0.03
+    # ...and the CoM *leads* the step: it heads toward the next foot before the
+    # reference switches (the whole point of preview).
+    switch = int(0.5 / dt)
+    assert com[switch - 15] < com[switch - 30]
+
+
+def test_zmp_preview_walks_and_balances(model):
+    pytest.importorskip("scipy")
+    zmp = rollout(model, ZMPPreviewWalk(), horizon=8.0)
+    cap = rollout(model, CapturePointWalk(), horizon=8.0)
+    # The preview walker makes real forward progress...
+    assert zmp.forward_distance > 0.3
+    # ...and is more balanced than the reactive capture-point walker.
+    assert zmp.survival_time > cap.survival_time
 
 
 def test_metrics_are_finite_and_serializable(model):
