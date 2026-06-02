@@ -57,3 +57,30 @@ python3 tools/check_demo_trace.py /tmp/walking_zoo_mujoco_g1_runtime_showcase/de
 ```
 
 This adds `demo_trace.json` and `demo_trace.md` next to the live MuJoCo images.
+
+## Export a run to a LeRobot dataset
+
+Turn a recorded runtime trace into a [LeRobot](https://github.com/huggingface/lerobot)
+dataset so walking_zoo runs can feed imitation-learning pipelines:
+
+```bash
+ros2 run walking_zoo_examples walking_zoo_lerobot_export.py \
+  /tmp/walking_zoo_mujoco_g1_runtime_showcase/demo_trace.json \
+  --out /tmp/walking_zoo_lerobot --fps 10
+```
+
+The change-triggered event trace is resampled to a fixed-rate frame timeline and
+written in the LeRobot v2.1 layout (`meta/info.json`, `meta/tasks.jsonl`,
+`meta/episodes.jsonl`, `meta/stats.json`, and a parquet episode under
+`data/chunk-000/`; a `.jsonl` episode is written if `pyarrow` is unavailable).
+
+Frame mapping:
+
+| LeRobot feature | Source | Vector |
+| --- | --- | --- |
+| `action` | `/cmd_vel` (Nav2/teleop command) | `[cmd_linear_x, cmd_linear_y, cmd_angular_z]` |
+| `observation.state` | `/walking_zoo/cmd_vel` (executed) + `/walking_zoo/state` | `[exec_linear_x, exec_linear_y, exec_angular_z, locomotion_state, locomotion_mode, estop_active]` |
+| `task` | most frequent `/walking_zoo/semantic_action`, else teleop | string |
+
+The trace → dataset logic is pure Python and covered by
+`walking_zoo_examples` pytest plus `tools/check_lerobot_export.py`.

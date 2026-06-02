@@ -13,6 +13,9 @@ jobs:
         run: |
           python3 tools/check_mujoco_g1_showcase_assets.py
           python3 tools/check_readme_gallery_assets.py
+      - name: Validate LeRobot export
+        run: |
+          python3 tools/check_lerobot_export.py
 
   build-and-test:
     runs-on: ubuntu-24.04

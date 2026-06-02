@@ -11,7 +11,13 @@ install(
     scripts/send_estop.py
     scripts/send_mock_cmd_vel.py
     scripts/walking_zoo_demo_recorder.py
+    scripts/walking_zoo_lerobot_export.py
   DESTINATION lib/${PROJECT_NAME}
 )
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_lerobot_export test/test_lerobot_export.py)
+endif()
 
 ament_package()
