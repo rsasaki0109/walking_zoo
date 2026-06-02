@@ -244,6 +244,39 @@ class UnitreeG1Renderer:
             self._set_joint(qpos, "left_elbow_joint", 0.52)
             self._set_joint(qpos, "right_elbow_joint", 0.52)
             return qpos
+        if gait in ("body_crouch", "body_pitch", "body_roll"):
+            # Static body-pose hold for MODE_BODY_POSE: feet stay planted while the
+            # torso height or orientation changes, with a faint sway so the held
+            # pose still reads as a live runtime target.
+            breathe = 0.006 * cos_phase
+            if gait == "body_crouch":
+                qpos[2] = 0.64 + breathe
+                qpos[3:7] = self._yaw_quat(0.0)
+                for side in ("left", "right"):
+                    self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.52)
+                    self._set_joint(qpos, f"{side}_knee_joint", 1.02)
+                    self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.50)
+                self._set_joint(qpos, "waist_pitch_joint", 0.12)
+                self._set_joint(qpos, "left_shoulder_pitch_joint", -0.32)
+                self._set_joint(qpos, "right_shoulder_pitch_joint", -0.32)
+            elif gait == "body_pitch":
+                qpos[2] = 0.80 + breathe
+                qpos[3:7] = self._body_quat(0.0, 0.20 + 0.01 * sin_phase, 0.0)
+                for side in ("left", "right"):
+                    self._set_joint(qpos, f"{side}_hip_pitch_joint", 0.16)
+                    self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.10)
+                self._set_joint(qpos, "waist_pitch_joint", 0.06)
+            else:  # body_roll
+                qpos[2] = 0.805 + breathe
+                qpos[3:7] = self._body_quat(0.16 + 0.01 * sin_phase, 0.0, 0.0)
+                self._set_joint(qpos, "left_hip_roll_joint", 0.10)
+                self._set_joint(qpos, "right_hip_roll_joint", 0.10)
+                self._set_joint(qpos, "waist_roll_joint", 0.08)
+            self._set_joint(qpos, "left_shoulder_roll_joint", 0.14)
+            self._set_joint(qpos, "right_shoulder_roll_joint", -0.14)
+            self._set_joint(qpos, "left_elbow_joint", 0.45)
+            self._set_joint(qpos, "right_elbow_joint", 0.45)
+            return qpos
         return qpos
 
     def render(self, frame_index, gait):
@@ -416,6 +449,14 @@ class MujocoG1GaitDemo(Node):
             "rotate_left": "turn_left",
             "turn_right": "turn_right",
             "rotate_right": "turn_right",
+            "body_crouch": "body_crouch",
+            "crouch": "body_crouch",
+            "lower_body": "body_crouch",
+            "body_pose": "body_pitch",
+            "body_pitch": "body_pitch",
+            "lean_forward": "body_pitch",
+            "body_roll": "body_roll",
+            "lean_side": "body_roll",
             "stop": "stand",
             "idle": "stand",
             "stand": "stand",

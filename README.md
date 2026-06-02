@@ -142,6 +142,14 @@ ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction 
 ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'turn_right'}" --once
 ```
 
+Or hold a body pose (`MODE_BODY_POSE`) instead of locomotion:
+
+```bash
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'body_crouch'}" --once
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'body_pitch'}" --once
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'body_roll'}" --once
+```
+
 Open `/tmp/walking_zoo_mujoco_g1_demo/latest.png` or
 `/tmp/walking_zoo_mujoco_g1_demo/live.gif` to inspect the current simulated
 runtime target.
