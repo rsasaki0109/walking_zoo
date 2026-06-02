@@ -18,3 +18,4 @@
 - README hero MuJoCo Unitree G1 showcase GIF and asset validation helper.
 - Runtime trace recorder and MuJoCo G1 runtime showcase launch with JSON/Markdown demo artifacts.
 - Demo evidence documentation and richer runtime trace validator output.
+- Improved MuJoCo Unitree G1 run gait pose, cadence, body lean, and README GIF assets.

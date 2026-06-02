@@ -1,0 +1,491 @@
+# walking_zoo Development Plan
+
+walking_zoo is a ROS2-native Walking Runtime & Adapter Hub for humanoid and
+legged robots. The project should read as "Nav2 for walking robots": not a
+policy zoo, not a simulator, and not a custom gait research stack, but a
+production-shaped runtime layer that makes walking robots controllable through
+stable ROS2 interfaces.
+
+This plan is intentionally practical. The immediate goal is to make the project
+feel useful and exciting within the first minute on GitHub: a real ROS2 runtime,
+real robot models rendered through existing simulators, visible walking/running
+gaits, clear safety boundaries, and copy-paste demos that work without hardware.
+
+## Product Direction
+
+### North Star
+
+Any walking robot should be controllable through a common ROS2 walking runtime.
+
+walking_zoo should become the runtime layer between:
+
+- Nav2 and walking robots.
+- Teleoperation tools and walking robots.
+- Learned policies and real robot SDKs.
+- Future VLA systems and safe walking execution.
+- Robot-specific SDKs and stable ROS2 applications.
+
+### Positioning
+
+walking_zoo is:
+
+- A ROS2-native walking runtime.
+- An adapter hub for humanoid and legged robot SDKs.
+- A safety-first command admission layer.
+- A Nav2 companion for walking platforms.
+- A future VLA command target.
+- A place to normalize walking commands, states, profiles, diagnostics, and
+  robot capability contracts.
+
+walking_zoo is not:
+
+- An RL training repository.
+- A custom simulator.
+- A custom MPC, WBC, or gait algorithm repository.
+- A toy visualization project.
+- A vendor-specific Unitree wrapper.
+- A shortcut around safety gates.
+
+## Current Project State
+
+The repository already has the important v0.1 foundation:
+
+- `walking_zoo_msgs` defines walking-specific ROS2 messages, services, and
+  actions.
+- `walking_zoo_core` defines the adapter contract.
+- `walking_zoo_safety` provides velocity limiting, watchdog, and e-stop gates.
+- `walking_zoo_runtime` provides the lifecycle runtime manager.
+- `walking_zoo_mock_adapter` gives an always-buildable adapter.
+- `walking_zoo_nav2` bridges Nav2-style `/cmd_vel` into `/walking_zoo/cmd_vel`.
+- `walking_zoo_bringup` provides one-command demos.
+- README assets include MuJoCo Unitree G1 and PyBullet Laikago simulation GIFs.
+- The MuJoCo G1 runtime showcase records JSON and Markdown trace evidence.
+
+The next phase is not about adding many unrelated packages. The next phase is
+about making the demo and runtime story much more convincing.
+
+## Immediate Theme
+
+Make humanoid walking and running look credible, reproducible, and tied to the
+ROS2 runtime.
+
+The README should not show toy GIFs. Every visual should come from an existing
+simulator or existing robot model asset:
+
+- MuJoCo for Unitree G1 humanoid showcases.
+- PyBullet for lightweight quadruped runtime showcases.
+- External robot model repositories such as `mujoco_menagerie` when possible.
+
+The README should make the viewer think:
+
+> This is already a real ROS2 runtime target, not a paper demo.
+
+## Immediate Work Items
+
+### 1. Improve The MuJoCo G1 Run
+
+The current MuJoCo G1 visualizer should continue moving from simple kinematic
+gait rendering toward a more credible runtime demo.
+
+Target improvements:
+
+- More natural forward lean during run.
+- Clearer difference between walk and run cadence.
+- Better knee lift and leg extension at toe-off.
+- Less exaggerated arm swing.
+- More stable torso orientation.
+- Small vertical body motion that sells running without looking unstable.
+- Runtime overlay that clearly shows the active semantic action and safety
+  state.
+
+Done means:
+
+- `run_forward` looks meaningfully faster than `walk_forward`.
+- The GIF does not look like walk playback at higher speed.
+- The robot remains visually balanced.
+- The generated README GIFs pass asset validation.
+- The runtime showcase trace still proves `/cmd_vel`, `/walking_zoo/cmd_vel`,
+  state publishing, and e-stop behavior.
+
+### 2. Build A Rich Gait Gallery
+
+The gait gallery is the most GitHub-visible feature. It should become a visual
+index of the walking command surface that walking_zoo normalizes.
+
+Initial gallery entries:
+
+- Stand.
+- Walk forward.
+- Run forward.
+- Turn left.
+- Turn right.
+- Sidestep left.
+- Sidestep right.
+- Stop.
+- E-stop.
+
+Next gallery entries:
+
+- Walk backward.
+- Slow careful walk.
+- Narrow-passage side-step.
+- Turn-in-place with visible yaw.
+- Body height adjustment.
+- Body pitch/roll pose command.
+- Fall detected placeholder state.
+- Recovery blocked by safety gate.
+
+Done means:
+
+- README contains a compact, high-signal gait gallery GIF.
+- Each visual maps to a real ROS2 command path or a planned message type.
+- The gallery does not imply unsupported real robot capability.
+- The generator script is deterministic enough for CI-style validation.
+
+### 3. Make The Demo Evidence Stronger
+
+The GIF should never stand alone. The project should show evidence that the GIF
+is connected to runtime behavior.
+
+Add or improve:
+
+- `demo_trace.json` with topic samples.
+- `demo_trace.md` with a readable timeline.
+- Asset validation scripts for GIF dimensions, frame count, and size.
+- Trace validation that checks:
+  - `/cmd_vel` input.
+  - `/walking_zoo/cmd_vel` bridge output.
+  - `/walking_zoo/state` transitions.
+  - `/walking_zoo/adapter_status`.
+  - `/walking_zoo/safety_state`.
+  - e-stop activation.
+
+Done means:
+
+- A skeptical ROS2 developer can reproduce the GIF and inspect the trace.
+- README links to demo evidence instead of only showing images.
+- The demo remains hardware-free and safe by default.
+
+### 4. Keep Runtime Quality Ahead Of Visual Hype
+
+Visuals bring attention, but the repository must remain a runtime project.
+
+The runtime should keep improving in parallel:
+
+- Better lifecycle logging.
+- Clear active adapter state.
+- Better command source tagging.
+- Command arbitration tests for teleop/Nav2/VLA priority.
+- More complete action cancellation behavior.
+- More useful `/walking_zoo/state` transitions.
+- Diagnostic messages that are readable in `ros2 topic echo`.
+
+Done means:
+
+- The demo visuals are backed by real runtime state.
+- New GIF features do not bypass the safety pipeline.
+- Commands still flow through the adapter contract.
+
+## Milestones
+
+### v0.1: Runtime Skeleton With Real Demo Feel
+
+Goal:
+
+Ship a buildable ROS2 workspace that proves the walking runtime shape.
+
+Scope:
+
+- ROS2 interfaces.
+- Adapter contract.
+- Safety pipeline.
+- Lifecycle runtime manager.
+- Mock adapter.
+- Nav2 `/cmd_vel` bridge.
+- MuJoCo G1 visual demo.
+- PyBullet Laikago visual demo.
+- README GIFs.
+- Demo evidence traces.
+- CI build and tests.
+
+Exit criteria:
+
+- `colcon build --symlink-install` passes.
+- `colcon test` passes.
+- Mock runtime E2E check passes.
+- MuJoCo G1 showcase generates `latest.png`, `live.gif`, `demo_trace.json`,
+  and `demo_trace.md`.
+- README explains that generated visuals use existing simulators and are not
+  toy animations.
+
+### v0.2: Better Humanoid Runtime Surface
+
+Goal:
+
+Make humanoid command concepts visible without claiming full whole-body control.
+
+Scope:
+
+- More complete `ExecuteVelocity` behavior.
+- Stub or partial `ExecuteBodyPose` action path.
+- Body pose command visualization in MuJoCo G1.
+- Footstep marker visualization, even before real footstep execution.
+- Runtime state transitions for body pose and footstep execution modes.
+- Better `SemanticAction` mapping for:
+  - `move_forward`
+  - `run_forward`
+  - `turn_left`
+  - `turn_right`
+  - `sidestep_left`
+  - `sidestep_right`
+  - `stop`
+
+Exit criteria:
+
+- README shows multiple humanoid command modes.
+- Docs clearly separate supported runtime behavior from planned robot control.
+- Gait gallery becomes a reason to star the repository.
+
+### v0.3: Unitree Adapter Readiness
+
+Goal:
+
+Make Unitree support credible while keeping the default build vendor-free.
+
+Scope:
+
+- Keep `WALKING_ZOO_WITH_UNITREE_SDK2` default `OFF`.
+- Improve Unitree SDK2 stub diagnostics.
+- Add explicit safety checklist for real robot testing.
+- Validate Go2, G1, and H1 robot profile fields.
+- Add adapter configuration examples.
+- Document CycloneDDS and Unitree networking expectations without making them
+  required for the default build.
+
+Exit criteria:
+
+- The repository still builds without Unitree SDK2.
+- Unitree-specific logic does not leak into `walking_zoo_core` or
+  `walking_zoo_msgs`.
+- Real robot motion remains disabled unless explicitly enabled.
+
+### v0.4: Footstep And Legged-Aware Navigation
+
+Goal:
+
+Move beyond `cmd_vel` while staying runtime-focused.
+
+Scope:
+
+- `ExecuteFootstepPlan` action behavior for mock/sim adapters.
+- Footstep plan RViz markers.
+- Step feasibility placeholder interface.
+- Dynamic footprint and support polygon documentation.
+- Nav2 BT nodes for walking readiness and fault handling.
+
+Exit criteria:
+
+- Users can see why `cmd_vel` is not enough for humanoids.
+- Nav2 integration still remains simple for mobile-base compatibility.
+- Footstep APIs are useful without forcing a custom planner.
+
+### v0.5: VLA-Ready Runtime
+
+Goal:
+
+Make walking_zoo a safe target for semantic robot commands.
+
+Scope:
+
+- Semantic action mapper node.
+- Semantic action action server.
+- Runtime policy that keeps VLA below safety and operator override priority.
+- Dataset/log export design for future LeRobot-style workflows.
+- Documentation for VLA systems as intent sources, not direct SDK controllers.
+
+Exit criteria:
+
+- README can honestly say walking_zoo is VLA-ready at the runtime boundary.
+- Semantic commands are traceable, cancellable, and safety-gated.
+
+## README And Star Strategy
+
+The README should sell the project in this order:
+
+1. One-line identity.
+2. Strong hero GIF from MuJoCo G1.
+3. Proof link to demo evidence.
+4. Visual tour of gait gallery.
+5. Why `cmd_vel` is not enough.
+6. Quick mock runtime demo.
+7. Live MuJoCo G1 demo.
+8. Nav2 integration.
+9. Adapter contract.
+10. Safety-first warning.
+11. Supported/planned robot table.
+12. Roadmap and contribution guide.
+
+High-value README assets:
+
+- Hero GIF: Unitree G1 moving through walking_zoo runtime showcase.
+- Runtime GIF: topic-driven G1 demo with overlay.
+- Gait gallery GIF: walk, run, sidestep, turn, stop, e-stop.
+- Safety GIF: e-stop blocks motion.
+- Architecture diagram: Nav2/VLA/Teleop -> Runtime -> Safety -> Adapter.
+
+Rules for README visuals:
+
+- No toy GIFs.
+- No fake robot silhouettes.
+- Use existing simulators or existing robot model assets.
+- Make the robot visible, centered, and inspectable.
+- Do not over-darken or blur the robot.
+- Include trace evidence when the GIF claims runtime behavior.
+
+## Demo Architecture
+
+### MuJoCo G1 Showcase
+
+Expected stack:
+
+```text
+showcase driver
+  -> /cmd_vel
+  -> walking_zoo_nav2 bridge
+  -> /walking_zoo/cmd_vel
+  -> WalkingRuntimeManager
+  -> SafetyPipeline
+  -> MockWalkingAdapter
+  -> /walking_zoo/state
+  -> MuJoCo G1 visualizer
+  -> latest.png / live.gif
+  -> trace recorder
+```
+
+This keeps the visualizer honest: it reflects runtime state and semantic
+actions instead of being only an offline animation.
+
+### Offline README Rendering
+
+Expected stack:
+
+```text
+MuJoCo model asset
+  -> deterministic render script
+  -> generated GIF / preview PNG
+  -> asset validator
+  -> README
+```
+
+This keeps README assets reproducible and independent of real hardware.
+
+## Safety Plan
+
+walking_zoo should be boringly strict about motion safety:
+
+- Real robot motion disabled by default.
+- `allow_motion:=true` required for any real robot adapter.
+- All commands pass through safety pipeline.
+- E-stop blocks every motion command.
+- Watchdog stops stale commands.
+- Conservative default velocity limits.
+- Runtime state should expose safety status clearly.
+- VLA commands never outrank operator override or safety.
+
+Upcoming safety improvements:
+
+- Fall detector placeholder interface.
+- Adapter health gate improvements.
+- Command source audit trail.
+- Per-profile velocity and body pose limits.
+- Clearer fault/clear-fault state machine.
+
+## Adapter Plan
+
+Adapter contract rules:
+
+- Vendor SDK types stay inside adapter packages.
+- Robot capabilities live in profiles.
+- Adapters report status even when disconnected.
+- Real robot commands are opt-in.
+- Mock and sim adapters are first-class test targets.
+
+Priority adapters/profiles:
+
+- Mock adapter: always buildable baseline.
+- Unitree Go2: first real quadruped target.
+- Unitree G1: humanoid visual and future runtime target.
+- Unitree H1: humanoid profile validation target.
+- Future: Digit, Figure, Booster, Fourier, ANYmal.
+
+## Issue Backlog
+
+Good first issues:
+
+- Add a README frame contact sheet for the MuJoCo G1 gait gallery.
+- Add `walk_backward` semantic action to the MuJoCo G1 visualizer.
+- Add `sidestep_right` to the runtime showcase sequence.
+- Add GIF metadata validation for frame count and dimensions.
+- Add robot profile validation tests for Unitree G1 and H1.
+- Add docs for command source priority.
+- Add docs for why VLA commands must go through safety gates.
+- Add RViz marker placeholders for footstep plans.
+
+Medium issues:
+
+- Improve `ExecuteVelocity` cancellation tests.
+- Add command source tagging to runtime debug output.
+- Add body pose command visualization in MuJoCo G1.
+- Add trace validator checks for full state ordering.
+- Add Nav2 BT stub docs and sample recovery tree.
+- Add runtime diagnostics publisher coverage.
+
+Hard issues:
+
+- Optional Unitree SDK2 adapter implementation.
+- Footstep plan execution contract.
+- BehaviorTree.CPP integration without making the default build fragile.
+- Runtime log export design for LeRobot-style datasets.
+- Legged-aware Nav2 integration beyond `cmd_vel`.
+
+## Definition Of Done For The Next Push
+
+The next high-impact push should satisfy:
+
+- MuJoCo G1 `run_forward` looks clearly better than before.
+- README GIF assets are regenerated.
+- `tools/check_mujoco_g1_showcase_assets.py` passes.
+- `colcon build --symlink-install` passes.
+- `colcon test` passes.
+- Mock runtime E2E check passes.
+- MuJoCo runtime showcase smoke test generates:
+  - `latest.png`
+  - `live.gif`
+  - `demo_trace.json`
+  - `demo_trace.md`
+- Changelog mentions the visual/runtime improvement.
+
+## Near-Term Execution Order
+
+1. Finish and validate the improved MuJoCo G1 run gait.
+2. Regenerate README GIFs from the updated simulator renderers.
+3. Run asset validation, build, tests, and mock E2E.
+4. Run MuJoCo runtime showcase smoke test.
+5. Commit and push the run gait improvement.
+6. Open issues for the next gait gallery expansion.
+7. Add the next visible gait: `walk_backward` or `sidestep_right`.
+8. Add a small README/demo evidence section for command-to-visual traceability.
+
+The best next development loop is short and visual:
+
+```text
+add one gait or runtime state
+  -> render it with MuJoCo
+  -> validate the asset
+  -> prove the ROS2 trace
+  -> update README evidence
+  -> push
+```
+
+That loop makes the repository more star-worthy without drifting away from the
+core runtime mission.

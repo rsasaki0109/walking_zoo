@@ -102,38 +102,65 @@ class G1ShowcaseScene:
     def yaw_quat(self, yaw):
         return [math.cos(yaw * 0.5), 0.0, 0.0, math.sin(yaw * 0.5)]
 
+    def body_quat(self, roll, pitch, yaw):
+        cy = math.cos(yaw * 0.5)
+        sy = math.sin(yaw * 0.5)
+        cp = math.cos(pitch * 0.5)
+        sp = math.sin(pitch * 0.5)
+        cr = math.cos(roll * 0.5)
+        sr = math.sin(roll * 0.5)
+        return [
+            cr * cp * cy + sr * sp * sy,
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy,
+        ]
+
     def forward_gait(self, qpos, sin_phase, cos_phase, fast=False):
-        hip_amp = 0.48 if fast else 0.30
-        knee_base = 0.32 if fast else 0.18
-        knee_amp = 0.62 if fast else 0.38
-        ankle_base = -0.18 if fast else -0.13
-        ankle_amp = 0.18 if fast else 0.12
-        arm_amp = 0.65 if fast else 0.36
+        hip_amp = 0.62 if fast else 0.30
+        knee_base = 0.30 if fast else 0.18
+        knee_amp = 0.74 if fast else 0.38
+        ankle_base = -0.22 if fast else -0.13
+        ankle_amp = 0.22 if fast else 0.12
+        arm_amp = 0.58 if fast else 0.36
 
         for side, value in (("left", sin_phase), ("right", -sin_phase)):
             swing = max(0.0, value)
-            self.set_joint(qpos, f"{side}_hip_pitch_joint", -hip_amp * value)
-            self.set_joint(qpos, f"{side}_knee_joint", knee_base + knee_amp * swing)
+            stance = max(0.0, -value)
+            hip_drive = -hip_amp * value - (0.10 * stance if fast else 0.0)
+            knee_drive = knee_base + knee_amp * swing + (0.12 * stance if fast else 0.0)
+            ankle_drive = (
+                ankle_base
+                - ankle_amp * swing
+                + (0.14 if fast else 0.10) * value
+                - (0.06 * stance if fast else 0.0)
+            )
+            self.set_joint(qpos, f"{side}_hip_pitch_joint", hip_drive)
+            self.set_joint(qpos, f"{side}_knee_joint", knee_drive)
             self.set_joint(
                 qpos,
                 f"{side}_ankle_pitch_joint",
-                ankle_base - ankle_amp * swing + 0.10 * value,
+                ankle_drive,
             )
 
-        self.set_joint(qpos, "left_hip_roll_joint", 0.04 * cos_phase)
-        self.set_joint(qpos, "right_hip_roll_joint", -0.04 * cos_phase)
-        self.set_joint(qpos, "waist_pitch_joint", -0.07)
-        self.set_joint(qpos, "waist_yaw_joint", 0.05 * sin_phase)
+        roll_amp = 0.07 if fast else 0.04
+        self.set_joint(qpos, "left_hip_roll_joint", roll_amp * cos_phase)
+        self.set_joint(qpos, "right_hip_roll_joint", -roll_amp * cos_phase)
+        self.set_joint(qpos, "waist_pitch_joint", -0.11 if fast else -0.07)
+        self.set_joint(qpos, "waist_yaw_joint", (0.08 if fast else 0.05) * sin_phase)
+        self.set_joint(qpos, "waist_roll_joint", 0.035 * cos_phase if fast else 0.0)
         self.set_joint(qpos, "left_shoulder_pitch_joint", -arm_amp * sin_phase)
         self.set_joint(qpos, "right_shoulder_pitch_joint", arm_amp * sin_phase)
-        self.set_joint(qpos, "left_shoulder_roll_joint", 0.10)
-        self.set_joint(qpos, "right_shoulder_roll_joint", -0.10)
-        self.set_joint(qpos, "left_elbow_joint", 0.50 + 0.20 * max(0.0, -sin_phase))
-        self.set_joint(qpos, "right_elbow_joint", 0.50 + 0.20 * max(0.0, sin_phase))
+        self.set_joint(qpos, "left_shoulder_roll_joint", 0.16 if fast else 0.10)
+        self.set_joint(qpos, "right_shoulder_roll_joint", -0.16 if fast else -0.10)
+        elbow_base = 0.95 if fast else 0.50
+        elbow_amp = 0.18 if fast else 0.20
+        self.set_joint(qpos, "left_elbow_joint", elbow_base + elbow_amp * max(0.0, -sin_phase))
+        self.set_joint(qpos, "right_elbow_joint", elbow_base + elbow_amp * max(0.0, sin_phase))
 
     def pose(self, frame_index, gait):
         qpos = self.stand_qpos.copy()
-        period = 30.0 if gait == "walk" else 24.0
+        period = 18.0 if gait == "run" else (30.0 if gait == "walk" else 24.0)
         phase = 2.0 * math.pi * (frame_index / period)
         sin_phase = math.sin(phase)
         cos_phase = math.cos(phase)
@@ -152,9 +179,9 @@ class G1ShowcaseScene:
             qpos[3:7] = self.yaw_quat(0.0)
             self.forward_gait(qpos, sin_phase, cos_phase, fast=False)
         elif gait == "run":
-            qpos[0] = 0.035 * frame_index
-            qpos[2] = 0.82 + 0.02 * max(0.0, cos_phase)
-            qpos[3:7] = self.yaw_quat(0.0)
+            qpos[0] = 0.046 * frame_index
+            qpos[2] = 0.815 + 0.026 * (0.5 + 0.5 * math.cos(2.0 * phase))
+            qpos[3:7] = self.body_quat(0.0, -0.07 + 0.012 * sin_phase, 0.0)
             self.forward_gait(qpos, sin_phase, cos_phase, fast=True)
         elif gait in ("sidestep_left", "sidestep_right"):
             direction = 1.0 if gait == "sidestep_left" else -1.0
