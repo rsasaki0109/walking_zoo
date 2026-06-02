@@ -66,6 +66,28 @@ clears a residual fault; and `tools/check_nav2_recovery_tree.py` statically
 guards that the droppable navigate tree keeps the walking recovery in the Nav2
 recovery branch.
 
+## Costmap-Driven Footstep Terrain
+
+The footstep planner's terrain can be fed from a real Nav2 costmap instead of
+hand-authored boxes. `footstep_marker_publisher` takes a `costmap_topic`
+parameter; point it at a `nav_msgs/OccupancyGrid` (e.g. a Nav2
+`global_costmap/costmap`) and cells at or above `occupied_threshold` become
+keep-out footholds, so the planner nudges feet around real obstacles. An optional
+`elevation_topic` (a second `OccupancyGrid` read as a coarse height field via
+`elevation_height_per_unit`) drives step-up heights. When a costmap arrives the
+planner adopts its frame so foothold queries align with the map cells. Grid yaw
+is not modelled (cells are assumed axis-aligned), and the costmap is expected to
+cover the planning origin — a robot-centred or transformed costmap is the natural
+input.
+
+```bash
+ros2 launch walking_zoo_runtime footstep_markers.launch.py \
+  costmap_topic:=/global_costmap/costmap
+```
+
+Covered by `test_occupancy_terrain` (OccupancyGrid → terrain → planner) and
+`tools/check_footstep_costmap_e2e.py` (a live costmap nudging a real plan).
+
 ## Frames
 
 walking_zoo follows REP-105 style expectations:

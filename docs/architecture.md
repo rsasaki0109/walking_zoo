@@ -41,7 +41,11 @@ configuration instead of relying on hard-coded defaults.
   models a genuinely quadruped FSM (lie-down rest, recovery-stand, sit on quick
   stop, four-foot support).
 - Planning layer: deterministic, terrain-aware `FootstepPlanner` (keep-out
-  avoidance and curb step-up) feeding the footstep markers and action.
+  avoidance and curb step-up) feeding the footstep markers and action. Terrain
+  comes from a real source: a Nav2-style `nav_msgs/OccupancyGrid` costmap drives
+  the keep-out cells and an optional elevation grid drives step-up heights
+  (`TerrainModel` grid queries), with hand-authored boxes still available for
+  tests and hardware-free demos.
 - Integration layer: legged-aware Nav2 `cmd_vel` bridge, a live BehaviorTree.CPP
   recovery node (`walking_zoo_bt_recovery_node`), the VLA semantic-action mapper,
   and a LeRobot dataset exporter for runtime traces.

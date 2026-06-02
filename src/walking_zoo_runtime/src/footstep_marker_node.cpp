@@ -1,12 +1,15 @@
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "nav_msgs/msg/occupancy_grid.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
 #include "walking_zoo_runtime/footstep_planner.hpp"
+#include "walking_zoo_runtime/occupancy_terrain.hpp"
 #include "walking_zoo_runtime/step_feasibility_checker.hpp"
 #include "walking_zoo_runtime/terrain_model.hpp"
 
@@ -59,6 +62,31 @@ public:
       terrain_.add_box(box);
     }
 
+    // Real terrain source: a Nav2-style costmap drives the keep-out zones and an
+    // optional elevation grid drives the step-up heights. Empty topic disables
+    // the subscription and keeps the hand-authored boxes above as the only
+    // terrain (so the existing flat/box demo path is unchanged).
+    occupied_threshold_ = static_cast<std::int8_t>(
+      declare_parameter<int>("occupied_threshold", 50));
+    unknown_is_no_step_ = declare_parameter<bool>("unknown_is_no_step", false);
+    elevation_height_per_unit_ =
+      declare_parameter<double>("elevation_height_per_unit", 0.0015);
+    const auto costmap_topic = declare_parameter<std::string>("costmap_topic", "");
+    const auto elevation_topic = declare_parameter<std::string>("elevation_topic", "");
+
+    if (!costmap_topic.empty()) {
+      costmap_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
+        costmap_topic, rclcpp::QoS(1).transient_local(),
+        [this](nav_msgs::msg::OccupancyGrid::SharedPtr msg) {this->on_costmap(*msg);});
+      RCLCPP_INFO(get_logger(), "terrain costmap source: '%s'", costmap_topic.c_str());
+    }
+    if (!elevation_topic.empty()) {
+      elevation_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
+        elevation_topic, rclcpp::QoS(1).transient_local(),
+        [this](nav_msgs::msg::OccupancyGrid::SharedPtr msg) {this->on_elevation(*msg);});
+      RCLCPP_INFO(get_logger(), "terrain elevation source: '%s'", elevation_topic.c_str());
+    }
+
     plan_publisher_ =
       create_publisher<walking_zoo_msgs::msg::FootstepPlan>("/walking_zoo/footstep_plan", 10);
     marker_publisher_ =
@@ -76,6 +104,41 @@ public:
   }
 
 private:
+  void on_costmap(const nav_msgs::msg::OccupancyGrid & msg)
+  {
+    costmap_grid_ = walking_zoo_runtime::terrain_grid_from_costmap(
+      msg, occupied_threshold_, unknown_is_no_step_);
+    have_costmap_ = true;
+    // Plan in the costmap frame so foothold queries align with the map cells.
+    if (!msg.header.frame_id.empty()) {
+      params_.frame_id = msg.header.frame_id;
+    }
+    rebuild_terrain();
+    RCLCPP_INFO_ONCE(
+      get_logger(), "terrain costmap received: %ux%u @ %.3fm in frame '%s'",
+      msg.info.width, msg.info.height, msg.info.resolution, params_.frame_id.c_str());
+  }
+
+  void on_elevation(const nav_msgs::msg::OccupancyGrid & msg)
+  {
+    elevation_msg_ = msg;
+    have_elevation_ = true;
+    rebuild_terrain();
+  }
+
+  void rebuild_terrain()
+  {
+    if (!have_costmap_) {
+      return;
+    }
+    walking_zoo_runtime::TerrainGrid grid = costmap_grid_;
+    if (have_elevation_) {
+      walking_zoo_runtime::set_elevation_from_grid(
+        grid, elevation_msg_, elevation_height_per_unit_);
+    }
+    terrain_.set_grid(grid);
+  }
+
   void publish()
   {
     const auto terrain_plan = planner_.plan_over_terrain(params_, terrain_);
@@ -166,6 +229,17 @@ private:
   StepFeasibilityChecker feasibility_checker_;
   FootstepPlanParams params_;
   TerrainModel terrain_;
+
+  std::int8_t occupied_threshold_{50};
+  bool unknown_is_no_step_{false};
+  double elevation_height_per_unit_{0.0015};
+  walking_zoo_runtime::TerrainGrid costmap_grid_;
+  bool have_costmap_{false};
+  nav_msgs::msg::OccupancyGrid elevation_msg_;
+  bool have_elevation_{false};
+
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_sub_;
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr elevation_sub_;
   rclcpp::Publisher<walking_zoo_msgs::msg::FootstepPlan>::SharedPtr plan_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
   rclcpp::TimerBase::SharedPtr timer_;

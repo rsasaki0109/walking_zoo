@@ -483,8 +483,16 @@ deepening single features:
   (ticks the branch through the real `nav2_behavior_tree::BehaviorTreeEngine`
   against the live runtime), and `tools/check_nav2_recovery_tree.py` (static tree
   guard).
-- Terrain-aware footstep planning fed from a real elevation/cost source instead
-  of hand-authored boxes.
+- [x] Terrain-aware footstep planning fed from a real elevation/cost source
+  instead of hand-authored boxes. **Done:** `TerrainModel` now answers keep-out
+  and height queries from an embedded grid sampled from a real map source.
+  `occupancy_terrain` builds that grid from a Nav2-style `nav_msgs/OccupancyGrid`
+  costmap (cells ≥ `occupied_threshold` become keep-out) plus an optional
+  elevation grid (step-up heights). `footstep_marker_publisher` subscribes to a
+  `costmap_topic` / `elevation_topic` and plans in the costmap frame. Covered by
+  `test_terrain_model` (grid queries), `test_occupancy_terrain` (OccupancyGrid →
+  terrain → planner), and `tools/check_footstep_costmap_e2e.py` (a live
+  OccupancyGrid nudging a real published plan).
 - [x] Capture multi-episode LeRobot datasets from live showcase runs and confirm
   HuggingFace `load_dataset` compatibility. **Done:**
   `tools/capture_lerobot_episodes.py` brings up the mock runtime and records

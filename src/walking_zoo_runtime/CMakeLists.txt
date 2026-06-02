@@ -8,6 +8,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
@@ -20,6 +21,7 @@ find_package(walking_zoo_safety REQUIRED)
 set(dependencies
   geometry_msgs
   lifecycle_msgs
+  nav_msgs
   pluginlib
   rclcpp
   rclcpp_action
@@ -34,6 +36,7 @@ add_library(${PROJECT_NAME}
   src/adapter_loader.cpp
   src/command_arbiter.cpp
   src/footstep_planner.cpp
+  src/occupancy_terrain.cpp
   src/step_feasibility_checker.cpp
   src/terrain_model.cpp
   src/mode_manager.cpp
@@ -99,6 +102,12 @@ if(BUILD_TESTING)
   ament_add_gtest(test_footstep_terrain_planner test/test_footstep_terrain_planner.cpp)
   if(TARGET test_footstep_terrain_planner)
     target_link_libraries(test_footstep_terrain_planner ${PROJECT_NAME})
+  endif()
+
+  ament_add_gtest(test_occupancy_terrain test/test_occupancy_terrain.cpp)
+  if(TARGET test_occupancy_terrain)
+    target_link_libraries(test_occupancy_terrain ${PROJECT_NAME})
+    ament_target_dependencies(test_occupancy_terrain nav_msgs)
   endif()
 endif()
 
