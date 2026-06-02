@@ -26,3 +26,4 @@
 - Added gtest coverage for the `walking_zoo_vla` semantic action mapper, including the new `move_backward`/`walk_backward` reverse-velocity mapping.
 - Completed the semantic action mapper surface with `run_forward`, `sidestep_left`, `sidestep_right`, and `walk_forward` mappings, documented in the package README and covered by tests.
 - Expanded command arbiter tests to cover the full teleop/Nav2/VLA priority ordering, source aliases, latest-wins ties, and the invariant that VLA intent never outranks operator override or safety.
+- Strengthened the showcase asset validator to also check GIF/PNG dimensions and GIF frame count, matching the gait gallery validator.
