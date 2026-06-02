@@ -32,3 +32,4 @@
 - Added a README MuJoCo Unitree G1 body-pose gallery GIF (neutral stand, crouch, pitch, roll) with shared gallery rendering and asset validation covering both galleries.
 - Added a deterministic `FootstepPlanner` that builds an alternating-leg `FootstepPlan` (forward progress, lateral offset, sidestep drift, metadata) as a foundation for footstep markers and `ExecuteFootstepPlan`, covered by gtest.
 - Added a `footstep_marker_publisher` node and launch file that publish the stub `FootstepPlan` and matching RViz `MarkerArray` foot/path markers on `/walking_zoo/footstep_plan` and `/walking_zoo/footstep_markers`.
+- Added a placeholder `StepFeasibilityChecker` (max stride distance, lateral offset, and swing height) with gtest coverage, and used it to flag infeasible footsteps in red in the marker preview.

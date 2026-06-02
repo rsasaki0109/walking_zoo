@@ -203,8 +203,11 @@ ros2 launch walking_zoo_runtime footstep_markers.launch.py step_count:=6 lateral
 This publishes a `walking_zoo_msgs/FootstepPlan` on `/walking_zoo/footstep_plan`
 and matching `visualization_msgs/MarkerArray` foot markers on
 `/walking_zoo/footstep_markers` (add a `MarkerArray` display in RViz with the
-fixed frame set to `base_link`). The planner does not command motion or check
-terrain; it is a placeholder for `ExecuteFootstepPlan`.
+fixed frame set to `base_link`). Left and right feet are colored blue and green,
+and any step the placeholder feasibility check rejects (over-long stride, too far
+lateral, or too high a swing) turns red. Try `lateral_shift:=0.3` to push later
+steps out of range and see them flagged. The planner does not command motion or
+check terrain; it is a placeholder for `ExecuteFootstepPlan`.
 
 Regenerate the README GIFs:
 

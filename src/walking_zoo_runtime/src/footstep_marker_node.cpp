@@ -6,6 +6,7 @@
 #include "visualization_msgs/msg/marker_array.hpp"
 
 #include "walking_zoo_runtime/footstep_planner.hpp"
+#include "walking_zoo_runtime/step_feasibility_checker.hpp"
 
 namespace walking_zoo_runtime
 {
@@ -61,6 +62,8 @@ private:
   visualization_msgs::msg::MarkerArray build_markers(
     const walking_zoo_msgs::msg::FootstepPlan & plan) const
   {
+    const auto feasibility = feasibility_checker_.evaluate(plan, StepFeasibilityLimits{});
+
     visualization_msgs::msg::MarkerArray markers;
 
     visualization_msgs::msg::Marker clear;
@@ -82,7 +85,12 @@ private:
     path.pose.orientation.w = 1.0;
 
     int id = 1;
+    std::size_t index = 0;
     for (const auto & footstep : plan.footsteps) {
+      const bool feasible =
+        index >= feasibility.steps.size() || feasibility.steps[index].feasible;
+      ++index;
+
       visualization_msgs::msg::Marker foot;
       foot.header.frame_id = plan.frame_id;
       foot.header.stamp = plan.header.stamp;
@@ -97,9 +105,16 @@ private:
       foot.scale.z = 0.03;
       const bool is_left = footstep.leg_name == "left";
       foot.color.a = 0.9f;
-      foot.color.r = is_left ? 0.30f : 0.30f;
-      foot.color.g = is_left ? 0.60f : 0.90f;
-      foot.color.b = is_left ? 1.00f : 0.55f;
+      if (!feasible) {
+        // Flag steps the placeholder feasibility check rejects in red.
+        foot.color.r = 0.95f;
+        foot.color.g = 0.25f;
+        foot.color.b = 0.25f;
+      } else {
+        foot.color.r = 0.30f;
+        foot.color.g = is_left ? 0.60f : 0.90f;
+        foot.color.b = is_left ? 1.00f : 0.55f;
+      }
       markers.markers.push_back(foot);
 
       path.points.push_back(footstep.pose.position);
@@ -110,6 +125,7 @@ private:
   }
 
   FootstepPlanner planner_;
+  StepFeasibilityChecker feasibility_checker_;
   FootstepPlanParams params_;
   rclcpp::Publisher<walking_zoo_msgs::msg::FootstepPlan>::SharedPtr plan_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
