@@ -155,6 +155,14 @@ ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction 
 ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'body_roll'}" --once
 ```
 
+The demo can also render a fall-detected placeholder state (the
+`walking_zoo_safety` `FallDetector` flags it from body tilt, and recovery stays
+blocked by the safety gate):
+
+```bash
+ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'fall_detected'}" --once
+```
+
 Open `/tmp/walking_zoo_mujoco_g1_demo/latest.png` or
 `/tmp/walking_zoo_mujoco_g1_demo/live.gif` to inspect the current simulated
 runtime target.

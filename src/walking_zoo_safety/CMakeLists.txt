@@ -14,6 +14,7 @@ find_package(walking_zoo_msgs REQUIRED)
 add_library(${PROJECT_NAME}
   src/command_watchdog.cpp
   src/estop_gate.cpp
+  src/fall_detector.cpp
   src/safety_pipeline.cpp
   src/velocity_limiter.cpp
 )
@@ -52,6 +53,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_estop_gate test/test_estop_gate.cpp)
   if(TARGET test_estop_gate)
     target_link_libraries(test_estop_gate ${PROJECT_NAME})
+  endif()
+
+  ament_add_gtest(test_fall_detector test/test_fall_detector.cpp)
+  if(TARGET test_fall_detector)
+    target_link_libraries(test_fall_detector ${PROJECT_NAME})
   endif()
 endif()
 

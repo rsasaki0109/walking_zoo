@@ -197,6 +197,21 @@ class UnitreeG1Renderer:
             self._set_joint(qpos, "left_ankle_pitch_joint", -0.18)
             self._set_joint(qpos, "right_ankle_pitch_joint", -0.18)
             return qpos
+        if gait == "fallen":
+            # Placeholder fallen state: low pelvis with a large forward pitch so
+            # the fall-detected runtime state is visually obvious. Recovery stays
+            # blocked by the safety gate until cleared.
+            qpos[2] = 0.34
+            qpos[3:7] = self._body_quat(0.10, 1.05, 0.0)
+            for side in ("left", "right"):
+                self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.70)
+                self._set_joint(qpos, f"{side}_knee_joint", 1.20)
+                self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.40)
+            self._set_joint(qpos, "left_shoulder_pitch_joint", -0.60)
+            self._set_joint(qpos, "right_shoulder_pitch_joint", -0.60)
+            self._set_joint(qpos, "left_elbow_joint", 0.80)
+            self._set_joint(qpos, "right_elbow_joint", 0.80)
+            return qpos
         if gait == "walk":
             qpos[0] = 0.022 * frame_index
             qpos[2] = 0.81 + 0.012 * max(0.0, cos_phase)
@@ -462,6 +477,9 @@ class MujocoG1GaitDemo(Node):
             "stand": "stand",
             "estop": "estopped",
             "emergency_stop": "estopped",
+            "fall": "fallen",
+            "fallen": "fallen",
+            "fall_detected": "fallen",
         }
         if action in mapping:
             self.semantic_gait = mapping[action]
@@ -510,7 +528,7 @@ class MujocoG1GaitDemo(Node):
 
     def on_timer(self):
         gait = self.current_gait()
-        if gait not in ("stand", "estopped"):
+        if gait not in ("stand", "estopped", "fallen"):
             self.frame_index += 1
         img = self.renderer.render(self.frame_index, gait)
         img = self.renderer.draw_overlay(
