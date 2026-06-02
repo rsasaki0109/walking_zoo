@@ -1,5 +1,6 @@
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "rclcpp/rclcpp.hpp"
 #include "visualization_msgs/msg/marker.hpp"
@@ -7,6 +8,7 @@
 
 #include "walking_zoo_runtime/footstep_planner.hpp"
 #include "walking_zoo_runtime/step_feasibility_checker.hpp"
+#include "walking_zoo_runtime/terrain_model.hpp"
 
 namespace walking_zoo_runtime
 {
@@ -31,6 +33,32 @@ public:
       static_cast<std::size_t>(declare_parameter<int>("step_count", static_cast<int>(params_.step_count)));
     const double rate = declare_parameter<double>("publish_rate", 2.0);
 
+    // Optional terrain so the preview can show feet dodging a keep-out zone and
+    // stepping up onto a curb. A keep-out zone is [min_x, min_y, max_x, max_y];
+    // a curb is [min_x, min_y, max_x, max_y, height]. Empty disables them.
+    const auto no_step_zone =
+      declare_parameter<std::vector<double>>("no_step_zone", std::vector<double>{});
+    const auto curb_box =
+      declare_parameter<std::vector<double>>("curb_box", std::vector<double>{});
+    if (no_step_zone.size() == 4) {
+      walking_zoo_runtime::TerrainBox box;
+      box.min_x = no_step_zone[0];
+      box.min_y = no_step_zone[1];
+      box.max_x = no_step_zone[2];
+      box.max_y = no_step_zone[3];
+      box.no_step = true;
+      terrain_.add_box(box);
+    }
+    if (curb_box.size() == 5) {
+      walking_zoo_runtime::TerrainBox box;
+      box.min_x = curb_box[0];
+      box.min_y = curb_box[1];
+      box.max_x = curb_box[2];
+      box.max_y = curb_box[3];
+      box.height = curb_box[4];
+      terrain_.add_box(box);
+    }
+
     plan_publisher_ =
       create_publisher<walking_zoo_msgs::msg::FootstepPlan>("/walking_zoo/footstep_plan", 10);
     marker_publisher_ =
@@ -50,17 +78,19 @@ public:
 private:
   void publish()
   {
-    auto plan = planner_.plan(params_);
+    const auto terrain_plan = planner_.plan_over_terrain(params_, terrain_);
+    auto plan = terrain_plan.plan;
     plan.header.stamp = now();
     for (auto & footstep : plan.footsteps) {
       footstep.header.stamp = plan.header.stamp;
     }
     plan_publisher_->publish(plan);
-    marker_publisher_->publish(build_markers(plan));
+    marker_publisher_->publish(build_markers(plan, terrain_plan.placements));
   }
 
   visualization_msgs::msg::MarkerArray build_markers(
-    const walking_zoo_msgs::msg::FootstepPlan & plan) const
+    const walking_zoo_msgs::msg::FootstepPlan & plan,
+    const std::vector<walking_zoo_runtime::StepPlacement> & placements) const
   {
     const auto feasibility = feasibility_checker_.evaluate(plan, StepFeasibilityLimits{});
 
@@ -89,6 +119,8 @@ private:
     for (const auto & footstep : plan.footsteps) {
       const bool feasible =
         index >= feasibility.steps.size() || feasibility.steps[index].feasible;
+      const bool blocked = index < placements.size() && placements[index].blocked;
+      const bool adjusted = index < placements.size() && placements[index].adjusted;
       ++index;
 
       visualization_msgs::msg::Marker foot;
@@ -105,11 +137,17 @@ private:
       foot.scale.z = 0.03;
       const bool is_left = footstep.leg_name == "left";
       foot.color.a = 0.9f;
-      if (!feasible) {
-        // Flag steps the placeholder feasibility check rejects in red.
+      if (blocked || !feasible) {
+        // Red: no clear foothold, or the feasibility gate rejected the step
+        // (e.g. the swing needed to clear a curb exceeds the limit).
         foot.color.r = 0.95f;
         foot.color.g = 0.25f;
         foot.color.b = 0.25f;
+      } else if (adjusted) {
+        // Amber: foot was nudged sideways to dodge a keep-out zone.
+        foot.color.r = 0.95f;
+        foot.color.g = 0.75f;
+        foot.color.b = 0.10f;
       } else {
         foot.color.r = 0.30f;
         foot.color.g = is_left ? 0.60f : 0.90f;
@@ -127,6 +165,7 @@ private:
   FootstepPlanner planner_;
   StepFeasibilityChecker feasibility_checker_;
   FootstepPlanParams params_;
+  TerrainModel terrain_;
   rclcpp::Publisher<walking_zoo_msgs::msg::FootstepPlan>::SharedPtr plan_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
   rclcpp::TimerBase::SharedPtr timer_;

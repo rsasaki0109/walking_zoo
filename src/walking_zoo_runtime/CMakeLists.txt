@@ -35,6 +35,7 @@ add_library(${PROJECT_NAME}
   src/command_arbiter.cpp
   src/footstep_planner.cpp
   src/step_feasibility_checker.cpp
+  src/terrain_model.cpp
   src/mode_manager.cpp
   src/walking_runtime_manager.cpp
 )
@@ -88,6 +89,16 @@ if(BUILD_TESTING)
   ament_add_gtest(test_step_feasibility_checker test/test_step_feasibility_checker.cpp)
   if(TARGET test_step_feasibility_checker)
     target_link_libraries(test_step_feasibility_checker ${PROJECT_NAME})
+  endif()
+
+  ament_add_gtest(test_terrain_model test/test_terrain_model.cpp)
+  if(TARGET test_terrain_model)
+    target_link_libraries(test_terrain_model ${PROJECT_NAME})
+  endif()
+
+  ament_add_gtest(test_footstep_terrain_planner test/test_footstep_terrain_planner.cpp)
+  if(TARGET test_footstep_terrain_planner)
+    target_link_libraries(test_footstep_terrain_planner ${PROJECT_NAME})
   endif()
 endif()
 
