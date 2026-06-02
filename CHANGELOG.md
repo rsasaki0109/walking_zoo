@@ -45,4 +45,23 @@
 - Wired the BehaviorTree.CPP recovery tree into a live `walking_zoo_bt_recovery_node`: added a ROS-integrated `ClearWalkingFaultService` BT action that actually calls `/walking_zoo/clear_fault`, a recovery node that subscribes to `/walking_zoo/state`, ticks the tree, and drives recovery (spinning on a background executor so the service call does not deadlock the tick loop), and a launch file. Fixed the matching runtime/adapter semantics so recovery is real: the mock adapter's `clear_fault` now re-enables the driver (clears the estop latch) and the runtime enforces the operator-estop interlock (a fault may not be cleared while the runtime estop is still engaged). Covered by gtest and an end-to-end check that proves the runtime stays faulted on its own and only the BT clears it (`tools/check_bt_recovery_e2e.py`).
 - Gave the Unitree SDK2 (G1) adapter a real vendor-SDK link path. Introduced a `UnitreeLocoBackend` dispatch boundary so all hardware calls live behind one interface: a `SilLocoBackend` (always built, records what would be sent, unit-tested and verified wired through the adapter) and an `Sdk2LocoBackend` (`src/sdk2_loco_backend.cpp`, compiled only with `-DWALKING_ZOO_WITH_UNITREE_SDK2=ON`) that drives the G1 `LocoClient` (`Move`/`BalanceStand`/`Damp` over the DDS channel). Wired the CMake option to a real `find_package(unitree_sdk2 REQUIRED)` + link that fails loudly when the SDK is absent (so an ON build never silently degrades), removed the in-source `#ifdef`s from the adapter, and documented the `unitree_sdk2_DIR`/`CMAKE_PREFIX_PATH` setup.
 - Extended the LeRobot exporter to collect multiple runtime traces into one multi-episode dataset: added `write_episodes_dataset` (one episode per trace) that de-duplicates tasks into a shared task table, keeps the global frame `index` continuous across episodes, shards episodes into `chunk-XYZ` directories, and computes `stats.json` over every frame; `write_dataset` is now a single-episode wrapper and the CLI accepts several trace paths. Covered by added pytest cases and a multi-episode round-trip in `tools/check_lerobot_export.py`.
+- Embedded the walking_zoo recovery into a real Nav2 `bt_navigator` recovery
+  branch. Added a Nav2-loadable BT plugin library `walking_zoo_nav2_bt_nodes`
+  exporting `IsWalkingReady` (a topic condition that reads `/walking_zoo/state`
+  via the `node` blackboard the bt_navigator sets) and `ClearWalkingFault` (built
+  on `nav2_behavior_tree::BtServiceNode<ClearFault>`, so it uses the exact Nav2
+  service-node machinery and succeeds only when the runtime confirms the fault is
+  cleared). Shipped `bt_xml/navigate_to_pose_w_walking_recovery.xml` — the stock
+  Nav2 navigate-to-pose tree with the walking recovery as the first action in the
+  `RoundRobin` recovery set, guarded by `Inverter/IsWalkingReady` so it is a
+  no-op when the robot is already ready — and `config/nav2_bt_navigator.yaml`
+  which appends the plugin to `plugin_lib_names` and selects the tree. Verified
+  three ways: `test_nav2_bt_recovery_nodes` loads the plugin the same way
+  bt_navigator does and drives it against a fake runtime; a
+  `walking_zoo_nav2_recovery_harness` ticks the recovery branch through the real
+  `nav2_behavior_tree::BehaviorTreeEngine`, exercised end-to-end against the live
+  runtime by `tools/check_nav2_bt_recovery_e2e.py` (runtime stays faulted alone,
+  the Nav2-loaded branch clears it); and `tools/check_nav2_recovery_tree.py`
+  statically guards the droppable navigate tree. The operator-estop interlock
+  still holds through the Nav2 path.
 - Added a second real-robot adapter, `walking_zoo_unitree_go2`, giving the adapter hub breadth beyond humanoids: a Unitree Go2 quadruped sport-mode adapter (`UnitreeGo2Adapter`) that reuses the dispatch-backend pattern with a `Go2SportBackend` (always-built software-in-the-loop `SilSportBackend`, plus an `Sdk2SportBackend` behind `-DWALKING_ZOO_WITH_UNITREE_SDK2=ON` driving the Go2 `SportClient` `Move`/`Euler`/`BodyHeight`/`RecoveryStand`/`StandDown`/`Damp`). The model is genuinely quadruped: it rests lying down (`STATE_SITTING`), stands up on activate and lies back down on deactivate, self-rights into balance-stand via recovery-stand, sits on a quick stop, reports four-foot `SUPPORT_QUADRUPED`, and tilts its torso via Euler angles. The vendor link is gated behind a real `find_package(unitree_sdk2 REQUIRED)` that fails loudly when the SDK is absent. Covered by gtest and an end-to-end runtime-load check (`tools/check_unitree_go2_adapter_e2e.py`) that loads the plugin, autostarts to a quadruped stand, and trots via the real `ExecuteVelocity` action.

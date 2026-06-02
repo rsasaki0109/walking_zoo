@@ -471,8 +471,18 @@ deepening single features:
   stop, four-foot `SUPPORT_QUADRUPED`) and a real `find_package(unitree_sdk2
   REQUIRED)` link path. Covered by gtest and
   `tools/check_unitree_go2_adapter_e2e.py`.
-- Embed the `walking_zoo_bt` recovery nodes inside an actual Nav2 BT navigator
-  recovery branch (not just the standalone recovery node).
+- [x] Embed the `walking_zoo_bt` recovery nodes inside an actual Nav2 BT
+  navigator recovery branch (not just the standalone recovery node). **Done:**
+  `walking_zoo_nav2_bt_nodes` is a Nav2-loadable BT plugin library exporting
+  `IsWalkingReady` (topic condition) and `ClearWalkingFault` (built on
+  `nav2_behavior_tree::BtServiceNode`), wired into
+  `bt_xml/navigate_to_pose_w_walking_recovery.xml` as the first action in the
+  Nav2 `RoundRobin` recovery branch and enabled by overlaying
+  `config/nav2_bt_navigator.yaml`. Verified by `test_nav2_bt_recovery_nodes`
+  (loads the plugin the bt_navigator way), `tools/check_nav2_bt_recovery_e2e.py`
+  (ticks the branch through the real `nav2_behavior_tree::BehaviorTreeEngine`
+  against the live runtime), and `tools/check_nav2_recovery_tree.py` (static tree
+  guard).
 - Terrain-aware footstep planning fed from a real elevation/cost source instead
   of hand-authored boxes.
 - Capture multi-episode LeRobot datasets from live showcase runs and confirm

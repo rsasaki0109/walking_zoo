@@ -1,0 +1,23 @@
+<root BTCPP_format="4" main_tree_to_execute="WalkingRecoveryBranch">
+  <!--
+    The walking_zoo recovery branch, isolated exactly as it is embedded inside the
+    Nav2 navigate-to-pose recovery subtree (see
+    navigate_to_pose_w_walking_recovery.xml). It is loaded through the real
+    nav2_behavior_tree::BehaviorTreeEngine with
+    plugin_lib_names = {walking_zoo_nav2_bt_nodes}.
+
+    If the robot is already ready, IsWalkingReady succeeds and the branch is a
+    no-op. Otherwise ClearWalkingFault calls /walking_zoo/clear_fault and the
+    trailing IsWalkingReady re-checks the refreshed state, so the branch only
+    reports SUCCESS once the robot is genuinely ready again.
+  -->
+  <BehaviorTree ID="WalkingRecoveryBranch">
+    <Sequence name="WalkingFaultRecovery">
+      <Fallback name="ReadyOrClear">
+        <IsWalkingReady state_topic="/walking_zoo/state"/>
+        <ClearWalkingFault service_name="/walking_zoo/clear_fault" reason="nav2_bt_recovery"/>
+      </Fallback>
+      <IsWalkingReady state_topic="/walking_zoo/state"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

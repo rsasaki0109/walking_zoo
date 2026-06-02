@@ -56,6 +56,13 @@ loop — it watches `/walking_zoo/state`, and when the robot is not ready it cal
 `/walking_zoo/clear_fault` to bring the robot back, but it can never override an
 engaged operator estop.
 
+The same recovery is also packaged as Nav2 bt_navigator plugins
+(`walking_zoo_nav2_bt_nodes`: `IsWalkingReady` + `ClearWalkingFault`, the latter
+built on `nav2_behavior_tree::BtServiceNode`) so the walking fault recovery can
+run inside a real Nav2 navigate-to-pose recovery branch
+(`navigate_to_pose_w_walking_recovery.xml`) rather than only as a standalone
+node. The operator-estop interlock still holds through that path.
+
 ## Runtime Boundary
 
 Nav2 owns path planning and obstacle-aware navigation. walking_zoo owns walking

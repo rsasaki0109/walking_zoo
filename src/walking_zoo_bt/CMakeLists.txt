@@ -8,6 +8,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
+find_package(nav2_behavior_tree REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(walking_zoo_msgs REQUIRED)
 
@@ -39,18 +40,38 @@ target_compile_features(walking_zoo_bt_recovery_node PUBLIC cxx_std_17)
 target_link_libraries(walking_zoo_bt_recovery_node ${PROJECT_NAME})
 ament_target_dependencies(walking_zoo_bt_recovery_node ${dependencies})
 
+# Nav2-loadable BT plugin library: IsWalkingReady + ClearWalkingFault, following
+# the Nav2 bt_navigator plugin convention (node from blackboard, BtServiceNode).
+# Kept in its own library so the core walking_zoo_bt stays Nav2-free; only this
+# target pulls in nav2_behavior_tree, and it is what goes in `plugin_lib_names`.
+add_library(walking_zoo_nav2_bt_nodes SHARED src/nav2_recovery_nodes.cpp)
+target_compile_features(walking_zoo_nav2_bt_nodes PUBLIC cxx_std_17)
+target_include_directories(walking_zoo_nav2_bt_nodes PUBLIC
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>"
+)
+target_link_libraries(walking_zoo_nav2_bt_nodes ${PROJECT_NAME})
+ament_target_dependencies(walking_zoo_nav2_bt_nodes ${dependencies} nav2_behavior_tree)
+target_compile_definitions(walking_zoo_nav2_bt_nodes PRIVATE BT_PLUGIN_EXPORT)
+
+# Harness that ticks the recovery branch through the real Nav2 BT engine.
+add_executable(walking_zoo_nav2_recovery_harness src/nav2_recovery_harness.cpp)
+target_compile_features(walking_zoo_nav2_recovery_harness PUBLIC cxx_std_17)
+ament_target_dependencies(walking_zoo_nav2_recovery_harness
+  ament_index_cpp behaviortree_cpp rclcpp nav2_behavior_tree)
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
-install(DIRECTORY bt_xml launch DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY bt_xml launch config DESTINATION share/${PROJECT_NAME})
 install(FILES plugins.xml DESTINATION share/${PROJECT_NAME})
 install(
-  TARGETS ${PROJECT_NAME}
+  TARGETS ${PROJECT_NAME} walking_zoo_nav2_bt_nodes
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 install(
-  TARGETS walking_zoo_bt_recovery_node
+  TARGETS walking_zoo_bt_recovery_node walking_zoo_nav2_recovery_harness
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -74,6 +95,17 @@ if(BUILD_TESTING)
     ament_target_dependencies(test_recovery_bt ${dependencies})
     target_compile_definitions(test_recovery_bt PRIVATE
       "WALKING_ZOO_RECOVERY_XML_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/bt_xml/walking_zoo_recovery_live.xml\"")
+  endif()
+
+  # Loads the Nav2 plugin library the same way bt_navigator does and drives the
+  # IsWalkingReady / ClearWalkingFault nodes against a fake runtime.
+  ament_add_gtest(test_nav2_bt_recovery_nodes test/test_nav2_bt_recovery_nodes.cpp)
+  if(TARGET test_nav2_bt_recovery_nodes)
+    add_dependencies(test_nav2_bt_recovery_nodes walking_zoo_nav2_bt_nodes)
+    ament_target_dependencies(test_nav2_bt_recovery_nodes
+      behaviortree_cpp rclcpp walking_zoo_msgs nav2_behavior_tree)
+    target_compile_definitions(test_nav2_bt_recovery_nodes PRIVATE
+      "WALKING_ZOO_NAV2_BT_NODES_LIB=\"$<TARGET_FILE:walking_zoo_nav2_bt_nodes>\"")
   endif()
 endif()
 
