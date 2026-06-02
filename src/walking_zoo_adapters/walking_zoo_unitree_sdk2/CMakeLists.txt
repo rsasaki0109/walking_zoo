@@ -15,6 +15,7 @@ find_package(walking_zoo_core REQUIRED)
 find_package(walking_zoo_msgs REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
+  src/unitree_loco_command.cpp
   src/unitree_sdk2_adapter.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
@@ -48,5 +49,19 @@ install(
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(geometry_msgs pluginlib rclcpp walking_zoo_core walking_zoo_msgs)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+
+  ament_add_gtest(test_unitree_loco_command test/test_unitree_loco_command.cpp)
+  if(TARGET test_unitree_loco_command)
+    target_link_libraries(test_unitree_loco_command ${PROJECT_NAME})
+  endif()
+
+  ament_add_gtest(test_unitree_sdk2_adapter test/test_unitree_sdk2_adapter.cpp)
+  if(TARGET test_unitree_sdk2_adapter)
+    target_link_libraries(test_unitree_sdk2_adapter ${PROJECT_NAME})
+  endif()
+endif()
 
 ament_package()

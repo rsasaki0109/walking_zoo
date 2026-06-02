@@ -2,6 +2,7 @@
 #define WALKING_ZOO_UNITREE_SDK2__UNITREE_SDK2_ADAPTER_HPP_
 
 #include "walking_zoo_core/walking_adapter.hpp"
+#include "walking_zoo_unitree_sdk2/unitree_loco_command.hpp"
 
 namespace walking_zoo_unitree_sdk2
 {
@@ -34,12 +35,24 @@ public:
   walking_zoo_core::CommandResult clear_fault() override;
 
 private:
+  // Whether commands are actually dispatched to hardware. True only when built
+  // against the vendor SDK *and* motion is allowed; otherwise the adapter runs
+  // as a software-in-the-loop model that translates and tracks commands.
+  bool dispatch_to_hardware() const;
+  void enter_mode(LocoMode mode);
+
   walking_zoo_core::RobotProfile profile_;
   bool configured_{false};
   bool active_{false};
   bool allow_motion_{false};
   bool estop_active_{false};
   std::string status_text_{"Unitree SDK2 support not compiled"};
+
+  LocoMode loco_mode_{LocoMode::ZERO_TORQUE};
+  G1VelocityLimits velocity_limits_;
+  G1PostureLimits posture_limits_;
+  LocoVelocityCommand last_velocity_;
+  bool has_velocity_command_{false};
 };
 
 }  // namespace walking_zoo_unitree_sdk2
