@@ -237,3 +237,11 @@
   so the sim must hold the commanded velocity (the stale-command watchdog belongs
   to the runtime's safety pipeline, not the sim) — re-expiring it mid-walk
   snapped the robot to a stand pose and toppled it.
+- Verified the Nav2 velocity path drives the gait_lab SIL robot. The SIL launch
+  already wires the legged `cmd_vel_bridge` (Nav2's shaper + readiness gate), so a
+  plain `/cmd_vel` Twist — exactly what Nav2's controller server emits — is shaped
+  to the legged envelope, ready-gated on `/walking_zoo/state`, and fed through the
+  runtime's safety pipeline into the SIL adapter. Added
+  `tools/check_gait_lab_sil_nav2_e2e.py`, which streams a Nav2-style `/cmd_vel` and
+  confirms the reinforcement-learned gait walks under it without falling
+  (end-to-end through bridge → runtime → safety → SIL adapter → MuJoCo G1).

@@ -56,6 +56,16 @@ ros2 topic echo /walking_zoo/state
 Point at a menagerie G1 with `menagerie_path:=` (or `WALKING_ZOO_MENAGERIE_PATH`)
 and choose a different gait_lab controller with `controller:=balanced-cpg`, etc.
 
+### Driving it from Nav2
+
+The launch already includes the legged `cmd_vel_bridge`, so the robot is driven
+by the same path Nav2 uses: a plain `/cmd_vel` Twist is shaped to the legged
+velocity envelope, gated on the robot being ready (`/walking_zoo/state`), and fed
+through the runtime's safety pipeline into the SIL adapter. So Nav2's controller
+server (or teleop) drives the RL-gait G1 directly — publish to `/cmd_vel` and it
+walks. `tools/check_gait_lab_sil_nav2_e2e.py` verifies this whole path
+end-to-end.
+
 ## Tests
 
 * `colcon test --packages-select walking_zoo_gait_lab_sil` runs the gtest for the
