@@ -29,3 +29,4 @@
 - Strengthened the showcase asset validator to also check GIF/PNG dimensions and GIF frame count, matching the gait gallery validator.
 - Added gtest coverage for the runtime mode manager, verifying the idle default, every valid locomotion mode, and rejection of unknown or out-of-range modes.
 - Added body-pose visualization (`body_crouch`, `body_pitch`, `body_roll`) to the live MuJoCo Unitree G1 demo, mapping `MODE_BODY_POSE`-style semantic actions to held humanoid poses.
+- Added a README MuJoCo Unitree G1 body-pose gallery GIF (neutral stand, crouch, pitch, roll) with shared gallery rendering and asset validation covering both galleries.

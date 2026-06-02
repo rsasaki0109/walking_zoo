@@ -31,6 +31,11 @@ forward walk, forward run, reverse walk, sidestep, turn-in-place, and stand/stop
 
 ![walking_zoo MuJoCo Unitree G1 gait gallery](docs/assets/readme/mujoco_unitree_g1_gait_gallery.gif)
 
+Beyond locomotion, walking_zoo also models body-pose commands (`MODE_BODY_POSE`):
+a neutral stand next to body crouch, pitch, and roll holds.
+
+![walking_zoo MuJoCo Unitree G1 body pose gallery](docs/assets/readme/mujoco_unitree_g1_body_pose_gallery.gif)
+
 Send a Nav2-style velocity command and watch a Laikago robot rendered in
 PyBullet move through the same runtime path without real hardware.
 

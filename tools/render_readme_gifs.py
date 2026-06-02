@@ -467,6 +467,38 @@ class MujocoUnitreeG1Scene:
             self._set_joint(qpos, "right_shoulder_pitch_joint", 0.30 * sin_phase)
             self._set_joint(qpos, "left_elbow_joint", 0.52)
             self._set_joint(qpos, "right_elbow_joint", 0.52)
+        elif gait in ("body_crouch", "body_pitch", "body_roll"):
+            # Static MODE_BODY_POSE holds: feet stay planted while the torso height
+            # or orientation changes, with a faint sway so the pose still reads as
+            # a live runtime target.
+            breathe = 0.006 * cos_phase
+            if gait == "body_crouch":
+                qpos[2] = 0.64 + breathe
+                qpos[3:7] = self._yaw_quat(0.0)
+                for side in ("left", "right"):
+                    self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.52)
+                    self._set_joint(qpos, f"{side}_knee_joint", 1.02)
+                    self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.50)
+                self._set_joint(qpos, "waist_pitch_joint", 0.12)
+                self._set_joint(qpos, "left_shoulder_pitch_joint", -0.32)
+                self._set_joint(qpos, "right_shoulder_pitch_joint", -0.32)
+            elif gait == "body_pitch":
+                qpos[2] = 0.80 + breathe
+                qpos[3:7] = self._body_quat(0.0, 0.20 + 0.01 * sin_phase, 0.0)
+                for side in ("left", "right"):
+                    self._set_joint(qpos, f"{side}_hip_pitch_joint", 0.16)
+                    self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.10)
+                self._set_joint(qpos, "waist_pitch_joint", 0.06)
+            else:  # body_roll
+                qpos[2] = 0.805 + breathe
+                qpos[3:7] = self._body_quat(0.16 + 0.01 * sin_phase, 0.0, 0.0)
+                self._set_joint(qpos, "left_hip_roll_joint", 0.10)
+                self._set_joint(qpos, "right_hip_roll_joint", 0.10)
+                self._set_joint(qpos, "waist_roll_joint", 0.08)
+            self._set_joint(qpos, "left_shoulder_roll_joint", 0.14)
+            self._set_joint(qpos, "right_shoulder_roll_joint", -0.14)
+            self._set_joint(qpos, "left_elbow_joint", 0.45)
+            self._set_joint(qpos, "right_elbow_joint", 0.45)
         else:
             raise ValueError(f"unknown gait: {gait}")
 
@@ -499,6 +531,27 @@ def draw_small_label(img, title, subtitle, accent):
     draw.text((274, 232), subtitle, font=font(12), fill=MUTED)
 
 
+def _render_pose_gallery(scene, specs, filename, columns=2, frame_count=36):
+    rows = (len(specs) + columns - 1) // columns
+    gallery_size = (SIZE[0], 270 * rows)
+    frames = []
+    for frame in range(frame_count):
+        tiles = []
+        for gait, title, subtitle, accent in specs:
+            x, y = scene.apply_gait_frame(frame, gait)
+            tile = scene.render(x, y, distance=2.28, elevation=-15).resize(
+                (480, 270),
+                Image.Resampling.LANCZOS,
+            )
+            draw_small_label(tile, title, subtitle, accent)
+            tiles.append(tile)
+        canvas = Image.new("RGB", gallery_size, BG)
+        for index, tile in enumerate(tiles):
+            canvas.paste(tile, ((index % columns) * 480, (index // columns) * 270))
+        frames.append(canvas)
+    save_gif(filename, frames, duration=80)
+
+
 def mujoco_unitree_g1_gait_gallery(scene=None):
     owns_scene = scene is None
     if owns_scene:
@@ -511,29 +564,28 @@ def mujoco_unitree_g1_gait_gallery(scene=None):
         ("turn", "Turn-in-place", "/cmd_vel z=0.55", PURPLE),
         ("stand", "Stand / stop", "zero cmd", MUTED),
     ]
-    columns = 2
-    rows = (len(gait_specs) + columns - 1) // columns
-    gallery_size = (SIZE[0], 270 * rows)
-    frames = []
     try:
-        for frame in range(36):
-            tiles = []
-            for gait, title, subtitle, accent in gait_specs:
-                x, y = scene.apply_gait_frame(frame, gait)
-                tile = scene.render(x, y, distance=2.28, elevation=-15).resize(
-                    (480, 270),
-                    Image.Resampling.LANCZOS,
-                )
-                draw_small_label(tile, title, subtitle, accent)
-                tiles.append(tile)
-            canvas = Image.new("RGB", gallery_size, BG)
-            for index, tile in enumerate(tiles):
-                canvas.paste(tile, ((index % columns) * 480, (index // columns) * 270))
-            frames.append(canvas)
+        _render_pose_gallery(scene, gait_specs, "mujoco_unitree_g1_gait_gallery.gif")
     finally:
         if owns_scene:
             scene.close()
-    save_gif("mujoco_unitree_g1_gait_gallery.gif", frames, duration=80)
+
+
+def mujoco_unitree_g1_body_pose_gallery(scene=None):
+    owns_scene = scene is None
+    if owns_scene:
+        scene = MujocoUnitreeG1Scene()
+    pose_specs = [
+        ("stand", "Neutral stand", "MODE_STAND", MUTED),
+        ("body_crouch", "Body crouch", "semantic/body_crouch", GREEN),
+        ("body_pitch", "Body pitch", "semantic/body_pitch", BLUE),
+        ("body_roll", "Body roll", "semantic/body_roll", PURPLE),
+    ]
+    try:
+        _render_pose_gallery(scene, pose_specs, "mujoco_unitree_g1_body_pose_gallery.gif")
+    finally:
+        if owns_scene:
+            scene.close()
 
 
 def mujoco_unitree_g1_runtime(scene=None):
@@ -712,6 +764,7 @@ def main():
     try:
         mujoco_unitree_g1_runtime(g1_scene)
         mujoco_unitree_g1_gait_gallery(g1_scene)
+        mujoco_unitree_g1_body_pose_gallery(g1_scene)
     finally:
         g1_scene.close()
     pybullet_laikago_runtime()
