@@ -60,6 +60,19 @@
   (OccupancyGrid → terrain → planner dodges a costmap obstacle), and
   `tools/check_footstep_costmap_e2e.py` (a live OccupancyGrid nudging a real
   published footstep plan, frame and all).
+- Added `experiments/gait_lab`, a physics-driven testbed for comparing walking
+  gait algorithms on a real MuJoCo Unitree G1 (position actuators + `mj_step`,
+  not kinematic playback). A single `GaitController` interface
+  (`update(obs, cmd) -> ctrl[29]`) lets gait algorithms be plugged in and scored
+  on the same robot with the same metrics (forward distance, survival time,
+  lateral drift, min torso height). Ships three algorithms — `stand-hold`
+  (stable baseline), `open-loop-cpg` (sinusoidal stepping with no feedback, the
+  honest failure that topples in ~1 s), and `balanced-cpg` (stepping + lateral
+  weight-shift + torso-attitude ankle feedback, which survives ~3× longer and
+  makes net forward progress) — plus `run_compare.py` (metrics table, optional
+  per-algorithm GIF/JSON) and a skip-if-unavailable pytest suite asserting the
+  comparison invariants. Kept under `experiments/` so the hardware-free ROS 2
+  build never depends on MuJoCo or a model checkout.
 - Captured multi-episode LeRobot datasets from live runtime runs and confirmed
   HuggingFace `datasets.load_dataset` compatibility. Added
   `tools/capture_lerobot_episodes.py`, which brings up the mock runtime and

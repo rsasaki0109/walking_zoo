@@ -71,3 +71,17 @@ node. The operator-estop interlock still holds through that path.
 
 Nav2 owns path planning and obstacle-aware navigation. walking_zoo owns walking
 command execution, robot mode, safety gates, and adapter dispatch.
+
+## Gait Algorithms Are A Command Source, Not The Runtime
+
+walking_zoo is not a gait research stack — gait generation sits *outside* the
+runtime boundary as just another command source behind a stable interface. To
+make that concrete (and answer "can I actually try gait algorithms here?"),
+`experiments/gait_lab/` is a physics-driven testbed: it drives a real MuJoCo
+Unitree G1 through `mj_step` and compares pluggable `GaitController`
+implementations (open-loop CPG vs. balance-feedback CPG vs. a standing baseline)
+on the same robot with the same metrics. It lives under `experiments/` because
+it depends on MuJoCo and a model checkout the hardware-free ROS 2 build must not
+require; the intended bridge back is to expose a validated controller as a
+walking_zoo adapter so a gait proven there drives the real runtime/safety
+pipeline. See `experiments/gait_lab/README.md`.
