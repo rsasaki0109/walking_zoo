@@ -12,6 +12,7 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(walking_zoo_core REQUIRED)
 find_package(walking_zoo_msgs REQUIRED)
 find_package(walking_zoo_safety REQUIRED)
@@ -23,6 +24,7 @@ set(dependencies
   rclcpp
   rclcpp_action
   rclcpp_lifecycle
+  visualization_msgs
   walking_zoo_core
   walking_zoo_msgs
   walking_zoo_safety
@@ -47,10 +49,15 @@ target_compile_features(walking_zoo_runtime_manager PUBLIC cxx_std_17)
 target_link_libraries(walking_zoo_runtime_manager ${PROJECT_NAME})
 ament_target_dependencies(walking_zoo_runtime_manager ${dependencies})
 
+add_executable(footstep_marker_publisher src/footstep_marker_node.cpp)
+target_compile_features(footstep_marker_publisher PUBLIC cxx_std_17)
+target_link_libraries(footstep_marker_publisher ${PROJECT_NAME})
+ament_target_dependencies(footstep_marker_publisher ${dependencies})
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(DIRECTORY launch params DESTINATION share/${PROJECT_NAME})
 install(
-  TARGETS ${PROJECT_NAME} walking_zoo_runtime_manager
+  TARGETS ${PROJECT_NAME} walking_zoo_runtime_manager footstep_marker_publisher
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

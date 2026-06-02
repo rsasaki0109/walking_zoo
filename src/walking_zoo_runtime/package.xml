@@ -15,6 +15,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
   <depend>rclcpp_lifecycle</depend>
+  <depend>visualization_msgs</depend>
   <depend>walking_zoo_core</depend>
   <depend>walking_zoo_msgs</depend>
   <depend>walking_zoo_safety</depend>

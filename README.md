@@ -190,6 +190,22 @@ the Nav2 bridge, the runtime state, and the rendered gait — including the new
 See [examples/mujoco_g1_runtime_showcase](examples/mujoco_g1_runtime_showcase)
 for the short example guide.
 
+## Footstep Plan Preview
+
+Humanoids need more than `/cmd_vel`. walking_zoo ships a deterministic stub
+footstep planner and an RViz marker preview so the footstep interface is visible
+before any real footstep controller exists:
+
+```bash
+ros2 launch walking_zoo_runtime footstep_markers.launch.py step_count:=6 lateral_shift:=0.0
+```
+
+This publishes a `walking_zoo_msgs/FootstepPlan` on `/walking_zoo/footstep_plan`
+and matching `visualization_msgs/MarkerArray` foot markers on
+`/walking_zoo/footstep_markers` (add a `MarkerArray` display in RViz with the
+fixed frame set to `base_link`). The planner does not command motion or check
+terrain; it is a placeholder for `ExecuteFootstepPlan`.
+
 Regenerate the README GIFs:
 
 ```bash
