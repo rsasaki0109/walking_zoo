@@ -36,6 +36,9 @@ class GaitHarness:
         fps: int = 30,
         perturb_seed: int | None = None,
         perturb_scale: float = 0.015,
+        push_speed: float = 0.0,
+        push_interval: float = 1.5,
+        push_seed: int = 0,
     ) -> tuple[GaitMetrics, list]:
         cmd = cmd or Command()
         m = self.model
@@ -46,6 +49,12 @@ class GaitHarness:
             # survives the nominal start is a fragile fluke).
             m.perturb(perturb_seed, perturb_scale)
         controller.reset(m)
+
+        # Optional mid-rollout shoves (push-recovery benchmarking): seeded so a
+        # given (push_seed, speed) is reproducible.
+        push_rng = np.random.default_rng(push_seed + 70007)
+        next_push = (0.5 + float(push_rng.exponential(push_interval))
+                     if push_speed > 0.0 else float("inf"))
 
         renderer = None
         frames: list = []
@@ -69,6 +78,9 @@ class GaitHarness:
 
         for i in range(steps):
             t = i * m.timestep
+            if t >= next_push:
+                m.push(push_rng, push_speed)
+                next_push = t + float(push_rng.exponential(push_interval))
             obs = m.observe(t)
             m.data.ctrl[:] = controller.update(obs, cmd)
             m.step()

@@ -269,6 +269,21 @@ def test_rl_residual_is_deterministic_and_dependency_free(model):
     assert a.forward_distance > 0.3
 
 
+def test_push_is_deterministic_and_disturbing(model):
+    # A mid-rollout shove is reproducible for a given (push_seed, speed) and makes
+    # a gait fall sooner than the same unshoved rollout — the basis of the
+    # push-recovery benchmark in eval_policy.py.
+    from gait_lab import GaitHarness
+
+    harness = GaitHarness(model, horizon=8.0)
+    a, _ = harness.rollout(BalancedCPG(), render=False, push_speed=0.6, push_seed=3)
+    b, _ = harness.rollout(BalancedCPG(), render=False, push_speed=0.6, push_seed=3)
+    assert a.survival_time == pytest.approx(b.survival_time)
+    calm, _ = harness.rollout(BalancedCPG(), render=False)
+    # Shoving the (already fragile) CPG does not make it survive *longer*.
+    assert a.survival_time <= calm.survival_time + 1e-6
+
+
 def test_metrics_are_finite_and_serializable(model):
     m = rollout(model, BalancedCPG(), horizon=3.0)
     d = m.as_dict()

@@ -35,6 +35,7 @@ pluginlib_export_plugin_description_file(walking_zoo_core plugins.xml)
 
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(FILES plugins.xml README.md DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY assets DESTINATION share/${PROJECT_NAME})
 install(
   TARGETS ${PROJECT_NAME}
   EXPORT export_${PROJECT_NAME}

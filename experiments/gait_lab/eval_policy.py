@@ -25,12 +25,22 @@ def main():
     ap.add_argument("--seeds", type=int, default=8, help="number of perturbed starts")
     ap.add_argument("--horizon", type=float, default=8.0)
     ap.add_argument("--perturb", type=float, default=0.015)
+    ap.add_argument("--push-speeds", type=float, nargs="*",
+                    default=[0.3, 0.5, 0.7],
+                    help="velocity-kick magnitudes (m/s) for the push-recovery sweep")
+    ap.add_argument("--push-trials", type=int, default=5,
+                    help="rollouts per push magnitude (different shove schedules)")
+    ap.add_argument("--policy", default=None,
+                    help="path to an rl_policy.npz (default: the shipped one)")
     args = ap.parse_args()
+
+    def make():
+        return RLResidualWalk(args.policy)
 
     model = G1Model()
     harness = GaitHarness(model, horizon=args.horizon)
 
-    nominal, _ = harness.rollout(RLResidualWalk(), render=False)
+    nominal, _ = harness.rollout(make(), render=False)
     cpg, _ = harness.rollout(BalancedCPG(), render=False)
     print(f"horizon {args.horizon:.0f}s   (balanced-cpg baseline: "
           f"survive {cpg.survival_time:.2f}s, kinematic ceiling ~3 s)\n")
@@ -39,7 +49,7 @@ def main():
 
     survs, fwds = [nominal.survival_time], [nominal.forward_distance]
     for seed in range(args.seeds):
-        m, _ = harness.rollout(RLResidualWalk(), render=False,
+        m, _ = harness.rollout(make(), render=False,
                                perturb_seed=seed, perturb_scale=args.perturb)
         survs.append(m.survival_time); fwds.append(m.forward_distance)
         print(f"  perturb seed {seed:2d}  survive {m.survival_time:4.2f}s  "
@@ -53,6 +63,22 @@ def main():
     verdict = "ROBUST" if survs.min() > 3.1 else "FLAKY (a fluke, like the chaos caveat)"
     print(f"  verdict: {verdict} — worst-case survival {survs.min():.2f}s "
           f"vs kinematic ceiling ~3 s")
+
+    # Push-recovery sweep: shove the robot mid-walk and see how long it stays up.
+    if args.push_speeds:
+        print("\n  push-recovery (mid-walk velocity kicks):")
+        for speed in args.push_speeds:
+            ps = []
+            for trial in range(args.push_trials):
+                m, _ = harness.rollout(
+                    make(), render=False, perturb_seed=trial,
+                    perturb_scale=args.perturb, push_speed=speed,
+                    push_interval=1.5, push_seed=trial)
+                ps.append(m.survival_time)
+            ps = np.array(ps)
+            print(f"    shove {speed:.1f} m/s  survive mean {ps.mean():4.2f}s "
+                  f"min {ps.min():4.2f}s  ({(ps >= args.horizon - 0.1).sum()}/"
+                  f"{len(ps)} full horizon)")
 
 
 if __name__ == "__main__":

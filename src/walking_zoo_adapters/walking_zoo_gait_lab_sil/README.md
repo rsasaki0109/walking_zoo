@@ -8,6 +8,13 @@ offline in `gait_lab` now runs as a live simulated robot **behind the real
 runtime and safety pipeline**, driven by the same `/cmd_vel` / action interfaces
 as every other adapter.
 
+![rl-residual walking the full horizon](assets/rl_residual_walk.png)
+
+*The gait this adapter runs: the reinforcement-learned `rl-residual` policy
+walking the full 8 s horizon (left→right) — the only gait_lab gait that stays up
+and travels (every model-based / hand-tuned gait is on the ground by ~3 s). It is
+this gait, behind the runtime + safety pipeline, that `/cmd_vel` now drives.*
+
 ## How it fits together
 
 The heavy physics and the learned policy are Python (MuJoCo). To keep MuJoCo an

@@ -179,6 +179,10 @@ def main():
     ap.add_argument("--horizon", type=float, default=8.0)
     ap.add_argument("--perturb", type=float, default=0.0,
                     help="domain-randomisation perturbation scale (0 = nominal start)")
+    ap.add_argument("--push-interval", type=float, default=0.0,
+                    help="mean seconds between mid-episode shoves (0 = no pushes)")
+    ap.add_argument("--push-speed", type=float, default=0.0,
+                    help="velocity-kick magnitude per shove (m/s)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--warmup", type=int, default=3,
                     help="iters to populate the obs normaliser before any PPO update "
@@ -190,7 +194,9 @@ def main():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    env_kwargs = dict(horizon=args.horizon, perturb_scale=args.perturb)
+    env_kwargs = dict(
+        horizon=args.horizon, perturb_scale=args.perturb,
+        push_interval=args.push_interval, push_speed=args.push_speed)
     net = ActorCritic(OBS_DIM, ACT_DIM).to(args.device)
     opt = torch.optim.Adam(net.parameters(), lr=args.lr)
     norm = RunningNorm(OBS_DIM)

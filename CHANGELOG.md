@@ -245,3 +245,18 @@
   `tools/check_gait_lab_sil_nav2_e2e.py`, which streams a Nav2-style `/cmd_vel` and
   confirms the reinforcement-learned gait walks under it without falling
   (end-to-end through bridge → runtime → safety → SIL adapter → MuJoCo G1).
+- Added a push-recovery benchmark to gait_lab and a hero filmstrip for the SIL
+  adapter. `G1Model.push` applies a horizontal base velocity kick; `GaitHarness`
+  and `rl_env` can shove the robot on a seeded mid-rollout schedule, and
+  `eval_policy.py --push-speeds` reports survival per shove magnitude (plus a new
+  `--policy` to benchmark any exported policy). `render_rl_walk.py` writes a
+  dependency-free filmstrip of `rl-residual` walking the full horizon, now the
+  SIL package's hero image. Honest negative result, documented in the README:
+  training for push recovery (`train_rl.py --push-interval/--push-speed`, with
+  shoves folded into the robust worst-of-perturbations eval) did not beat the
+  nominal policy's incidental shove tolerance and regressed locomotion (the
+  policy drifted backward to balance in place) — a fixed CPG rhythm plus a small
+  position residual is too thin a substrate for genuine push recovery, so the
+  failed weights are not shipped (the nominal forward-walking policy stays the
+  default) and only the benchmark + training hooks are kept. Push-determinism
+  pytest added; suite at 20 gait_lab tests.

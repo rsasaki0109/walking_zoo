@@ -84,6 +84,8 @@ class G1WalkEnv:
         action_scale: float = DEFAULT_ACTION_SCALE,
         fall_height: float = 0.5,
         perturb_scale: float = 0.0,
+        push_interval: float = 0.0,   # mean s between mid-episode shoves (0 = off)
+        push_speed: float = 0.0,      # velocity kick magnitude per shove (m/s)
     ):
         self.model = model or G1Model()
         self.horizon = horizon
@@ -91,6 +93,8 @@ class G1WalkEnv:
         self.action_scale = action_scale
         self.fall_height = fall_height
         self.perturb_scale = perturb_scale
+        self.push_interval = push_interval
+        self.push_speed = push_speed
         self.timestep = self.model.timestep
         self.decim = max(1, int(round((1.0 / control_hz) / self.timestep)))
         self.max_control_steps = int(round(horizon / (self.decim * self.timestep)))
@@ -117,7 +121,17 @@ class G1WalkEnv:
         self.cpg.reset(self.model)
         self._k = 0
         self._t = 0.0
+        # Schedule mid-episode shoves (push-recovery training). Seed-derived so a
+        # given episode's disturbances are reproducible.
+        self._push_rng = np.random.default_rng((seed or 0) + 90001)
+        self._next_push = self._schedule_push(self._t)
         return self._obs()
+
+    def _schedule_push(self, t: float) -> float:
+        if self.push_interval <= 0.0 or self.push_speed <= 0.0:
+            return float("inf")
+        # Exponential gaps around the mean interval, with a short initial grace.
+        return t + 0.5 + float(self._push_rng.exponential(self.push_interval))
 
     def _obs(self) -> np.ndarray:
         o = self.model.observe(self._t)
@@ -129,6 +143,11 @@ class G1WalkEnv:
     def step(self, action: np.ndarray) -> StepResult:
         action = np.clip(np.asarray(action, dtype=float), -1.0, 1.0)
         residual = self.action_scale * action
+        # Mid-episode shove: an external velocity kick the policy must recover
+        # from (only when push training is enabled).
+        if self._t >= self._next_push:
+            self.model.push(self._push_rng, self.push_speed)
+            self._next_push = self._schedule_push(self._t)
         # Hold the residual across the decimation block; the CPG feedforward is
         # recomputed every sim step so the rhythm stays smooth.
         for _ in range(self.decim):

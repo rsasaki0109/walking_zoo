@@ -175,6 +175,14 @@ class G1Model:
         self.data.qpos[7:] += rng.normal(0.0, scale, self.data.qpos.shape[0] - 7)
         self._mj.mj_forward(self.model, self.data)
 
+    def push(self, rng: np.random.Generator, speed: float) -> None:
+        """Shove the robot: add a horizontal velocity kick (m/s) to the base in a
+        random direction. Models an external disturbance for push-recovery
+        training / benchmarking. ``rng`` makes the direction reproducible."""
+        theta = float(rng.uniform(0.0, 2.0 * np.pi))
+        self.data.qvel[0] += speed * np.cos(theta)
+        self.data.qvel[1] += speed * np.sin(theta)
+
     def step(self) -> None:
         self._mj.mj_step(self.model, self.data)
 

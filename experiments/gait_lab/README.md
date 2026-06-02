@@ -244,6 +244,29 @@ Inference is dependency-free: training exports the actor to `rl_policy.npz`
 (weights + observation normaliser) and `RLResidualWalk` runs it with numpy only —
 the same convention the linear `learned-feedback` policy follows.
 
+### Push robustness (and an honest negative result)
+
+`eval_policy.py` also benchmarks recovery from mid-walk **shoves** (a velocity
+kick to the base; `GaitHarness(..., push_speed=...)`):
+
+```bash
+python3 eval_policy.py --push-speeds 0.3 0.5 0.7
+```
+
+The shipped `rl-residual` policy — never trained on shoves — recovers from a
+0.3–0.5 m/s shove for several seconds but does not regain the full horizon, and a
+0.7 m/s shove topples it within ~3 s. The obvious next move is to *train* for it
+(`train_rl.py --push-interval --push-speed` adds mid-episode shoves with the same
+robust, worst-of-perturbations save). That experiment is an **honest negative
+result**: a push-trained policy did *not* out-recover the nominal one (comparable
+shove tolerance) and it *regressed* on locomotion — it learned to drift backward
+and balance in place rather than walk forward. A fixed CPG rhythm plus a small
+position-target residual is too thin a substrate for genuine push recovery; that
+needs reactive footstep retiming, more control authority, or a learned
+feedforward — the gait-class ceiling again, one level up. The benchmark and the
+`--push-*` training hooks are kept so the next substrate can be measured against
+them.
+
 ## Running it
 
 `gait_lab` needs `mujoco` and the menagerie G1 model — neither is part of the
