@@ -18,6 +18,8 @@ install(
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_lerobot_export test/test_lerobot_export.py)
+  # Skips itself if HuggingFace 'datasets'/'pyarrow' are unavailable.
+  ament_add_pytest_test(test_lerobot_hf_compat test/test_lerobot_hf_compat.py)
 endif()
 
 ament_package()

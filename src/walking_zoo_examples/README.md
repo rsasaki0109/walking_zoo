@@ -86,6 +86,41 @@ Each trace becomes one episode. Tasks are de-duplicated into a shared task
 table, the global frame `index` is continuous across episodes, episodes are
 sharded into `chunk-XYZ` directories, and `stats.json` covers every frame.
 
+### Capture multiple episodes from live runs
+
+To build a multi-episode dataset straight from live runtime runs (instead of
+hand-collecting trace files), use the capture tool. It brings up the mock
+runtime, drives a distinct semantic-action episode for each requested episode
+(recording each with the live `walking_zoo_demo_recorder`), and exports them all
+into one LeRobot dataset:
+
+```bash
+python3 tools/capture_lerobot_episodes.py \
+  --episodes 3 --out /tmp/walking_zoo_lerobot_live --episode-duration 3.0
+```
+
+The traces come from real ROS topics flowing through the cmd_vel bridge,
+runtime, safety pipeline, and adapter — not synthetic data.
+
+### HuggingFace `load_dataset` compatibility
+
+The export is consumable by HuggingFace `datasets` (the common LeRobot entry
+point that does not need the full `lerobot` package):
+
+```python
+from datasets import load_dataset
+ds = load_dataset(
+    "parquet",
+    data_files="/tmp/walking_zoo_lerobot_live/data/chunk-000/episode_*.parquet",
+    split="train",
+)
+print(ds, ds[0]["observation.state"], ds[0]["action"])
+```
+
+`tools/check_lerobot_hf_load.py` (and a skip-if-unavailable
+`walking_zoo_examples` pytest) prove this round-trips: row count, columns, and
+feature widths match `meta/info.json`, and the `meta/*.jsonl` tables load too.
+
 Frame mapping:
 
 | LeRobot feature | Source | Vector |
@@ -95,4 +130,5 @@ Frame mapping:
 | `task` | most frequent `/walking_zoo/semantic_action`, else teleop | string |
 
 The trace → dataset logic is pure Python and covered by
-`walking_zoo_examples` pytest plus `tools/check_lerobot_export.py`.
+`walking_zoo_examples` pytest plus `tools/check_lerobot_export.py`,
+`tools/check_lerobot_hf_load.py`, and the live `tools/capture_lerobot_episodes.py`.

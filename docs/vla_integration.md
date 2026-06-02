@@ -18,5 +18,10 @@ Example semantic actions:
 - `follow_person`
 - `stop`
 
-Future dataset work can export runtime logs and rosbag2 data toward formats
-used by robot learning stacks such as LeRobot.
+Runtime runs export to LeRobot datasets for robot-learning stacks. A live
+capture tool (`tools/capture_lerobot_episodes.py`) drives the runtime through
+several distinct semantic-action episodes, records each through the real ROS
+pipeline, and aggregates them into one multi-episode LeRobot v2.1 dataset. The
+export is confirmed loadable by HuggingFace `datasets.load_dataset` (the common
+LeRobot entry point that does not require the full `lerobot` package), covered by
+`tools/check_lerobot_hf_load.py` and a skip-if-unavailable pytest.

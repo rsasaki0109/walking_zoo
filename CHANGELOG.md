@@ -45,6 +45,20 @@
 - Wired the BehaviorTree.CPP recovery tree into a live `walking_zoo_bt_recovery_node`: added a ROS-integrated `ClearWalkingFaultService` BT action that actually calls `/walking_zoo/clear_fault`, a recovery node that subscribes to `/walking_zoo/state`, ticks the tree, and drives recovery (spinning on a background executor so the service call does not deadlock the tick loop), and a launch file. Fixed the matching runtime/adapter semantics so recovery is real: the mock adapter's `clear_fault` now re-enables the driver (clears the estop latch) and the runtime enforces the operator-estop interlock (a fault may not be cleared while the runtime estop is still engaged). Covered by gtest and an end-to-end check that proves the runtime stays faulted on its own and only the BT clears it (`tools/check_bt_recovery_e2e.py`).
 - Gave the Unitree SDK2 (G1) adapter a real vendor-SDK link path. Introduced a `UnitreeLocoBackend` dispatch boundary so all hardware calls live behind one interface: a `SilLocoBackend` (always built, records what would be sent, unit-tested and verified wired through the adapter) and an `Sdk2LocoBackend` (`src/sdk2_loco_backend.cpp`, compiled only with `-DWALKING_ZOO_WITH_UNITREE_SDK2=ON`) that drives the G1 `LocoClient` (`Move`/`BalanceStand`/`Damp` over the DDS channel). Wired the CMake option to a real `find_package(unitree_sdk2 REQUIRED)` + link that fails loudly when the SDK is absent (so an ON build never silently degrades), removed the in-source `#ifdef`s from the adapter, and documented the `unitree_sdk2_DIR`/`CMAKE_PREFIX_PATH` setup.
 - Extended the LeRobot exporter to collect multiple runtime traces into one multi-episode dataset: added `write_episodes_dataset` (one episode per trace) that de-duplicates tasks into a shared task table, keeps the global frame `index` continuous across episodes, shards episodes into `chunk-XYZ` directories, and computes `stats.json` over every frame; `write_dataset` is now a single-episode wrapper and the CLI accepts several trace paths. Covered by added pytest cases and a multi-episode round-trip in `tools/check_lerobot_export.py`.
+- Captured multi-episode LeRobot datasets from live runtime runs and confirmed
+  HuggingFace `datasets.load_dataset` compatibility. Added
+  `tools/capture_lerobot_episodes.py`, which brings up the mock runtime and
+  drives several distinct semantic-action episodes (walk_forward / turn_left /
+  sidestep_left / ...), recording each through the live `walking_zoo_demo_recorder`
+  over real ROS topics (cmd_vel bridge → runtime → safety pipeline → adapter) and
+  aggregating them into one LeRobot v2.1 dataset via the existing exporter. Added
+  `tools/check_lerobot_hf_load.py` and skip-if-unavailable `walking_zoo_examples`
+  pytest cases that prove the export round-trips through HuggingFace `datasets`:
+  the parquet episode files load via `load_dataset("parquet", ...)` with row
+  count, columns, and `observation.state`/`action` widths matching
+  `meta/info.json`, and the `meta/tasks.jsonl` / `meta/episodes.jsonl` tables load
+  via `load_dataset("json", ...)`. Verified end-to-end with three live episodes
+  (129 frames, three distinct task labels) loading cleanly through HuggingFace.
 - Embedded the walking_zoo recovery into a real Nav2 `bt_navigator` recovery
   branch. Added a Nav2-loadable BT plugin library `walking_zoo_nav2_bt_nodes`
   exporting `IsWalkingReady` (a topic condition that reads `/walking_zoo/state`

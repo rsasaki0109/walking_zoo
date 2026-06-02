@@ -485,8 +485,15 @@ deepening single features:
   guard).
 - Terrain-aware footstep planning fed from a real elevation/cost source instead
   of hand-authored boxes.
-- Capture multi-episode LeRobot datasets from live showcase runs and confirm
-  HuggingFace `load_dataset` compatibility.
+- [x] Capture multi-episode LeRobot datasets from live showcase runs and confirm
+  HuggingFace `load_dataset` compatibility. **Done:**
+  `tools/capture_lerobot_episodes.py` brings up the mock runtime and records
+  several distinct semantic-action episodes through the real ROS pipeline
+  (cmd_vel bridge → runtime → safety → adapter → recorder), aggregating them into
+  one LeRobot v2.1 dataset. `tools/check_lerobot_hf_load.py` and a
+  skip-if-unavailable `walking_zoo_examples` pytest confirm the parquet episodes
+  and `meta/*.jsonl` tables load via HuggingFace `datasets.load_dataset` with row
+  counts, columns, and feature widths matching `meta/info.json`.
 
 ## Definition Of Done For The Next Push
 
