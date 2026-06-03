@@ -18,7 +18,7 @@ import os
 
 import numpy as np
 
-from render_zoo_gif import GLOSS, _font, _label_tile
+from render_zoo_gif import GLOSS, _font, _label_tile  # GLOSS now includes dcm-walk
 
 
 def _title_band(width, height, fonts_big):
@@ -30,7 +30,7 @@ def _title_band(width, height, fonts_big):
     d.text((22, 14), "walking_zoo", font=f_brand, fill=(124, 196, 255))
     d.text((24, 58), "honest physics benchmarks for walking robots — bad gaits "
                      "actually fall over", font=f_tag, fill=(232, 233, 238))
-    d.text((24, 84), "8 controllers · one MuJoCo Unitree G1 · live fall detection",
+    d.text((24, 84), "9 controllers · one MuJoCo Unitree G1 · live fall detection",
            font=f_sub, fill=(150, 154, 165))
     return np.asarray(band)
 
@@ -40,9 +40,9 @@ def main() -> int:
     ap.add_argument("--menagerie", default=None)
     ap.add_argument("--out", default="assets/social_preview.png")
     ap.add_argument("--at", type=float, default=2.6, help="time (s) of the frame to use")
-    ap.add_argument("--cols", type=int, default=4)
+    ap.add_argument("--cols", type=int, default=3)     # 9 controllers -> clean 3x3
     ap.add_argument("--tile-w", type=int, default=320)
-    ap.add_argument("--tile-h", type=int, default=236)
+    ap.add_argument("--tile-h", type=int, default=130)  # 3 rows + title band -> ~640
     ap.add_argument("--camera-distance", type=float, default=2.2)
     args = ap.parse_args()
 

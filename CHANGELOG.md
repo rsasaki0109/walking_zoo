@@ -495,3 +495,20 @@
   `test_capture_step_widens_the_forward_push_frontier_but_not_the_backward`, and
   `test_contact_qp_push_frontier_collapses_to_a_must_step_certificate`; suite at 41
   gait_lab tests.
+- **Added a DCM (divergent-component-of-motion) step-adjustment walker — the
+  closed-loop model-based baseline the other steppers leave out (`DCMWalk`).**
+  `capture-point` reasons about the foothold only at each foot strike and `zmp-preview`
+  plans the CoM trajectory open-loop; `dcm-walk` does both — a nominal footstep plan
+  (so it bootstraps and marches straight) plus a DCM correction recomputed *every
+  control tick*, placing the next foot proportional to the CoM velocity error
+  `k·(v - v_nom)/omega`. It walks the second-farthest of all the steppers (0.81 m,
+  behind only the CEM-optimised `optimized-cp`) and very straight (drift 0.06 m). **The
+  honest result is a null one:** on this position-controlled G1 (no CoP authority within
+  a step) the closed loop buys no survival — every footstep walker topples from its own
+  dynamics in ~1-1.3 s, and the *open-loop* `zmp-preview` actually outlives it (2.42 s);
+  the full DCM law needs force authority to track a within-step CoP, which position
+  servos don't give. The lab's recurring ceiling, found from a new direction. Registered
+  in the zoo (9 controllers now, 3×3 hero grids regenerated); tested by
+  `test_dcm_step_adjustment_reacts_to_forward_velocity_error` and
+  `test_dcm_walk_walks_well_but_its_closed_loop_does_not_break_the_ceiling`; suite at 43
+  gait_lab tests.

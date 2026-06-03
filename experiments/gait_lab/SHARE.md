@@ -25,10 +25,11 @@ algorithm lives behind one small interface and is scored on the same robot with 
 same metrics. A bad gait topples; a good one stays up and walks. Same robot, same
 command, side by side, live.
 
-Eight controllers in the gallery so far — open-loop CPG, balanced CPG, capture-point
-footsteps, a CEM-optimized variant, ZMP-preview control, a learned linear feedback
-policy, and a PPO residual. Only the RL residual holds the full horizon; the rest
-topple at times you can watch flip red in the GIF.
+Nine controllers in the gallery so far — open-loop CPG, balanced CPG, capture-point
+footsteps, a CEM-optimized variant, a continuous DCM step-adjustment walker,
+ZMP-preview control, a learned linear feedback policy, and a PPO residual. Only the RL
+residual holds the full horizon; the rest topple at times you can watch flip red in
+the GIF.
 
 The part I didn't expect, and the reason I think it's worth sharing: I built the
 textbook force-aware controller — a full contact-QP whole-body controller (task-space
@@ -44,7 +45,7 @@ stand — the model-based QP can. But apply the same audit to *walking* and the 
 does NOT flip: position tracking genuinely beats torque there. Standing balance was a
 crutch; walking authority was real.
 
-It's a research playground next to a ROS2 walking runtime, not a product. ~38 tests,
+It's a research playground next to a ROS2 walking runtime, not a product. ~43 tests,
 every controller reproducible, the GIFs regenerate from one script. Happy to take
 holes in the methodology — finding them is the point.
 
@@ -59,7 +60,7 @@ controllers — the textbook whole-body controller loses, and you can watch why
 
 [gait_zoo.gif]
 
-Eight walking controllers, one MuJoCo Unitree G1, same command, scored through real
+Nine walking controllers, one MuJoCo Unitree G1, same command, scored through real
 physics so a bad gait actually falls. The status chip flips red the instant a gait
 topples. Only the PPO residual holds the full horizon; the kinematic footstep walkers
 walk then fall.
@@ -91,7 +92,7 @@ Tear the methodology apart — that's what it's for.
 ## X / short thread
 
 1/ I built a physics testbed where bad humanoid walking gaits actually fall over.
-8 controllers, one MuJoCo G1, same command, live fall detection. Only the RL residual
+9 controllers, one MuJoCo G1, same command, live fall detection. Only the RL residual
 walks the full horizon 👇 [gait_zoo.gif]
 
 2/ The fun part is the negatives. I built the textbook contact-QP whole-body
@@ -110,7 +111,7 @@ benchmarks, negatives included: https://github.com/rsasaki0109/walking_zoo
 
 ## Talking points (keep them accurate)
 
-- 8 controllers in the live gallery; only `rl-residual` holds the full 5 s horizon.
+- 9 controllers in the live gallery; only `rl-residual` holds the full 5 s horizon.
 - Contact-QP WBC (TSID) holds a quiet stand, loses under a shove by going infeasible
   (= "must step"). Not a bug — a certificate.
 - Friction-only QP planned ankle torque ~383% of limit (56 steps); the complete TSID
@@ -120,3 +121,11 @@ benchmarks, negatives included: https://github.com/rsasaki0109/walking_zoo
 - Walking audit: position-IK walk loses ~⅓ to the idealization (~2.15→~1.45 s) but
   still beats the QP walk (~0.6 s). Walking verdict does NOT flip.
 - The recovering move is the capture step, taken exactly when the QP says you must.
+- Push-robustness frontier (`push_frontier.py`): binary-search the max shove (m/s)
+  survived per direction. The capture step's polygon encloses the stiff stand by
+  +55% area but ties it at the backward worst case (~0.2 m/s); the contact-QP's
+  collapses to a point (certifies must-step under any shove).
+- `dcm-walk` (continuous DCM step adjustment) walks 2nd-farthest of the steppers
+  (0.81 m) but its closed loop buys no survival on position control — the open-loop
+  zmp-preview outlives it. The DCM's robustness edge needs force authority; an honest
+  null result that points at the same ceiling.

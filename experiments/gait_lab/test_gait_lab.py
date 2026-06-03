@@ -20,6 +20,7 @@ from gait_lab import (  # noqa: E402
     SteerableCPG,
     CapturePointWalk,
     OptimizedCapturePoint,
+    DCMWalk,
     ZMPPreviewWalk,
     LearnedFeedbackWalk,
     RLSteerableWalk,
@@ -106,6 +107,58 @@ def test_optimized_gait_beats_hand_tuned(model):
     # Same algorithm/interface, parameters from CEM optimisation instead of by
     # hand: it should walk markedly farther (it roughly doubled the distance).
     assert opt.forward_distance > hand.forward_distance * 1.3
+
+
+def test_dcm_step_adjustment_reacts_to_forward_velocity_error(model):
+    # The reactive heart of the DCM walker, tested directly (no rollout): the next
+    # foothold is the nominal plan plus k*(v_com - v_nominal)/omega, the divergent-
+    # mode step adjustment. At nominal velocity the correction vanishes (the foot
+    # lands on the nominal plan); a forward velocity *error* moves the foothold
+    # further forward to catch the faster CoM. That single law is what reacts to a
+    # shove during a rollout.
+    import numpy as np
+
+    from gait_lab import DCMWalk, Observation
+
+    model.reset()             # known physics state (the shared fixture may be stale)
+    dcm = DCMWalk()
+    dcm.reset(model)
+    nominal_v = dcm.step_length / dcm.step_duration
+    common = dict(t=0.2, base_height=0.7, base_pos_xy=np.zeros(2),
+                  base_lin_vel=np.zeros(3), torso_rpy=np.zeros(3),
+                  torso_ang_vel=np.zeros(3), com_xy=np.zeros(2), com_z=0.70)
+    on_plan = Observation(com_vel_xy=np.array([nominal_v, 0.0]), **common)
+    too_fast = Observation(com_vel_xy=np.array([nominal_v + 0.4, 0.0]), **common)
+    u_on = dcm._plan_foothold(on_plan, t_remaining=0.2)
+    u_fast = dcm._plan_foothold(too_fast, t_remaining=0.2)
+    # nominal velocity -> zero correction -> foot lands on the nominal plan.
+    assert u_on[0] == pytest.approx(dcm.base0[0] + dcm.step_length, abs=1e-6)
+    # a forward velocity error steps the foot meaningfully further forward.
+    assert u_fast[0] > u_on[0] + 0.10
+
+
+def test_dcm_walk_walks_well_but_its_closed_loop_does_not_break_the_ceiling(model):
+    # DCMWalk is a legitimate new model-based baseline: a nominal footstep plan plus
+    # a continuous DCM step adjustment. It walks farther and straighter than the
+    # hand-tuned capture-point. But the honest result -- and the lab's recurring one
+    # -- is that on this *position-controlled* G1 (no CoP authority within a step)
+    # the closed loop buys no survival: every footstep walker topples from its own
+    # dynamics in ~1-1.3 s, and the *open-loop* zmp-preview actually outlives it. The
+    # DCM's theoretical robustness needs force-aware control to materialise.
+    pytest.importorskip("scipy")          # ZMPPreviewWalk's Riccati solve
+    dcm = rollout(model, DCMWalk(), horizon=6.0)
+    cp = rollout(model, CapturePointWalk(), horizon=6.0)
+    zmp = rollout(model, ZMPPreviewWalk(), horizon=6.0)
+    assert "dcm-walk" in [c.name for c in CONTROLLERS()]   # registered in the zoo
+    assert dcm.forward_distance > 0.4
+    assert dcm.forward_distance > cp.forward_distance       # beats hand-tuned capture-point
+    assert dcm.lateral_drift < 0.25                         # and walks roughly straight
+    # the honest negative: the closed loop does not out-survive the open-loop preview.
+    assert dcm.survival_time < zmp.survival_time
+    # deterministic (a baked baseline, not a chaotic fluke).
+    again = rollout(model, DCMWalk(), horizon=6.0)
+    assert dcm.forward_distance == pytest.approx(again.forward_distance)
+    assert dcm.survival_time == pytest.approx(again.survival_time)
 
 
 def test_zmp_preview_control_tracks_and_leads():

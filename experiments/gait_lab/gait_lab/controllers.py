@@ -371,6 +371,122 @@ class OptimizedCapturePoint(CapturePointWalk):
         super().__init__(OPTIMIZED_CAPTURE_POINT_PARAMS)
 
 
+class DCMWalk(GaitController):
+    """Continuous **DCM** (divergent-component-of-motion) step adjustment — the
+    modern textbook reactive walker (Englsberger et al. 2015; Khadiv et al. 2016),
+    and the closed-loop model-based baseline the other two leave out.
+
+    ``capture-point`` reasons about the foothold only *at each foot strike*;
+    ``zmp-preview`` plans the whole CoM trajectory *open-loop* and never feeds the
+    measured state back. This fills the gap between them: a nominal forward footstep
+    plan (so it bootstraps and marches straight, like the preview) **plus** a DCM
+    correction recomputed **every control tick** (so it reacts to disturbance, like
+    the capture step). The next foothold is
+
+        u = u_nominal + k_dcm * (v_com - v_nominal) / omega   (lateral term clamped)
+
+    where ``u_nominal`` marches forward at the nominal stance width and the second
+    term is the DCM's *divergent* component — a foot placement proportional to the
+    velocity error, the unstable mode you must step on. A shove changes ``v_com``,
+    which immediately moves the foothold to catch it, with no separate recovery mode.
+
+    Honest note on what's realizable here. The full DCM law places the foot at the
+    DCM *propagated to the end of the step*, ``xi_eos = p + (xi - p) e^{omega T}``,
+    and relies on the CoP tracking a reference DCM *within* the step to stay on its
+    periodic orbit. On this position-controlled G1 there is no CoP authority — the
+    only handle is where the feet go — so that full propagation diverges from a cold
+    stand (``e^{omega T} ~ 5``) and cannot bootstrap. The velocity-error form above is
+    the realizable projection: the same divergent-mode foot placement, anchored to a
+    nominal plan instead of an un-trackable propagated reference. Whether that closed
+    loop actually buys distance or push-robustness over the open-loop preview on this
+    robot is exactly what the benchmark and the push frontier measure — and the
+    honest answer is "comparable to walk, with its edge (if any) under disturbance".
+    """
+
+    name = "dcm-walk"
+    step_duration = 0.45
+    step_length = 0.10        # forward advance per step (m)
+    com_height = 0.70
+    nominal_half_width = 0.119  # half stance width (m)
+    step_lift = 0.05
+    dcm_gain = 1.3            # foot-placement gain on the DCM velocity error
+    lateral_clamp = 0.10     # cap on the lateral DCM correction (m)
+    max_reach = 0.50         # foothold clamp from the stance foot (m)
+    ankle_pitch_kp = 0.20
+    ankle_roll_kp = 0.30
+    ankle_kd = 0.05
+
+    def reset(self, model: G1Model) -> None:
+        super().reset(model)
+        self.ground = float(model.foot_pos("left")[2])
+        self.planted = {f: model.foot_pos(f).copy() for f in ("left", "right")}
+        self.stance = "right"
+        self.swing = "left"
+        self.t_step_start = 0.0
+        self.swing_from = self.planted["left"].copy()
+        self.base0 = model.data.qpos[0:2].copy()
+        self.step_idx = 0
+        self.plant_target = self.planted["left"].copy()
+
+    def _omega(self, obs: Observation) -> float:
+        return float(np.sqrt(_GRAVITY / max(obs.com_z, 0.3)))
+
+    def _plan_foothold(self, obs: Observation, t_remaining: float) -> np.ndarray:
+        """DCM step-adjustment: nominal forward plan + clamped velocity-error term."""
+        omega = self._omega(obs)
+        p = self.planted[self.stance][:2]                      # current CoP ~ stance
+        nominal_y = self.nominal_half_width if self.swing == "left" \
+            else -self.nominal_half_width
+        u_nom = np.array([self.base0[0] + (self.step_idx + 1) * self.step_length,
+                          self.base0[1] + nominal_y])
+        v_nom = np.array([self.step_length / self.step_duration, 0.0])
+        # The DCM divergent component: place the foot ahead of where the velocity
+        # error is carrying the CoM. This is what reacts to a shove.
+        corr = self.dcm_gain * (obs.com_vel_xy - v_nom) / omega
+        corr[1] = float(np.clip(corr[1], -self.lateral_clamp, self.lateral_clamp))
+        u = u_nom + corr
+        # Clamp the foothold to a reachable radius from the stance foot.
+        v = u - p
+        r = float(np.linalg.norm(v))
+        if r > self.max_reach:
+            u = p + v / r * self.max_reach
+        return np.array([u[0], u[1], self.ground])
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        model = self.model
+        phase = (obs.t - self.t_step_start) / self.step_duration
+        if phase >= 1.0:
+            self.planted[self.swing] = model.foot_pos(self.swing).copy()
+            self.stance, self.swing = self.swing, self.stance
+            self.t_step_start = obs.t
+            phase = 0.0
+            self.swing_from = model.foot_pos(self.swing).copy()
+            self.step_idx += 1
+
+        ph = float(np.clip(phase, 0.0, 1.0))
+        t_remaining = (1.0 - ph) * self.step_duration
+        # Recompute the foothold from the live DCM *every tick* — the reactive heart.
+        self.plant_target = self._plan_foothold(obs, t_remaining)
+        swing_xy = (1.0 - ph) * self.swing_from[:2] + ph * self.plant_target[:2]
+        swing_z = self.ground + self.step_lift * np.sin(np.pi * ph)
+        swing_target = np.array([swing_xy[0], swing_xy[1], swing_z])
+
+        roll, pitch, _ = obs.torso_rpy
+        roll_rate, pitch_rate = obs.torso_ang_vel[0], obs.torso_ang_vel[1]
+        ankle_pitch_fix = self.ankle_pitch_kp * pitch + self.ankle_kd * pitch_rate
+        ankle_roll_fix = self.ankle_roll_kp * roll + self.ankle_kd * roll_rate
+
+        ctrl = self.stand.copy()
+        for foot, target in ((self.stance, self.planted[self.stance]),
+                             (self.swing, swing_target)):
+            angles = model.solve_leg_ik(foot, target)
+            for joint, value in zip(LEG_JOINTS[foot], angles):
+                ctrl[model.actuator(joint)] = value
+            ctrl[model.actuator(f"{foot}_ankle_pitch_joint")] += ankle_pitch_fix
+            ctrl[model.actuator(f"{foot}_ankle_roll_joint")] += ankle_roll_fix
+        return ctrl
+
+
 class ZMPPreviewWalk(GaitController):
     """The most principled model-based walker here: ZMP preview control + IK.
 
@@ -1013,6 +1129,7 @@ def CONTROLLERS() -> list[GaitController]:
         BalancedCPG(),
         CapturePointWalk(),
         OptimizedCapturePoint(),
+        DCMWalk(),
         ZMPPreviewWalk(),
         LearnedFeedbackWalk(),
         RLResidualWalk(),

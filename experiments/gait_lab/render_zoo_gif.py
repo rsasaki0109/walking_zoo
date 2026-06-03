@@ -31,6 +31,7 @@ GLOSS = {
     "balanced-cpg": "weight-shift + attitude",
     "capture-point": "LIPM footstep + IK",
     "optimized-cp": "capture-point, CEM-tuned",
+    "dcm-walk": "DCM step adjustment",
     "zmp-preview": "ZMP preview control",
     "learned-feedback": "CPG + learned feedback",
     "rl-residual": "CPG + RL residual (PPO)",

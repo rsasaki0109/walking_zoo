@@ -13,10 +13,10 @@ the interface here is `GaitController` and the "runtime" is the physics harness.
 
 ![gait_lab animated gait zoo](assets/gait_zoo.gif)
 
-*Eight controllers, one command, the same MuJoCo G1 — live. The status chip flips
+*Nine controllers, one command, the same MuJoCo G1 — live. The status chip flips
 red the instant a gait falls: `open-loop-cpg` topples in ~1 s, the kinematic
-footstep walkers (`capture-point`, `optimized-cp`, `zmp-preview`) walk then fall,
-and only `rl-residual` (CPG + a PPO residual) holds the full horizon. That spread
+footstep walkers (`capture-point`, `optimized-cp`, `dcm-walk`, `zmp-preview`) walk
+then fall, and only `rl-residual` (CPG + a PPO residual) holds the full horizon. That spread
 — who stays up, who walks farthest, who only looks alive — is the honest benchmark
 this lab exists to produce. Regenerate with `MUJOCO_GL=egl python3 render_zoo_gif.py`
 (add `--push 0.6` for the push-recovery cut).*
@@ -97,8 +97,8 @@ at 6 s). Regenerate with `MUJOCO_GL=egl python3 render_montage.py --horizon 6`.*
 
 ## What's included
 
-Eight algorithms spanning six classes (CPG, reactive model-based, optimised,
-preview model-based, learned-linear, **reinforcement-learned**):
+Nine algorithms spanning seven classes (CPG, reactive model-based, optimised,
+DCM closed-loop, preview model-based, learned-linear, **reinforcement-learned**):
 
 | algorithm          | idea                                                          |
 |--------------------|---------------------------------------------------------------|
@@ -107,6 +107,7 @@ preview model-based, learned-linear, **reinforcement-learned**):
 | `balanced-cpg`     | stepping + lateral weight-shift + torso-attitude feedback     |
 | `capture-point`    | LIPM capture-point footstep placement + leg **inverse kinematics** |
 | `optimized-cp`     | the capture-point gait with parameters found by **optimisation** (CEM), not by hand |
+| `dcm-walk`         | **DCM step adjustment** — nominal footstep plan + a continuous closed-loop divergent-component foot-placement correction |
 | `zmp-preview`      | **ZMP preview control** (Kajita) plans a CoM trajectory tracked via IK |
 | `learned-feedback` | CPG feedforward + a **learned** linear feedback policy (CEM-trained) |
 | `rl-residual`      | CPG feedforward + a **reinforcement-learned** neural residual (PPO) — the only gait that walks the full horizon |
@@ -120,6 +121,7 @@ open-loop-cpg      fwd=+0.100m  speed=+0.130m/s  survive= 1.07s  drift=0.168m  m
 balanced-cpg       fwd=+0.269m  speed=+0.096m/s  survive= 3.09s  drift=0.267m  minH=0.50m  [FELL]
 capture-point      fwd=+0.614m  speed=+0.814m/s  survive= 1.05s  drift=0.038m  minH=0.50m  [FELL]
 optimized-cp       fwd=+1.250m  speed=+1.228m/s  survive= 1.32s  drift=0.128m  minH=0.50m  [FELL]
+dcm-walk           fwd=+0.814m  speed=+0.956m/s  survive= 1.15s  drift=0.061m  minH=0.50m  [FELL]
 zmp-preview        fwd=+0.658m  speed=+0.310m/s  survive= 2.42s  drift=0.194m  minH=0.50m  [FELL]
 learned-feedback   fwd=+0.740m  speed=+0.431m/s  survive= 2.02s  drift=0.100m  minH=0.50m  [FELL]
 rl-residual        fwd=+0.728m  speed=+0.095m/s  survive= 8.00s  drift=0.158m  minH=0.77m  [ok]
@@ -151,6 +153,23 @@ The story the numbers tell, and the reason a comparison testbed is worth having:
   it optimised the *distance* objective: it does not out-*stabilise*
   `balanced-cpg`, because that is not what it was rewarded for. Optimisation
   closes the gap on the axis you optimise.
+* **dcm-walk** is the modern textbook *closed-loop* walker the other two leave a
+  gap for. `capture-point` reasons about the foothold only at each foot strike;
+  `zmp-preview` plans the whole trajectory open-loop and never feeds the measured
+  state back. This does both: a nominal footstep plan (so it bootstraps and marches
+  straight) **plus** a **DCM** (divergent-component-of-motion) correction recomputed
+  *every control tick*, placing the next foot proportional to the CoM velocity error
+  `k·(v - v_nom)/omega` — the unstable mode you must step on. It walks the
+  **second-farthest** of all the steppers (0.81 m, behind only the CEM-optimised one)
+  and very straight (drift 0.06 m). **But the honest result is a null one:** on this
+  *position-controlled* G1 the closed loop buys **no** survival — it topples at 1.15 s
+  like every footstep walker, and the *open-loop* `zmp-preview` actually outlives it
+  (2.42 s). The full DCM law needs to track a reference Centre-of-Pressure *within*
+  each step, which needs **torque/force authority** the position servos don't give;
+  without it, the predictive propagation diverges from a cold stand and the realizable
+  law is just velocity-error step placement. The theory's robustness edge is real, but
+  it cashes out only with force-aware control — the lab's recurring ceiling, found
+  again from a new direction.
 * **zmp-preview** is the most *principled* model-based walker: it plans a whole
   CoM trajectory up front with **Kajita preview control** (a cart-table LIPM
   whose induced ZMP tracks — and leads — the footstep reference), then realises
