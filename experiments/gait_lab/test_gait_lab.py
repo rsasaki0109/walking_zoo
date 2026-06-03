@@ -607,6 +607,82 @@ def test_complete_tsid_is_torque_honest_but_the_wall_is_unchanged():
     assert np.isclose(m.model.actuator_gainprm[i, 0], 500.0)
 
 
+def test_motor_model_zoh_and_bandwidth_are_honest():
+    # Unit-level: the shared actuator pipeline does what it claims. No physics.
+    import numpy as np
+    from motor_model import MotorModel
+    lo, hi = np.full(2, -10.0), np.full(2, 10.0)
+
+    # zero-order hold: a 100 Hz control rate refreshes only every 0.01 s.
+    m = MotorModel(lo, hi, control_hz=100.0)
+    m.reset(2)
+    assert m.should_recompute(0.000)          # first call always due
+    assert not m.should_recompute(0.005)      # mid-period: held
+    assert m.should_recompute(0.010)          # next period: refresh
+    # control_hz=None refreshes every step.
+    mn = MotorModel(lo, hi)
+    mn.reset(2)
+    assert mn.should_recompute(0.0) and mn.should_recompute(0.002)
+
+    # first-order bandwidth lag: applied torque relaxes toward command, never jumps.
+    m = MotorModel(lo, hi, bw_hz=20.0)
+    m.reset(2)
+    a1 = m.step(np.array([5.0, 5.0]), 0.002)
+    assert np.all(a1 > 0) and np.all(a1 < 5.0)      # partial step, not instant
+    a2 = m.step(np.array([5.0, 5.0]), 0.002)
+    assert np.all(a2 > a1) and np.all(a2 < 5.0)      # keeps approaching
+    # the real torque clamp still binds at the limit.
+    mc = MotorModel(lo, hi)                           # ideal motor, clamp only
+    mc.reset(2)
+    assert np.allclose(mc.step(np.array([100.0, -100.0]), 0.002), [10.0, -10.0])
+
+
+def test_stiff_servos_standing_win_was_an_implicit_damping_idealisation():
+    # The lab's through-line ("a stiff position servo beats the force controllers")
+    # rested on an unpaid idealisation: MuJoCo integrates the position servo's
+    # velocity-damping term -kd q. IMPLICITLY (an unconditionally-stable inner loop
+    # at the full physics rate). Applied as honest explicit torque -- the bit-
+    # identical force a real finite-rate digital servo computes -- the SAME servo
+    # cannot even hold a quiet stand. Routing -kd q. back through implicit damping
+    # recovers most of it, localising the crutch to the velocity term.
+    pytest.importorskip("qpsolvers")
+    import numpy as np
+    from motor_model import localize_servo_idealisation
+
+    res = localize_servo_idealisation(G1Model(), horizon=2.0, fall_h=0.5,
+                                      push_speed=0.0)
+    t_imp, why_imp = res["implicit"]
+    t_exp, why_exp = res["explicit"]
+    t_dmp, _ = res["explicit+impl-damp"]
+    t_qp, why_qp = res["qp"]
+    # implicit position servo holds the quiet stand; the explicit one topples early.
+    assert why_imp == "held" and t_imp >= 2.0
+    assert why_exp == "toppled" and t_exp < 1.5
+    # the damping term is the crutch: re-implicit-ing it recovers a big chunk.
+    assert t_dmp > t_exp + 0.5
+    # the model-based QP, on the same honest explicit-torque footing, DOES hold the
+    # quiet stand the explicit servo cannot -- the standing-balance verdict flips.
+    assert why_qp == "held" and t_qp >= 2.0
+
+
+def test_under_a_real_shove_the_support_polygon_wall_is_unchanged():
+    # The other half of the verdict, unflipped: in the fair fight (both controllers
+    # explicit torque through the same motor) a real forward shove still topples
+    # both at ~0.6 s, and the QP certifies "must step" (infeasible) at the ideal
+    # motor. Removing the servo's idealisation buys standing balance, NOT push
+    # recovery -- the binding limit under a shove is the support polygon.
+    pytest.importorskip("qpsolvers")
+    from motor_model import run_motor_stand_push
+    m = G1Model()
+    t_servo, _ = run_motor_stand_push(m, "servo", 2.0, 0.5, 0.6)
+    t_qp, why_qp = run_motor_stand_push(m, "qp", 2.0, 0.5, 0.6)
+    assert t_servo < 1.0 and t_qp < 1.0           # neither balances the shove
+    assert why_qp in ("toppled", "infeasible")    # QP can certify the step
+    # actuators restored to position mode afterwards (no fixture leakage).
+    import numpy as np
+    assert np.isclose(m.model.actuator_gainprm[m.actuator("left_knee_joint"), 0], 500.0)
+
+
 def test_capture_step_recovers_a_forward_push(model):
     # Push recovery that works: a forward shove topples the static position stand,
     # but a capture STEP (step the foot to the capture point) catches it. The

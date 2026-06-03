@@ -439,3 +439,28 @@
   the torque budget. Tested by
   `test_complete_tsid_is_torque_honest_but_the_wall_is_unchanged`; suite at 34 gait_lab
   tests.
+- **Found and paid the last idealisation: the stiff servo's standing-balance win was a
+  MuJoCo implicit-damping artifact (`motor_model.py`).** The lab's through-line — "a
+  stiff 500-gain position servo beats the force controllers" — rested on the servo being
+  a MuJoCo *implicit* actuator: MuJoCo integrates its velocity-damping term `−kd q̇`
+  implicitly (its Euler step always does), an unconditionally-stable inner velocity loop
+  at the full 500 Hz that no finite-rate digital servo and no explicit-torque QP enjoys.
+  `motor_model.py` re-implements **both** controllers as explicit torque through one
+  shared `MotorModel` (control-rate ZOH + first-order bandwidth lag + the real
+  `jnt_actfrcrange` clamp); the servo torque `kp(q_des−q) − kd q̇` is bit-identical to
+  MuJoCo's position actuator (verified to 1e-13), so only the damping integration
+  changes. Result: the explicit servo **cannot hold even a quiet stand** (topples
+  ~1.3 s, unchanged from 200 Hz down to 50 Hz — not a control-rate effect), while
+  routing `−kd q̇` back through implicit joint damping recovers most of the hold
+  (~2.8 s); `localize_servo_idealisation` pins the crutch to the velocity term. The
+  model-based complete-TSID QP, on the identical explicit-torque footing, **does** hold
+  the quiet stand the servo cannot, and degrades gracefully with control rate (holds at
+  ≥200 Hz). So the standing-balance half of the verdict **flips**: a model-based torque
+  controller is the better stand-keeper on honest footing. The push-recovery half is
+  untouched — under a 0.6 m/s shove both still fail at ~0.6 s and the QP certifies *must
+  step*: removing the servo's free lunch buys standing balance, not push recovery, and
+  the shove wall is still the support polygon. Tested by
+  `test_motor_model_zoh_and_bandwidth_are_honest`,
+  `test_stiff_servos_standing_win_was_an_implicit_damping_idealisation`, and
+  `test_under_a_real_shove_the_support_polygon_wall_is_unchanged`; suite at 37 gait_lab
+  tests.

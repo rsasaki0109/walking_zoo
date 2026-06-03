@@ -348,6 +348,7 @@ humanoid can and cannot deliver them:
 | torque ankle / CoM-WBC / contact-WBC (`force_balance.py`) | n/a | loses to the stiff stand | standing favours stiffness; open-loop gravity comp drifts |
 | **contact-QP WBC (TSID)** (`wbc_qp.py`) | n/a | holds a quiet stand; loses under a shove | proper friction-cone GRF, but goes *infeasible* when the capture point exits the support polygon — certifying "you must step" |
 | **complete TSID (+ torque limits)** (`wbc_qp.py`) | n/a | same survival, now torque-honest | adds the G1's real joint torque limits; the friction-only QP was secretly planning ankle torque ~4× the limit — fixing that costs no survival, the wall is the support polygon not torque |
+| **explicit-torque fair fight** (`motor_model.py`) | n/a | servo can't hold a quiet stand; QP can | the stiff servo's stand-keeping was MuJoCo integrating its `−kd q̇` *implicitly* — on equal explicit-torque footing the servo topples ~1.3 s and the model-based QP holds; the shove wall is still the support polygon |
 
 Three honest conclusions fall out. (1) **Steering needs foot placement** — the CPG
 substrate structurally cannot do it; footsteps can. (2) **Kinematic footstep
@@ -438,6 +439,35 @@ plans torques it can actually deliver and can certify *torque*-infeasibility too
 100 % cap, steps-over-limit from 56 to 0) at **no cost to survival** — a quiet stand
 needs only ~45 % of the budget. Correctness improved; the verdict is unchanged, because
 the binding constraint under a shove is the support polygon, not the torque budget.
+
+One idealisation remained unpaid, and `motor_model.py` collects the bill. The whole
+map's through-line is "a stiff 500-gain position servo beats the force controllers,"
+but that servo is a MuJoCo *implicit* actuator: its force `kp(q_des−q) − kd q̇` is
+recomputed inside every physics substep, and MuJoCo integrates the velocity-damping
+term `−kd q̇` **implicitly** (its Euler step always does, for stability) — an
+unconditionally-stable inner velocity loop at the full 500 Hz that no finite-rate
+digital servo, and no explicit-torque QP, enjoys. So "the servo wins" might be a gift
+of the integrator. `motor_model.py` removes the asymmetry: it re-implements **both**
+controllers as *explicit torque* through one shared `MotorModel` (control-rate
+zero-order hold + first-order bandwidth lag + the real `jnt_actfrcrange` clamp). The
+servo's torque is `kp(q_des−q) − kd q̇` computed in Python — *bit-identical* to MuJoCo's
+position actuator (verified to 1e-13), so the only thing changed is that the damping is
+now applied explicitly, one step late, as real hardware must. The result is the most
+surprising in the lab: **the explicit servo cannot hold even a quiet stand** (topples
+~1.3 s, unchanged from 200 Hz down to 50 Hz control rate — it is *not* a control-rate
+effect), while the same servo with `−kd q̇` routed back through MuJoCo's implicit joint
+damping recovers most of the hold (~2.8 s) — `localize_servo_idealisation` pins the
+crutch precisely to the velocity term. And the model-based **complete-TSID QP, on the
+identical explicit-torque footing, *does* hold the quiet stand** the servo cannot, and
+degrades gracefully with control rate (holds at ≥200 Hz). So the standing-balance half
+of the verdict **flips** once the idealisation is paid for: the servo's stand-keeping
+win was substantially an integration artifact, and a model-based torque controller is
+the better stand-keeper on honest footing. But the *other* half is untouched — under a
+0.6 m/s shove **both** still fail at ~0.6 s and the QP certifies *must step*. Removing
+the servo's free lunch buys standing balance, not push recovery; the binding limit
+under a shove is, once again, the support polygon. That is the lab's longest-standing
+result surviving its most adversarial test — and the one place a free idealisation was
+quietly carrying the through-line, now found and paid.
 
 ## Running it
 
