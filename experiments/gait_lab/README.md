@@ -1,19 +1,15 @@
-# gait_lab — a physics testbed for walking gait algorithms
+# gait_lab — honest physics benchmarks for walking gait algorithms
 
-walking_zoo is the runtime/safety/adapter layer for walking robots — it is
-deliberately **not** a gait research stack. `gait_lab` sits *alongside* it as an
-experiment that answers a natural question: *"can I actually try different gait
-algorithms here?"*
+**Bad gaits actually fall over here.** `gait_lab` drives a real MuJoCo **Unitree G1**
+through physics (position actuators + `mj_step`, not kinematic playback), puts every
+walking controller behind one small interface, and scores them on the same robot with
+the same metrics. A bad gait topples; a good one stays up and walks — apples-to-apples,
+and the negatives are reported (the whole point: see the textbook whole-body controller
+*lose*, below).
 
-It drives a real MuJoCo **Unitree G1** through **physics** (position actuators +
-`mj_step`, not kinematic playback), so a gait algorithm's quality actually shows
-up: a bad gait falls over, a better one stays up and walks. Every algorithm
-lives behind one small interface and is scored on the same robot with the same
-metrics — an apples-to-apples comparison.
-
-This mirrors the walking_zoo thesis: a gait generator is just another command
-source behind a stable interface. Here that interface is `GaitController` and
-the "runtime" is the physics harness.
+It lives *alongside* the walking_zoo runtime (the runtime/safety/adapter layer for
+walking robots) as the research playground for the controllers that runtime dispatches:
+the interface here is `GaitController` and the "runtime" is the physics harness.
 
 ![gait_lab animated gait zoo](assets/gait_zoo.gif)
 
@@ -46,6 +42,33 @@ full horizon. The one move that survives a real push is stepping, taken when the
 says you must — the through-line of the whole lab in a single loop. Each tile is the
 unmodified, tested rollout with `model.step` wrapped to record frames. Regenerate with
 `MUJOCO_GL=egl python3 render_showdown.py`.*
+
+## Quickstart
+
+No GPU needed for the numbers; a GL backend (`MUJOCO_GL=egl`) is only for the GIFs.
+
+```bash
+pip install mujoco numpy scipy pillow imageio matplotlib
+git clone https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
+cd experiments/gait_lab
+
+python3 run_compare.py                      # the honest benchmark table (no GL)
+MUJOCO_GL=egl python3 render_zoo_gif.py     # regenerate the gait-zoo GIF above
+```
+
+`run_compare.py` rolls every controller out on the same robot and prints survival,
+forward distance and speed, then names the farthest walker, the most stable, and the
+only one that survives *and* walks:
+
+```
+algorithm           forward     speed       survival  status
+open-loop-cpg      fwd=+0.100m  speed=+0.130m/s  survive= 1.07s  [FELL]
+optimized-cp       fwd=+1.250m  speed=+1.228m/s  survive= 1.32s  [FELL]
+rl-residual        fwd=+0.168m  speed=+0.036m/s  survive= 5.00s  [ok]
+...
+farthest walker: optimized-cp (+1.250 m, survived 1.32s)
+survives & walks: rl-residual (+0.168 m over the full 5.00s)
+```
 
 ![gait_lab comparison montage](assets/gait_comparison.png)
 
