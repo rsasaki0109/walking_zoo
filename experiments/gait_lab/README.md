@@ -15,6 +15,16 @@ This mirrors the walking_zoo thesis: a gait generator is just another command
 source behind a stable interface. Here that interface is `GaitController` and
 the "runtime" is the physics harness.
 
+![gait_lab animated gait zoo](assets/gait_zoo.gif)
+
+*Eight controllers, one command, the same MuJoCo G1 — live. The status chip flips
+red the instant a gait falls: `open-loop-cpg` topples in ~1 s, the kinematic
+footstep walkers (`capture-point`, `optimized-cp`, `zmp-preview`) walk then fall,
+and only `rl-residual` (CPG + a PPO residual) holds the full horizon. That spread
+— who stays up, who walks farthest, who only looks alive — is the honest benchmark
+this lab exists to produce. Regenerate with `MUJOCO_GL=egl python3 render_zoo_gif.py`
+(add `--push 0.6` for the push-recovery cut).*
+
 ![gait_lab comparison montage](assets/gait_comparison.png)
 
 *Same robot, same 6 s, one row per algorithm (time runs left→right). Top to
