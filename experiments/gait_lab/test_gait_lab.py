@@ -896,3 +896,62 @@ def test_contact_qp_push_frontier_collapses_to_a_must_step_certificate():
     qp = FRONTIER_CONTROLLERS["contact-qp"][0]
     r = max_survivable(qp, model, 0.0, 2.5, 0.5, hi=1.0, tol=0.05)
     assert r <= 0.1
+
+
+# --- adaptive step duration on restricted footholds (adaptive_step.py) ------------
+# A from-paper port of "Adaptive Step Duration for Accurate Foot Placement"
+# (arXiv:2403.17136, 2024), which ships no public code.
+
+def test_adaptive_step_planner_recovers_a_clean_nominal_gait():
+    # Sanity for the discrete DCM step-to-step planner: started on its periodic orbit
+    # with no foothold constraints, it should reproduce a clean nominal gait --
+    # durations near nominal, footsteps marching forward by ~step_length, stance side
+    # alternating. (If this drifts, the bilinear solve or the DCM map is wrong.)
+    pytest.importorskip("scipy")
+    import numpy as np
+
+    from adaptive_step import GaitParams, _limit_cycle_dcm, plan_steps
+
+    par = GaitParams()
+    p0 = np.array([0.0, -par.half_width])
+    xi0 = _limit_cycle_dcm(par, p0[1], 1.0)
+    plan = plan_steps(xi0, p0, par=par, n_steps=4, swing_side=1.0)
+    assert plan.ok
+    assert np.all(plan.T > 0.35) and np.all(plan.T < 0.65)         # near nominal 0.45
+    assert np.all(np.diff(plan.u[:, 0]) > 0.08)                    # marches forward
+    assert 0.30 < plan.u[-1, 0] - plan.u[0, 0] < 0.45             # ~3 * step_length
+    assert plan.u[0, 1] > 0 > plan.u[1, 1] and plan.u[2, 1] > 0 > plan.u[3, 1]  # alternates
+
+
+def test_adaptive_step_timing_keeps_dcm_viable_where_fixed_cadence_diverges():
+    # The paper's core claim, quantified. On *irregular* stepping stones (long/short
+    # forward gaps), both adaptive and fixed timing can hit the footholds -- but a
+    # fixed cadence forced over uneven gaps lets the DCM run away (it would topple),
+    # while adapting the step *duration* keeps the DCM viable. The viability error must
+    # be dramatically lower for adaptive timing.
+    pytest.importorskip("scipy")
+    from adaptive_step import GaitParams, compare_timing_on_stones
+
+    _, _, _, s = compare_timing_on_stones(GaitParams(), n=5)
+    assert s["adaptive_viab_mean"] < 1.5            # adaptive stays viable
+    assert s["fixed_viab_mean"] > 5.0               # fixed cadence diverges
+    assert s["fixed_viab_mean"] > 8.0 * s["adaptive_viab_mean"]   # a large, clear gap
+    # the adaptive plan genuinely varies the step duration (it is not secretly fixed).
+    import numpy as np
+    assert np.ptp(s["adaptive_T"]) > 0.1
+
+
+def test_adaptive_walk_realises_the_plan_but_hits_the_position_control_ceiling(model):
+    # The closed-loop realisation on the G1, reported honestly. Seeded on its periodic
+    # orbit it walks forward via the planned footsteps -- but, like every position-
+    # controlled footstep walker in this lab, it topples from its own dynamics in ~1 s
+    # (no within-step CoP authority). The planner's viability advantage is real; it
+    # cannot be cashed without force control. Deterministic baseline, not a fluke.
+    pytest.importorskip("scipy")
+    from adaptive_step import run_adaptive_walk
+
+    a = run_adaptive_walk(model, horizon=6.0)
+    assert a["forward"] > 0.2          # it does walk forward off the mark...
+    assert a["fell"] and a["survival"] < 2.0    # ...but topples at the ceiling
+    b = run_adaptive_walk(model, horizon=6.0)
+    assert a["survival"] == pytest.approx(b["survival"])   # deterministic

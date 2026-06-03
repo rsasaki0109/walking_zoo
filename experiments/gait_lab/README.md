@@ -382,6 +382,44 @@ python3 force_balance.py                            # why in-place force does no
 python3 push_frontier.py && python3 render_frontier.py   # the robustness frontier
 ```
 
+## Adaptive step *duration*: a 2024 method with no public code
+
+Footstep walkers choose *where* to step. A more recent idea is to also choose
+*when* — adapting the **step duration**, not just the location. That extra degree of
+freedom is what lets a biped cross **restricted footholds** (stepping stones at
+irregular gaps) while staying balanced: a far stone needs a longer step so the
+Divergent Component of Motion (DCM) can reach it, a near stone a shorter one. This is
+a faithful, dependency-light port of *"Adaptive Step Duration for Accurate Foot
+Placement: Achieving Robust Bipedal Locomotion on Terrains with Restricted Footholds"*
+([arXiv:2403.17136](https://arxiv.org/abs/2403.17136), 2024) — which ships **no public
+implementation** (it uses the commercial FORCES PRO solver). `adaptive_step.py`
+reimplements the discrete step-to-step DCM map ``xi_k = p_{k-1} + (xi_{k-1} -
+p_{k-1}) e^{lam T_k}`` and the receding-horizon program over ``{u_k, T_k}`` with SciPy
+SLSQP (the bilinear ``e^{lam T}`` coupling is a small nonlinear program, not the
+paper's commercial QP).
+
+![gait_lab adaptive step duration on restricted footholds](assets/adaptive_step_stones.png)
+
+*The core claim, reproduced. The **same** irregular stepping stones, planned two ways.
+Both *hit* every stone. But a **fixed cadence** (bottom), forced to keep a nominal step
+time over uneven gaps, lets the DCM run off the strip — a **44× larger** viability error
+(11.6 vs 0.26), i.e. it would topple. **Adapting the step duration** (top, the paper:
+0.51 s for a long gap, 0.25 s for a short one) keeps the DCM tucked beside each foothold
+and the gait viable. Regenerate with `python3 render_stepping_stones.py`; the numbers
+come from `python3 adaptive_step.py`.*
+
+And the honest coda, consistent with the DCM walker above: realising this closed-loop
+on the *position-controlled* G1 (`run_adaptive_walk`) walks off the mark but topples at
+**~1 s**, the same ceiling every footstep walker here hits — the planner's viability
+advantage is real but cannot be cashed without within-step CoP (force) authority. The
+contribution that stands on this substrate is the **planner** and its measured result,
+not yet a robot that walks the stones to the end.
+
+```bash
+python3 adaptive_step.py                       # adaptive vs fixed timing on stones
+python3 render_stepping_stones.py              # the figure above
+```
+
 ## Steering (a substrate ladder, and where position control runs out)
 
 The `rl-residual` gait breaks the *survival* ceiling, but it only ever walks one

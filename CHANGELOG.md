@@ -512,3 +512,21 @@
   `test_dcm_step_adjustment_reacts_to_forward_velocity_error` and
   `test_dcm_walk_walks_well_but_its_closed_loop_does_not_break_the_ceiling`; suite at 43
   gait_lab tests.
+- **Implemented a 2024 method that ships no public code — adaptive step *duration* on
+  restricted footholds (`adaptive_step.py`, `render_stepping_stones.py`).** A faithful,
+  dependency-light port of "Adaptive Step Duration for Accurate Foot Placement"
+  (arXiv:2403.17136), which uses the commercial FORCES PRO solver and releases no
+  implementation. It reimplements the discrete step-to-step DCM map and the
+  receding-horizon program over footstep location *and* step timing with SciPy SLSQP
+  (the bilinear `e^{lam T}` coupling is a small NLP). The headline result, quantified:
+  on irregular stepping stones a fixed cadence can hit the footholds but lets the DCM
+  diverge (viability error mean 11.6, max 47 — it would topple), while **adapting the
+  step duration keeps the DCM viable (mean 0.26, a 44× smaller error)** and still hits
+  every stone — choosing 0.51 s for a long gap, 0.25 s for a short one. Honest coda:
+  the closed-loop realisation on the position-controlled G1 (`run_adaptive_walk`) walks
+  off the mark but topples at ~1 s like every footstep walker here — the planner's
+  viability edge needs within-step CoP authority to cash, the lab's recurring ceiling.
+  Tested by `test_adaptive_step_planner_recovers_a_clean_nominal_gait`,
+  `test_adaptive_step_timing_keeps_dcm_viable_where_fixed_cadence_diverges`, and
+  `test_adaptive_walk_realises_the_plan_but_hits_the_position_control_ceiling`; suite at
+  46 gait_lab tests.
