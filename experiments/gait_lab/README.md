@@ -57,6 +57,24 @@ widens the frontier where it can reach, and honestly does not where it can't. Th
 "must step" under *any* shove, so its in-place frontier has zero width. Regenerate the
 numbers with `python3 push_frontier.py` and the plot with `python3 render_frontier.py`.*
 
+![gait_lab push recovery — delaying vs recovering](assets/survival_curve.png)
+
+*The polygon scores survival as a **binary** — did you reach the full horizon? — so it
+collapses two very different failures onto the same `r=0`. This un-flattens it: the raw
+**time-to-fall vs shove magnitude** in one direction (`push_frontier.py --curve`), with
+the horizon drawn as a *recovery ceiling*. It separates **recovering** from merely
+**delaying** a fall, and gives the force+step synthesis its honest place. The
+**capture step** (green) rides the ceiling the farthest (recovers a forward shove up to
+**0.35 m/s**); the **stiff stand** (red) to 0.25. The two force-aware controllers never
+reach the ceiling for *any* nonzero shove: the bare **contact-QP** (amber) goes
+infeasible at once (~0.55 s plateau — "must step"), and feeding that certificate to a
+capture step — **`qp-capture-step`** (blue), the synthesis the polygon hid at `r=0` —
+roughly **doubles** the time (~1.2 s plateau). That is real, measurable value the binary
+frontier scored as a flat zero: force authority **delays** the fall, but the late step
+from a drifted compliant-balance state still cannot **recover** the horizon. Only an
+immediate step does. Regenerate with `python3 push_frontier.py --curve && python3
+render_survival_curve.py`.*
+
 ## Quickstart
 
 No GPU needed for the numbers; a GL backend (`MUJOCO_GL=egl`) is only for the GIFs.

@@ -530,3 +530,20 @@
   `test_adaptive_step_timing_keeps_dcm_viable_where_fixed_cadence_diverges`, and
   `test_adaptive_walk_realises_the_plan_but_hits_the_position_control_ceiling`; suite at
   46 gait_lab tests.
+- **Added a survival-time curve that un-flattens the push-robustness frontier, and put
+  the force+step synthesis on it (`push_frontier.py --curve`, `render_survival_curve.py`,
+  the `qp-capture-step` frontier controller).** The robustness *polygon* scores survival
+  as a binary — did you reach the full horizon? — collapsing both the contact-QP WBC and
+  the QP-balance-then-capture-step synthesis (`wbc_qp.run_qp_capture_step`) onto the same
+  `r=0`. The curve sweeps raw time-to-fall vs shove magnitude with the horizon drawn as a
+  *recovery ceiling*, separating **recovering** from merely **delaying** a fall. The
+  measured forward result: the immediate **capture step** recovers a shove up to 0.35 m/s
+  (the stiff stand to 0.25); neither force-aware controller recovers *any* nonzero shove,
+  but feeding the QP's must-step certificate to a late capture step (`qp-capture-step`)
+  **roughly doubles** the bare QP's time-to-fall (~1.2 s plateau vs ~0.55 s) — real,
+  measurable value the binary polygon hid at `r=0`, and still short of recovery because
+  the late step starts from a drifted compliant-balance state. Force authority delays the
+  fall; only an immediate step reaches the ceiling. Tested by
+  `test_detail_time_parses_the_survival_time_from_every_adapter_format` and
+  `test_survival_curve_separates_recovering_from_merely_delaying`; suite at 48 gait_lab
+  tests.

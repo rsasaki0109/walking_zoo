@@ -898,6 +898,47 @@ def test_contact_qp_push_frontier_collapses_to_a_must_step_certificate():
     assert r <= 0.1
 
 
+def test_detail_time_parses_the_survival_time_from_every_adapter_format():
+    # The survival curve reads time-to-fall out of each adapter's detail string;
+    # the formats differ ("1.31s", "1.31s/held", "1.31s/stepped") but all lead with
+    # the float, so the parser must be format-agnostic.
+    from push_frontier import _detail_time
+
+    assert _detail_time("3.00s") == pytest.approx(3.0)
+    assert _detail_time("0.59s/infeasible") == pytest.approx(0.59)
+    assert _detail_time("1.31s/stepped") == pytest.approx(1.31)
+
+
+def test_survival_curve_separates_recovering_from_merely_delaying():
+    # The binary frontier scores both the contact-QP and the force+step synthesis at
+    # r=0 -- it asks only "did you reach the full horizon?". The survival-TIME curve
+    # un-flattens that: an immediate capture step RECOVERS a small shove (rides the
+    # ceiling), while feeding the QP's must-step certificate to a late step only
+    # DELAYS the fall -- but measurably longer than the bare QP that just certifies
+    # infeasible. This is the value the polygon's r=0 hid.
+    pytest.importorskip("qpsolvers")
+    from push_frontier import survival_curve
+
+    model = G1Model()
+    H = 1.5
+    curve = survival_curve(
+        model, theta=0.0, mags=[0.0, 0.1], H=H, fall=0.5,
+        controllers=["capture-step", "contact-qp", "qp-capture-step"], log=lambda *a: None)
+
+    # the immediate capture step recovers the 0.1 m/s forward shove (reaches H)...
+    assert curve["capture-step"]["ceiling_mag"] >= 0.1
+    # ...while neither QP-based controller recovers ANY nonzero shove.
+    assert curve["contact-qp"]["ceiling_mag"] == 0.0
+    assert curve["qp-capture-step"]["ceiling_mag"] == 0.0
+    # but the force+step synthesis DELAYS the fall markedly longer than the bare QP
+    # (the late capture step buys time the in-place QP cannot) -- the real, measurable
+    # value the binary frontier collapsed to a flat zero.
+    t_qp = curve["contact-qp"]["times"][1]            # at 0.1 m/s
+    t_qp_step = curve["qp-capture-step"]["times"][1]
+    assert t_qp_step > t_qp + 0.3
+    assert t_qp_step < H            # ...yet still does not recover the horizon
+
+
 # --- adaptive step duration on restricted footholds (adaptive_step.py) ------------
 # A from-paper port of "Adaptive Step Duration for Accurate Foot Placement"
 # (arXiv:2403.17136, 2024), which ships no public code.

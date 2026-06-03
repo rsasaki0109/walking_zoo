@@ -25,10 +25,11 @@ import os
 # Brand-consistent palette (matches the GIF status chips: green/amber/red family).
 COLORS = {
     "capture-step": ("#5aa05f", "steps to the capture point"),
+    "qp-capture-step": ("#7cc4ff", "force-aware QP balance, then capture step"),
     "contact-qp": ("#e6aa28", "contact-QP WBC, in place"),
     "stiff-stand": ("#e04642", "500-gain position stand"),
 }
-ORDER = ["capture-step", "contact-qp", "stiff-stand"]
+ORDER = ["capture-step", "qp-capture-step", "contact-qp", "stiff-stand"]
 
 
 def main() -> int:
