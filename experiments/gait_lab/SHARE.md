@@ -45,7 +45,7 @@ stand — the model-based QP can. But apply the same audit to *walking* and the 
 does NOT flip: position tracking genuinely beats torque there. Standing balance was a
 crutch; walking authority was real.
 
-It's a research playground next to a ROS2 walking runtime, not a product. ~50 tests,
+It's a research playground next to a ROS2 walking runtime, not a product. ~52 tests,
 every controller reproducible, the GIFs regenerate from one script. Happy to take
 holes in the methodology — finding them is the point.
 
@@ -134,6 +134,10 @@ benchmarks, negatives included: https://github.com/rsasaki0109/walking_zoo
   ~5% (forward is ankle-torque-limited) — and the fall clock is leg length, `1/ω =
   √(z/g) ≈ 0.27 s`, so the ~1 s ceiling is a few of those clocks, controller-independent.
   That's *why* force-vs-position never moved the wall.
+- Terrain test (`terrain_frontier.py`): tilt gravity into a slope and the capturability
+  theory keeps predicting — the frontier shifts uphill, and the critical slope the stand
+  self-holds is torque-limited (~4.7° vs the geometric 9.6°). Stepping extends it to
+  ~5.9° and doubles the downhill recoverable kick. Same through-line on a slope.
 - `dcm-walk` (continuous DCM step adjustment) walks 2nd-farthest of the steppers
   (0.81 m) but its closed loop buys no survival on position control — the open-loop
   zmp-preview outlives it. The DCM's robustness edge needs force authority; an honest

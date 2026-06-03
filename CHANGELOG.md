@@ -563,3 +563,19 @@
   by `test_capturability_predicts_the_frontier_anisotropy_from_geometry` and
   `test_free_inverted_pendulum_topple_is_the_two_over_omega_floor_and_a_lower_bound`;
   suite at 50 gait_lab tests.
+- **Tested the capturability theory on terrain by tilting gravity into a slope
+  (`terrain_frontier.py`, `render_terrain_frontier.py`).** Walking an incline of angle
+  `α` is equivalent to rotating `model.opt.gravity` (a downhill `g·sinα` plus a reduced
+  normal `g·cosα`), so the same shove experiments run on a slope with no model surgery —
+  the cleanest test of the flat-ground theory in a regime it was not fitted to. Results,
+  honest including where the clean theory bends: the frontier **shifts uphill** as
+  predicted (downhill recoverable kick collapses toward zero, uphill grows, reversing the
+  flat forward>backward order by ~3°); the **critical slope is torque-limited** — the
+  stand self-holds only to **~4.7°**, far below the geometric `arctan(d_fwd/z) ≈ 9.6°`,
+  the same ankle-torque limit the fall-time theory found forward; the uphill kick grows
+  *more* than the static margin predicts because gravity also dynamically decelerates an
+  uphill shove (a partial, honest validation of `v*=d·ω`); and the lab's through-line
+  holds — **stepping extends the limit** (critical slope ~4.7° → ~5.9°, downhill kick
+  roughly doubled) until even a step lands on ground that keeps falling away (~8°). Tested
+  by `test_terrain_critical_slope_is_torque_limited_and_stepping_extends_it` and
+  `test_slope_biases_the_capturability_frontier_uphill`; suite at 52 gait_lab tests.

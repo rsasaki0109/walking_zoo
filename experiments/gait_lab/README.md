@@ -433,6 +433,34 @@ wall: the wall is `√(z/g)`.**
 python3 fall_time_theory.py && python3 render_fall_theory.py   # the ~1s collapse, derived
 ```
 
+### Terrain: the same theory, tested on a slope
+
+The capturability theory above was measured on flat ground. The cleanest test of a
+theory is a regime it was not fitted to — so `terrain_frontier.py` tilts **gravity** by
+`α` (equivalent to walking an incline: a constant downhill `g·sinα` plus a reduced
+normal `g·cosα`) and re-runs the shove experiments, no model surgery needed.
+
+![gait_lab terrain frontier](assets/terrain_frontier.png)
+
+The tilted gravity biases the inverted pendulum downhill by a static lean `z·tanα`, so
+`v* = d·ω` predicts the frontier should **shift uphill** — and it does: the downhill
+recoverable kick collapses toward zero while the uphill kick grows, reversing the
+flat-ground forward>backward order by ~3°. The **critical slope** (where the stand lets
+go with *no* push) is **torque-limited, not geometry-limited**: geometry says
+`arctan(d_fwd/z) ≈ 9.6°`, but the stand actually gives up near **~4.7°** — the same
+ankle-torque limit the fall-time theory found forward, because the ankle cannot drive
+the CoP to the toe to hold the downhill lean. The honest bend in the clean theory: the
+*uphill* kick grows **more** than the static margin predicts, because on a downhill
+slope gravity also actively decelerates an uphill shove — a dynamic assist the static
+capture-point bound misses. And the lab's through-line holds on terrain too: **stepping
+extends the limit** — a capture step raises the critical slope (~4.7° → ~5.9°) and
+roughly doubles the downhill recoverable kick, until even a step lands on ground that
+keeps falling away (~8°).
+
+```bash
+python3 terrain_frontier.py && python3 render_terrain_frontier.py   # capturability on a slope
+```
+
 ## Adaptive step *duration*: a 2024 method with no public code
 
 Footstep walkers choose *where* to step. A more recent idea is to also choose

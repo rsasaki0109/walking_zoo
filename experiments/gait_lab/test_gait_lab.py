@@ -988,6 +988,41 @@ def test_free_inverted_pendulum_topple_is_the_two_over_omega_floor_and_a_lower_b
     assert t_meas == pytest.approx(2 * tau, abs=0.15)
 
 
+# --- terrain frontier: capturability on a slope (terrain_frontier.py) -------------
+# Tilting gravity by alpha is equivalent to walking a slope; tests the flat-ground
+# capturability theory in a regime it was not fitted to.
+
+def test_terrain_critical_slope_is_torque_limited_and_stepping_extends_it():
+    # The static geometry says the stand should self-hold to arctan(d_fwd/z) ~ 9.6 deg.
+    # It actually lets go near ~5 deg: the binding limit is the ankle torque that
+    # cannot drive the CoP to the toe to hold the downhill lean -- the fall-time
+    # theory's forward asymmetry, now on terrain. And a capture step extends it.
+    from terrain_frontier import critical_slope, geometric_critical_slope
+
+    model = G1Model()
+    geo, _ = geometric_critical_slope(model)
+    assert geo == pytest.approx(9.56, abs=1.0)
+    stand = critical_slope(model, "stand", H=2.0)
+    step = critical_slope(model, "capture-step", H=2.0)
+    # the stand is torque-limited: it gives up well below the geometric bound...
+    assert 2.5 < stand < geo - 2.0
+    # ...and stepping pushes the critical slope higher (the recovery is the step).
+    assert step >= stand + 0.3
+
+
+def test_slope_biases_the_capturability_frontier_uphill():
+    # Tilting gravity downhill biases the inverted pendulum downhill, so the uphill
+    # support margin grows and the downhill one shrinks: on a slope the recoverable
+    # kick is larger uphill than downhill, reversing the flat-ground forward>backward
+    # order. This is v* = d*omega's predicted shift, measured.
+    from terrain_frontier import max_kick, DIRS
+
+    model = G1Model()
+    down = max_kick(model, "stand", 3.0, DIRS["downhill"], H=2.0)
+    up = max_kick(model, "stand", 3.0, DIRS["uphill"], H=2.0)
+    assert up > down + 0.03
+
+
 # --- adaptive step duration on restricted footholds (adaptive_step.py) ------------
 # A from-paper port of "Adaptive Step Duration for Accurate Foot Placement"
 # (arXiv:2403.17136, 2024), which ships no public code.
