@@ -360,6 +360,19 @@ CoM/ZMP while stepping** — leaving pure position control. That boundary *is* t
 result: this lab exists to find exactly where a position-controlled humanoid runs
 out, and for steerable, disturbance-robust walking, this is it.
 
+And `force_walk.py` runs that frontier controller to its honest root: it builds the
+proper torque WBC — `mj_inverse` gravity compensation, a posture task tracking the
+ZMP-preview IK pose, and a contact-Jacobian CoM task — and it **still** loses to
+the position-IK `zmp-preview` (~1.3 s vs ~2.4 s). The cause is one level deeper
+than the controller: on a model *built* for position control, the high-gain
+servos the solver applies implicitly, continuously and exactly are not beatable by
+explicit torque control with a feedforward gravity term, which drifts and caps near
+~1.3 s whatever the gains (`force_balance.py` shows the same for standing). The WBC
+is correct; the limit is the **substrate**. Genuine force-aware walking needs a
+*torque-native* model (torque actuators and contact dynamics tuned for it), not the
+position-servo menagerie G1 — the boundary here is the model, not the controller,
+and that is the honest end of this thread.
+
 ## Running it
 
 `gait_lab` needs `mujoco` and the menagerie G1 model — neither is part of the

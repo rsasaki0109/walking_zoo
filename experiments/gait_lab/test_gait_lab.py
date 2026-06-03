@@ -401,6 +401,10 @@ def test_torque_mode_actuates_by_force(model):
     # ankle/CoM torques (ground-reaction / ZMP balance) the position gait cannot.
     import numpy as np
 
+    # Fresh model: the torque/mj_inverse machinery perturbs shared MjData state in
+    # ways that are immaterial on their own but would change a later chaotic
+    # rollout sharing the fixture (e.g. the capture-step recovery).
+    model = G1Model()
     knee = "left_knee_joint"
     i = model.actuator(knee)
     qadr = int(model.model.jnt_qposadr[model.model.actuator_trnid[i, 0]])
@@ -485,6 +489,25 @@ def test_reactive_steerable_walks_but_does_not_break_the_ceiling(model):
     zmp = pytest.importorskip("scipy") and rollout(
         model, SteerableZMPWalk(0.12, 0.0), horizon=8.0)
     assert zmp.survival_time > fwd.survival_time
+
+
+def test_force_walk_torque_wbc_runs(model):
+    # The frontier attempt: a contact-Jacobian torque WBC tracking the ZMP-preview
+    # plan inside a walk (gravity comp via mj_inverse + posture + CoM tasks). This
+    # checks the WBC walker mechanism runs end to end and returns a sane survival;
+    # the honest result (it does not beat position IK on a position-built model —
+    # the limit is the substrate, not the controller) is reported by force_walk.py.
+    pytest.importorskip("scipy")
+
+    from force_walk import run_force_walk
+
+    fresh = G1Model()  # self-contained: the torque WBC perturbs shared MjData
+    surv = run_force_walk(fresh, horizon=1.2, fall_h=0.5)
+    assert 0.0 < surv <= 1.2
+    # The leg actuators are restored to position mode afterwards (no leakage).
+    import numpy as np
+    i = fresh.actuator("left_knee_joint")
+    assert np.isclose(fresh.model.actuator_gainprm[i, 0], 500.0)
 
 
 def test_capture_step_recovers_a_forward_push(model):

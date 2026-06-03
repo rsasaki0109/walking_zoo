@@ -163,8 +163,20 @@ class G1Model:
         ``biastype=NONE``). Reversible and per-actuator.
         """
         mj = self._mj
+        if not hasattr(self, "_saved_actuator_params"):
+            self._saved_actuator_params = {}
         for name in names:
             i = self._name2act[name]
+            # Save the ORIGINAL params once so they can be restored exactly (the
+            # per-joint damping etc. differs; a guessed kd would silently change
+            # the model for everything that runs after — e.g. a shared test fixture).
+            if i not in self._saved_actuator_params:
+                self._saved_actuator_params[i] = (
+                    int(self.model.actuator_gaintype[i]),
+                    int(self.model.actuator_biastype[i]),
+                    self.model.actuator_gainprm[i, :3].copy(),
+                    self.model.actuator_biasprm[i, :3].copy(),
+                )
             self.model.actuator_gaintype[i] = mj.mjtGain.mjGAIN_FIXED
             self.model.actuator_biastype[i] = mj.mjtBias.mjBIAS_NONE
             self.model.actuator_gainprm[i, :3] = [1.0, 0.0, 0.0]
@@ -172,15 +184,24 @@ class G1Model:
         self._torque_acts = set(self._name2act[n] for n in names)
 
     def set_position_mode(self, names, kp: float = 500.0, kd: float = 5.0) -> None:
-        """Restore the named actuators to position-servo mode (the G1 default:
-        ``force = kp*(target - q) - kd*qvel``)."""
+        """Restore the named actuators to position-servo mode. When the originals
+        were saved by :meth:`set_torque_mode`, restore them EXACTLY (so flipping to
+        torque and back is a no-op); otherwise fall back to a ``kp``/``kd`` servo."""
         mj = self._mj
+        saved = getattr(self, "_saved_actuator_params", {})
         for name in names:
             i = self._name2act[name]
-            self.model.actuator_gaintype[i] = mj.mjtGain.mjGAIN_FIXED
-            self.model.actuator_biastype[i] = mj.mjtBias.mjBIAS_AFFINE
-            self.model.actuator_gainprm[i, :3] = [kp, 0.0, 0.0]
-            self.model.actuator_biasprm[i, :3] = [0.0, -kp, -kd]
+            if i in saved:
+                gt, bt, gp, bp = saved[i]
+                self.model.actuator_gaintype[i] = gt
+                self.model.actuator_biastype[i] = bt
+                self.model.actuator_gainprm[i, :3] = gp
+                self.model.actuator_biasprm[i, :3] = bp
+            else:
+                self.model.actuator_gaintype[i] = mj.mjtGain.mjGAIN_FIXED
+                self.model.actuator_biastype[i] = mj.mjtBias.mjBIAS_AFFINE
+                self.model.actuator_gainprm[i, :3] = [kp, 0.0, 0.0]
+                self.model.actuator_biasprm[i, :3] = [0.0, -kp, -kd]
 
     # -- physics -----------------------------------------------------------
     def reset(self) -> None:

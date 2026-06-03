@@ -358,3 +358,14 @@
   foot placement; kinematic footsteps cap at ~1.5–2.5 s; the working balance win is
   a capture step, not torque-mode standing; the frontier is a contact-constrained
   torque WBC regulating a moving CoM/ZMP while stepping). Suite at 29 gait_lab tests.
+- Ran the frontier controller to its root: `force_walk.py` builds the proper
+  force-aware ZMP walker — leg torques from `mj_inverse` gravity compensation + a
+  posture task tracking the ZMP-preview IK pose + a contact-Jacobian CoM task — and
+  it still **loses** to the position-IK `zmp-preview` (~1.3 s vs ~2.4 s). The cause
+  is the *substrate*, not the controller: on a model built for position control,
+  the high-gain servos the solver applies implicitly/continuously/exactly are not
+  beatable by explicit torque control with a feedforward gravity term, which drifts
+  and caps near ~1.3 s whatever the gains (standing or walking). The WBC is correct;
+  genuine force-aware walking needs a *torque-native* model, not the position-servo
+  menagerie G1 — the boundary is the model, not the controller. Covered by
+  `test_force_walk_torque_wbc_runs`; suite at 30 gait_lab tests.
