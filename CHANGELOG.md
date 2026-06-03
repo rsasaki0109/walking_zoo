@@ -464,3 +464,17 @@
   `test_stiff_servos_standing_win_was_an_implicit_damping_idealisation`, and
   `test_under_a_real_shove_the_support_polygon_wall_is_unchanged`; suite at 37 gait_lab
   tests.
+- **Turned the same lens on the lab's central conclusion — walking — and it survives
+  (`motor_model.py::run_motor_zmp_walk`).** "Position-IK `zmp-preview` beats the torque
+  WBC while walking" used the same implicit servo as its winning baseline, so it gets
+  the same audit: re-run both controllers as explicit torque on the ZMP-preview plan.
+  Unlike standing, the verdict does **not** flip. The position servo loses ~a third of
+  its survival to the idealisation (implicit-IK walk ~2.15 s → honest explicit torque
+  ~1.45 s) but still beats the QP walk (~0.6 s) by a wide margin at every control rate.
+  The asymmetry is the finding: standing balance is won by the idealised inner damping
+  loop (so removing it flips the result), but walking is won by genuinely tracking the
+  fast swing trajectory — a real control-authority advantage the high-gain position
+  servo has and the compliant torque WBC does not, which survives the honest test. The
+  standing claim needed a crutch; the walking claim never did. Tested by
+  `test_paying_the_idealisation_does_not_flip_the_walking_verdict`; suite at 38 gait_lab
+  tests.

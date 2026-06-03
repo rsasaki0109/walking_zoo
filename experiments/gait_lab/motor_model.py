@@ -284,6 +284,80 @@ def run_motor_stand_push(model, controller, horizon, fall_h, push_speed,
         model.set_position_mode(names)
 
 
+def run_motor_zmp_walk(model, controller, horizon, fall_h, *,
+                       control_hz=None, bw_hz=None, noise_frac=0.0, seed=0):
+    """Walk the ZMP-preview plan with BOTH controllers as explicit torque through the
+    same :class:`MotorModel` — the *walking* half of the idealisation audit.
+
+    The lab's central conclusion ("position-IK `zmp-preview` beats the torque WBC
+    while walking, ~2.4 s vs ~1.3 s") used the *implicit* position servo as the
+    winning baseline — the same free lunch the standing result exposed. This re-runs
+    it honestly: the ``"servo"`` controller tracks the planner's joint targets with
+    explicit torque ``kp(q_des-q) - kd q̇`` (same form the standing experiment showed
+    cannot hold a quiet stand), and ``"qp"`` is the complete-TSID QP tracking the
+    planned CoM + swing foot. Both pass the identical control-rate/bandwidth/clamp.
+
+    Returns ``(survive_time, reason)``. The finding (see the README): unlike standing,
+    paying the idealisation does NOT flip the walking verdict — the position servo
+    loses ~a third of its survival but still beats the QP walk, because tracking the
+    fast swing trajectory is a genuine control-authority win, not an integrator gift."""
+    from gait_lab.controllers import ZMPPreviewWalk, Command
+    from gait_lab.model import LEG_JOINTS
+    from wbc_qp import _stance_swing
+
+    names = _all_actuator_names(model)
+    planner = ZMPPreviewWalk()
+    model.set_position_mode(names)
+    model.reset()
+    planner.reset(model)
+    kp, kd = _servo_gains(model)
+    stand = model.stand_targets.copy()
+    com_z = float(model.data.subtree_com[0, 2])
+    solver = WBCSolver(model, tau_limits=True)
+    motor = MotorModel(solver.tau_lo, solver.tau_hi, control_hz=control_hz,
+                       bw_hz=bw_hz, noise_frac=noise_frac, seed=seed)
+
+    model.set_torque_mode(names)
+    model.reset()
+    motor.reset(model.nu)
+    d = model.data
+    try:
+        for i in range(int(round(horizon / model.timestep))):
+            t = i * model.timestep
+            tau_cmd = None
+            if motor.should_recompute(t):
+                obs = model.observe(t)
+                if controller == "servo":
+                    q_des = planner.update(obs, Command())
+                    tau_cmd = _servo_torque(model, kp, kd, q_des)
+                else:
+                    k = min(int(t / planner.plan_dt), planner._n - 1)
+                    com_plan = planner._com[k]
+                    com_des = np.array([com_plan[0], com_plan[1], com_z])
+                    q_des = stand.copy()
+                    base_now = d.qpos[0:2]
+                    for foot in ("left", "right"):
+                        fw = planner._foot_world(foot, t)
+                        target = np.array([base_now[0] + (fw[0] - com_plan[0]),
+                                           base_now[1] + (fw[1] - com_plan[1]), fw[2]])
+                        angles = model.solve_leg_ik(foot, target)
+                        for joint, value in zip(LEG_JOINTS[foot], angles):
+                            q_des[model.actuator(joint)] = value
+                    stance, swing = _stance_swing(planner, t)
+                    swing_des = planner._foot_world(swing, t)
+                    tau_cmd = solver.compute(com_des, q_des=q_des,
+                                             swing_foot=swing, swing_pos_des=swing_des)
+                    if tau_cmd is None:
+                        return t, "infeasible"
+            d.ctrl[:] = motor.step(tau_cmd, model.timestep)
+            model.step()
+            if float(d.qpos[2]) < fall_h:
+                return t, "toppled"
+        return horizon, "held"
+    finally:
+        model.set_position_mode(names)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--horizon", type=float, default=4.0)
@@ -341,13 +415,32 @@ def main():
             print(f"  {label:24s}     " + "  ".join(cells))
 
     print("\n(H held to horizon, T toppled, I QP infeasible = must step.)\n"
-          "Verdict: the servo's standing-balance 'win' was substantially an implicit-\n"
-          "damping idealisation — on equal explicit-torque footing the model-based QP\n"
-          "is the better stand-keeper (holds the quiet stand the explicit servo cannot),\n"
-          "and degrades gracefully with control rate. But under a real shove BOTH still\n"
-          "fail at ~0.6s and the QP certifies 'must step': the support-polygon wall is\n"
-          "unchanged. The push-recovery verdict stands; the standing half flips once the\n"
-          "idealisation is paid for.")
+          "Stand verdict: the servo's standing-balance 'win' was substantially an\n"
+          "implicit-damping idealisation — on equal explicit-torque footing the model-\n"
+          "based QP is the better stand-keeper (holds the quiet stand the explicit servo\n"
+          "cannot), and degrades gracefully with control rate. But under a real shove\n"
+          "BOTH still fail at ~0.6s and the QP certifies 'must step': the support-polygon\n"
+          "wall is unchanged. The push-recovery verdict stands; the standing half flips.\n")
+
+    print("Experiment C — apply the same lens to the lab's CENTRAL conclusion: WALKING.\n"
+          "'position-IK zmp-preview beats the torque WBC' used the implicit servo as the\n"
+          "winning baseline too. Re-run both as explicit torque on the ZMP-preview plan:\n")
+    print("  controller                   ideal   200Hz/100BW  100Hz/50BW")
+    for ctl in ("servo", "qp"):
+        cells = []
+        for control_hz, bw_hz in ((None, None), (200.0, 100.0), (100.0, 50.0)):
+            t, why = run_motor_zmp_walk(model, ctl, args.horizon, args.fall_height,
+                                        control_hz=control_hz, bw_hz=bw_hz)
+            cells.append(f"{t:5.2f}{tag(why)}")
+        print(f"  {ctl.upper():10s} (explicit torque)     " + "    ".join(cells))
+    print("\nWalk verdict: UNLIKE standing, paying the idealisation does NOT flip the\n"
+          "walking result. The position servo loses ~a third of its survival (the\n"
+          "implicit-damping share) but still beats the QP walk — tracking the fast swing\n"
+          "trajectory is a genuine control-authority win, not an integrator gift. So the\n"
+          "lab's central conclusion survives its most adversarial test: on this position-\n"
+          "built model, honest explicit-torque position tracking still walks farther than\n"
+          "the torque WBC. The one idealisation that quietly carried the STANDING claim is\n"
+          "found and paid; the WALKING claim needed no crutch.")
 
 
 if __name__ == "__main__":

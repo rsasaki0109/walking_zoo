@@ -683,6 +683,32 @@ def test_under_a_real_shove_the_support_polygon_wall_is_unchanged():
     assert np.isclose(m.model.actuator_gainprm[m.actuator("left_knee_joint"), 0], 500.0)
 
 
+def test_paying_the_idealisation_does_not_flip_the_walking_verdict():
+    # The companion to the standing result, and the more important one: the lab's
+    # CENTRAL conclusion ("position-IK zmp-preview beats the torque WBC while walking")
+    # used the same implicit-servo idealisation as its winning baseline. Re-run both as
+    # explicit torque on the ZMP-preview plan. Unlike standing, the verdict does NOT
+    # flip: the position servo loses ~a third of its survival (the implicit-damping
+    # share) but STILL beats the QP walk -- tracking the fast swing trajectory is a
+    # genuine control-authority win, not an integrator gift.
+    pytest.importorskip("scipy")          # ZMPPreviewWalk
+    pytest.importorskip("qpsolvers")
+    from wbc_qp import run_zmp_position
+    from motor_model import run_motor_zmp_walk
+
+    m = G1Model()
+    implicit = run_zmp_position(m, 3.0, 0.5)              # the idealised baseline
+    servo, _ = run_motor_zmp_walk(m, "servo", 3.0, 0.5)  # honest explicit torque
+    qp, _ = run_motor_zmp_walk(m, "qp", 3.0, 0.5)
+    # paying the idealisation costs the position walk real survival...
+    assert servo < implicit - 0.3
+    # ...but the position walk STILL beats the QP walk: the walking verdict holds.
+    assert servo > qp + 0.4
+    # actuators restored to position mode afterwards (no fixture leakage).
+    import numpy as np
+    assert np.isclose(m.model.actuator_gainprm[m.actuator("left_knee_joint"), 0], 500.0)
+
+
 def test_capture_step_recovers_a_forward_push(model):
     # Push recovery that works: a forward shove topples the static position stand,
     # but a capture STEP (step the foot to the capture point) catches it. The

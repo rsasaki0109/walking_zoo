@@ -348,7 +348,7 @@ humanoid can and cannot deliver them:
 | torque ankle / CoM-WBC / contact-WBC (`force_balance.py`) | n/a | loses to the stiff stand | standing favours stiffness; open-loop gravity comp drifts |
 | **contact-QP WBC (TSID)** (`wbc_qp.py`) | n/a | holds a quiet stand; loses under a shove | proper friction-cone GRF, but goes *infeasible* when the capture point exits the support polygon — certifying "you must step" |
 | **complete TSID (+ torque limits)** (`wbc_qp.py`) | n/a | same survival, now torque-honest | adds the G1's real joint torque limits; the friction-only QP was secretly planning ankle torque ~4× the limit — fixing that costs no survival, the wall is the support polygon not torque |
-| **explicit-torque fair fight** (`motor_model.py`) | n/a | servo can't hold a quiet stand; QP can | the stiff servo's stand-keeping was MuJoCo integrating its `−kd q̇` *implicitly* — on equal explicit-torque footing the servo topples ~1.3 s and the model-based QP holds; the shove wall is still the support polygon |
+| **explicit-torque fair fight** (`motor_model.py`) | n/a | stand: servo can't hold, QP can; walk: servo still wins | the servo's *standing* win was MuJoCo integrating its `−kd q̇` *implicitly* (flips to the QP on honest footing); but the *walking* win is real swing-tracking authority — the position walk loses ~⅓ to the idealisation yet still beats the QP walk |
 
 Three honest conclusions fall out. (1) **Steering needs foot placement** — the CPG
 substrate structurally cannot do it; footsteps can. (2) **Kinematic footstep
@@ -468,6 +468,23 @@ the servo's free lunch buys standing balance, not push recovery; the binding lim
 under a shove is, once again, the support polygon. That is the lab's longest-standing
 result surviving its most adversarial test — and the one place a free idealisation was
 quietly carrying the through-line, now found and paid.
+
+The same lens then turns on the lab's **central** conclusion — *walking* — because
+"position-IK `zmp-preview` beats the torque WBC (~2.4 s vs ~1.3 s)" used that identical
+implicit servo as its winning baseline. `run_motor_zmp_walk` re-runs both controllers
+as explicit torque on the ZMP-preview plan. The result is the informative *opposite* of
+standing: paying the idealisation does **not** flip the walking verdict. The position
+servo loses about a third of its survival (implicit-IK walk ~2.15 s → honest explicit
+torque ~1.45 s — the implicit-damping share, the same crutch standing relied on) but
+**still beats the QP walk** (~0.6 s) by a wide margin, at every control rate. The
+asymmetry is the point: standing balance is won by the (idealised) inner damping loop,
+so removing it flips the result; walking is won by genuinely tracking the fast swing
+trajectory, an authority the high-gain position servo has and the compliant torque WBC
+does not — a real control advantage that survives the honest test. The lab's earlier
+note ("the implicit high-gain servo tracks the fast swing exactly where explicit torque
+drifts") is now quantified and confirmed *not* to be an integrator artifact. So the
+standing claim needed a crutch and the walking claim did not: on this position-built
+model, honest explicit-torque position tracking still walks farther than the torque WBC.
 
 ## Running it
 
