@@ -510,6 +510,33 @@ def test_force_walk_torque_wbc_runs(model):
     assert np.isclose(fresh.model.actuator_gainprm[i, 0], 500.0)
 
 
+def test_qp_wbc_holds_a_stand_but_certifies_the_support_polygon_limit():
+    # The contact-QP WBC (proper TSID: solve joint accels AND friction-cone ground-
+    # reaction forces). Two honest facts the module establishes: (1) it HOLDS a
+    # quiet stand with real GRF; (2) under a shove it does NOT beat the stiff servo
+    # -- the QP goes infeasible (or topples) when the capture point leaves the
+    # support polygon, certifying "you must step". Needs a QP solver (qpsolvers).
+    pytest.importorskip("qpsolvers")
+
+    from wbc_qp import run_qp_stand_push, run_position_stand_push
+
+    fresh = G1Model()  # self-contained: torque mode perturbs shared MjData
+    # (1) a quiet stand (no push) is held to the horizon.
+    held, why = run_qp_stand_push(fresh, horizon=1.0, fall_h=0.5, push_speed=0.0)
+    assert held == pytest.approx(1.0) and why == "held"
+    # (2) a 0.6 m/s forward shove is NOT recovered, and fails for a physical reason.
+    surv, why = run_qp_stand_push(fresh, horizon=1.5, fall_h=0.5, push_speed=0.6,
+                                  direction=(1.0, 0.0))
+    assert why in ("infeasible", "toppled")
+    stiff = run_position_stand_push(fresh, horizon=1.5, fall_h=0.5, push_speed=0.6,
+                                    direction=(1.0, 0.0))
+    assert surv < stiff  # force control does not beat the stiff servo here
+    # The actuators are restored to position mode afterwards (no leakage).
+    import numpy as np
+    i = fresh.actuator("left_knee_joint")
+    assert np.isclose(fresh.model.actuator_gainprm[i, 0], 500.0)
+
+
 def test_capture_step_recovers_a_forward_push(model):
     # Push recovery that works: a forward shove topples the static position stand,
     # but a capture STEP (step the foot to the capture point) catches it. The

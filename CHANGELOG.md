@@ -381,3 +381,22 @@
   unchanged — position IK wins on this position-built model — but precisely scoped:
   the limit is the substrate *plus* a hand-tuned (non-QP) controller; genuine
   force-aware walking wants a torque-native model and a contact-QP WBC.
+- **Built the contact-QP WBC** that conclusion asked for: `wbc_qp.py` implements
+  proper task-space inverse dynamics (TSID), solving the joint accelerations *and*
+  the per-foot-corner ground-reaction forces together each step under the friction
+  cone and unilateral contact (CoM/posture/swing tasks in a weighted-least-squares
+  objective, GRF a genuine decision variable rather than a hand-split assumption).
+  The honest result closes the loop rather than breaking the wall: the QP **holds a
+  quiet stand indefinitely** with real friction-cone GRF (a posture task is the
+  stable backbone; a moderate-weight CoM task adds force authority without fighting
+  the rigid double-support constraints), but it still does **not** beat position
+  control — under a 0.6 m/s shove it goes **infeasible** the instant the capture
+  point leaves the support polygon (measured ~5 cm past the toe), and walking it tops
+  out below the position-IK `zmp-preview`. That infeasibility is the most valuable
+  output: the controller itself *certifies* that no force in the friction cone can
+  recover without a step — the rigorous statement of "step, don't push." Building the
+  textbook QP confirms the boundary is *standing-without-stepping plus a position-
+  built model*, not the absence of a QP; the move that beats the limit remains the
+  capture step, taken exactly when the QP says you must. Tested by
+  `test_qp_wbc_holds_a_stand_but_certifies_the_support_polygon_limit` (uses a fresh
+  `G1Model`); suite at 31 gait_lab tests. Needs a QP solver (`qpsolvers`/`osqp`).

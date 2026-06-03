@@ -345,6 +345,7 @@ humanoid can and cannot deliver them:
 | `reactive-steerable` (capture step + steering) | yes | ~1.2 s | continuous reactive capture-stepping is *less* stable than a smooth plan |
 | capture step (`capture_step.py`) | n/a | **recovers** a forward shove to the horizon | the decision to *step* puts support back under the CoM |
 | torque ankle / CoM-WBC / contact-WBC (`force_balance.py`) | n/a | loses to the stiff stand | standing favours stiffness; open-loop gravity comp drifts |
+| **contact-QP WBC (TSID)** (`wbc_qp.py`) | n/a | holds a quiet stand; loses under a shove | proper friction-cone GRF, but goes *infeasible* when the capture point exits the support polygon — certifying "you must step" |
 
 Three honest conclusions fall out. (1) **Steering needs foot placement** — the CPG
 substrate structurally cannot do it; footsteps can. (2) **Kinematic footstep
@@ -376,6 +377,24 @@ position-servo menagerie G1 — this maps exactly how far the position-controlle
 testbed carries it, which is the lab's point. (An earlier note here over-claimed
 that torque *standing* balance capped at ~1.3 s; corrected — it holds ~3 s; walking
 is the harder case.)
+
+And then `wbc_qp.py` **builds the contact-QP WBC that note asked for** — proper
+task-space inverse dynamics (TSID), solving the joint accelerations *and* the
+per-foot-corner ground-reaction forces together each step, subject to the friction
+cone and unilateral contact, the CoM/posture/swing tasks in a weighted least-squares
+objective. This is the textbook "missing piece," not a hand-split force. The honest
+result closes the loop rather than breaking the wall: the QP **holds a quiet stand
+indefinitely** with genuine GRF (a posture task is the stable backbone; a moderate-
+weight CoM task adds force authority without fighting the rigid double-support
+constraints), but it still does **not** beat position control — under a 0.6 m/s shove
+it goes **infeasible** the instant the capture point leaves the support polygon
+(measured ~5 cm past the toe), and walking it tops out below the position-IK
+`zmp-preview`. That infeasibility is the most valuable output: the controller itself
+*certifies* that no friction-cone force can recover without a step — the rigorous
+statement of "step, don't push." So building the proper QP confirms the boundary is
+**standing-without-stepping plus a position-built model**, not the absence of a QP;
+the one move that beats the limit remains the capture step, taken exactly when the QP
+says you must.
 
 ## Running it
 
