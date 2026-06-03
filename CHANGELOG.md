@@ -478,3 +478,20 @@
   standing claim needed a crutch; the walking claim never did. Tested by
   `test_paying_the_idealisation_does_not_flip_the_walking_verdict`; suite at 38 gait_lab
   tests.
+- **Mapped the push-recovery showdown's thesis into a hard number — the push-robustness
+  frontier (`push_frontier.py`, `render_frontier.py`).** The showdown is one shove from
+  one direction; this measures the whole map. For each controller and every shove
+  direction, a binary search finds the largest base-velocity kick (m/s) it survives for
+  the full horizon — a *robustness polygon* in velocity space, rendered as a polar hero
+  (`assets/push_frontier.png`). The shape is the recovery anisotropy: both the stiff
+  stand and the capture step bulge sideways (the G1's wide stance) and pinch fore-aft
+  (the narrow ankle-pitch axis). The capture step encloses the stiff stand with **+55 %
+  recoverable area** (0.61 vs 0.39 (m/s)²) — but the two **tie at the backward worst
+  case** (~0.2 m/s): stepping widens the frontier where it can reach and honestly does
+  not where it can't. The contact-QP WBC collapses to a point at the origin — it holds a
+  quiet stand but goes infeasible under *any* shove, certifying "must step", so its
+  in-place frontier has zero width. Tested by
+  `test_push_frontier_search_and_area_are_exact`,
+  `test_capture_step_widens_the_forward_push_frontier_but_not_the_backward`, and
+  `test_contact_qp_push_frontier_collapses_to_a_must_step_certificate`; suite at 41
+  gait_lab tests.

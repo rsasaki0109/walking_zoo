@@ -770,3 +770,76 @@ def test_harness_render_produces_frames(model):
         pytest.skip(f"rendering unavailable: {exc}")
     assert frames, "expected rendered frames"
     assert frames[0].shape == (120, 160, 3)
+
+
+# --- push-robustness frontier (push_frontier.py) ---------------------------------
+
+def test_push_frontier_search_and_area_are_exact():
+    # Pure, no physics: the frontier's two primitives must be exact. The binary
+    # search finds the largest surviving magnitude of a monotone survival function;
+    # polygon_area is the true polar area (a unit "diamond" of radius 1 at the four
+    # cardinals encloses area 2), and is monotone in the radii.
+    import math
+
+    from push_frontier import max_survivable, polygon_area
+
+    survives_below = lambda model, v, th, H, fall: (v <= 0.63, "")
+    r = max_survivable(survives_below, None, 0.0, 1.0, 1.0, hi=1.5, tol=0.01)
+    assert r == pytest.approx(0.63, abs=0.02)
+    # never survives even the smallest shove -> radius 0; always survives -> the cap.
+    assert max_survivable(lambda *a: (False, ""), None, 0.0, 1, 1, hi=1.5) == 0.0
+    assert max_survivable(lambda *a: (True, ""), None, 0.0, 1, 1, hi=1.5) == 1.5
+
+    cardinals = [0.0, math.pi / 2, math.pi, 3 * math.pi / 2]
+    assert polygon_area([1, 1, 1, 1], cardinals) == pytest.approx(2.0)
+    assert polygon_area([2, 2, 2, 2], cardinals) == pytest.approx(8.0)  # ~r^2
+    assert polygon_area([1, 0.5, 1, 0.5], cardinals) < polygon_area([1, 1, 1, 1],
+                                                                    cardinals)
+
+
+def test_capture_step_widens_the_forward_push_frontier_but_not_the_backward(model):
+    # The showdown's thesis, quantified into a hard number. Map the max base-velocity
+    # shove (m/s) each controller survives, by direction. Where stepping helps -- a
+    # forward-diagonal shove -- the capture step survives a MUCH bigger shove than the
+    # stiff in-place stand. But the backward direction is the shared worst for both,
+    # and stepping does NOT meaningfully widen it: an honest, directional result, not
+    # a blanket "stepping always wins".
+    import math
+
+    from push_frontier import FRONTIER_CONTROLLERS, max_survivable
+
+    stiff = FRONTIER_CONTROLLERS["stiff-stand"][0]
+    capture = FRONTIER_CONTROLLERS["capture-step"][0]
+    H, hi, tol = 2.5, 1.0, 0.05
+
+    fwd_diag = math.radians(45.0)
+    s_fwd = max_survivable(stiff, model, fwd_diag, H, 0.5, hi=hi, tol=tol)
+    c_fwd = max_survivable(capture, model, fwd_diag, H, 0.5, hi=hi, tol=tol)
+    assert c_fwd > s_fwd + 0.15            # stepping buys a much bigger forward shove
+
+    back = math.radians(180.0)
+    s_back = max_survivable(stiff, model, back, H, 0.5, hi=hi, tol=tol)
+    c_back = max_survivable(capture, model, back, H, 0.5, hi=hi, tol=tol)
+    assert abs(c_back - s_back) < 0.12     # backward is the shared worst; no real gain
+    # and the backward frontier really is the weak one (well under the forward gain).
+    assert s_back < s_fwd and c_back < c_fwd
+
+
+def test_contact_qp_push_frontier_collapses_to_a_must_step_certificate():
+    # The contact-QP WBC holds a quiet stand, but its in-place push frontier collapses
+    # to ~0: under any non-trivial shove it returns INFEASIBLE -- the QP itself
+    # certifying "no friction-cone ground force can arrest this, you must step". So its
+    # robustness polygon is a degenerate point at the origin. That is not the QP
+    # failing; it is the QP telling you to do exactly what the capture step does.
+    pytest.importorskip("qpsolvers")
+    from push_frontier import FRONTIER_CONTROLLERS, max_survivable
+    from wbc_qp import run_qp_stand_push
+
+    model = G1Model()
+    # holds the quiet (zero-shove) stand for the full horizon...
+    t, reason = run_qp_stand_push(model, 2.5, 0.5, 0.0, direction=(1.0, 0.0))
+    assert reason == "held" and t == pytest.approx(2.5)
+    # ...but the largest shove it survives *in place* is essentially nothing.
+    qp = FRONTIER_CONTROLLERS["contact-qp"][0]
+    r = max_survivable(qp, model, 0.0, 2.5, 0.5, hi=1.0, tol=0.05)
+    assert r <= 0.1

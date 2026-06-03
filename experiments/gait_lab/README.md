@@ -43,6 +43,20 @@ says you must — the through-line of the whole lab in a single loop. Each tile 
 unmodified, tested rollout with `model.step` wrapped to record frames. Regenerate with
 `MUJOCO_GL=egl python3 render_showdown.py`.*
 
+![gait_lab push-robustness frontier](assets/push_frontier.png)
+
+*The showdown is one push from one angle; this is the **whole map**. For each
+controller and every shove direction, `push_frontier.py` binary-searches the largest
+base-velocity kick (m/s) it survives for the full horizon — a *robustness polygon* in
+velocity space. The shape is the recovery anisotropy: both polygons bulge sideways
+(the G1's wide stance) and pinch fore-aft (the narrow ankle-pitch axis). The
+**capture step** (green) encloses the **stiff stand** (red) almost everywhere — **+55 %
+recoverable area** — but they tie at the backward worst case (~0.2 m/s): stepping
+widens the frontier where it can reach, and honestly does not where it can't. The
+**contact-QP** collapses to the dot at the origin: it holds a quiet stand but certifies
+"must step" under *any* shove, so its in-place frontier has zero width. Regenerate the
+numbers with `python3 push_frontier.py` and the plot with `python3 render_frontier.py`.*
+
 ## Quickstart
 
 No GPU needed for the numbers; a GL backend (`MUJOCO_GL=egl`) is only for the GIFs.
@@ -335,9 +349,18 @@ hard, and a 1 m/s shove needs running, not one step), but it is the honest,
 working rung — and the reactive-footstep substrate a force-aware steerable gait
 would build on.
 
+`push_frontier.py` turns "still hard" into a measured map: for every shove
+direction it binary-searches the largest base-velocity kick each controller
+survives, giving a *robustness polygon* (see the frontier hero above). The capture
+step encloses the stiff stand with **+55 % recoverable area**, but the two tie at
+the backward worst case (~0.2 m/s) — quantifying exactly where stepping helps and
+where it doesn't. The contact-QP's polygon collapses to a point: it certifies "must
+step" under any shove.
+
 ```bash
 python3 capture_step.py --speeds 0.4 0.6 0.8 1.0   # static stand vs capture step
 python3 force_balance.py                            # why in-place force does not suffice
+python3 push_frontier.py && python3 render_frontier.py   # the robustness frontier
 ```
 
 ## Steering (a substrate ladder, and where position control runs out)
