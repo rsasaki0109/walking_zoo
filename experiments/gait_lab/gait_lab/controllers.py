@@ -554,6 +554,112 @@ class SteerableFootstepGait(CapturePointWalk):
         return super().update(obs, cmd)
 
 
+class ReactiveSteerableWalk(GaitController):
+    """The synthesis attempt: reactive-footstep steering — and its honest verdict.
+
+    The capstone idea, unifying the two things that each half-work: the capture
+    step (``capture_step.py``) demonstrably *recovers* a biped by placing the foot
+    at the **capture point** ``xi = com + com_vel/omega``, and footstep placement
+    *steers*. So this steps rhythmically with every footstep target set to the
+    capture point (balance) **plus** a commanded forward offset along a heading that
+    rotates with the commanded yaw rate (steering) — balance and steering through
+    one reactive foot-placement lever, realised with the same position IK.
+
+    Honest verdict: it does NOT break the ceiling. It walks fast and responds to
+    the command, but *continuous* reactive capture-stepping is **less** stable than
+    the open-loop ``steerable-zmp`` — it tops out around ~1.2 s. The capture step
+    wins as a *recovery from a stand* (catch one shove and settle), but stepping to
+    the capture point every step, while also pushing forward and turning, gives the
+    CoM no settled support to recover onto — the very reactivity that rescues a
+    stand destabilises a walk. This closes the map: across CPG-residual,
+    capture-point, ZMP-preview, and this reactive synthesis, no position-controlled
+    kinematic steerable walker reaches the full horizon. The genuine path is a
+    contact-constrained torque WBC that regulates the moving CoM/ZMP while walking
+    (foundation in ``force_balance.py``) or an RL policy that can stabilise such a
+    base — both beyond position-controlled kinematics, which is the lab's point.
+    """
+
+    name = "reactive-steerable"
+    step_duration = 0.34
+    nominal_width = 0.12      # half stance width (m)
+    step_lift = 0.05
+    capture_x = 1.0           # fore/aft capture weight (balance)
+    capture_y = 1.0           # lateral capture weight (balance)
+    max_step = 0.40           # reach clamp from the stance foot (m)
+    ankle_pitch_kp = 0.20
+    ankle_roll_kp = 0.25
+    ankle_kd = 0.05
+
+    def reset(self, model: G1Model) -> None:
+        super().reset(model)
+        self.ground = float(model.foot_pos("left")[2])
+        self.theta = float(model.observe(0.0).torso_rpy[2])
+        self.stance, self.swing = "right", "left"
+        self.t0 = 0.0
+        self.planted = {f: model.foot_pos(f).copy() for f in ("left", "right")}
+        self.swing_from = self.planted["left"].copy()
+        self.swing_to = self.planted["left"].copy()
+        self._first = True
+
+    def _lateral_sign(self, foot: str) -> float:
+        return 1.0 if foot == "left" else -1.0
+
+    def _plan_step(self, obs: Observation, cmd: Command) -> np.ndarray:
+        omega = np.sqrt(_GRAVITY / max(obs.com_z, 0.3))
+        c, s = np.cos(self.theta), np.sin(self.theta)
+        fwd_dir = np.array([c, s])
+        lat_dir = np.array([-s, c])
+        v = obs.com_vel_xy
+        # Capture point in the heading frame: react to where the body is going.
+        cap_fwd = self.capture_x * float(v @ fwd_dir) / omega
+        cap_lat = self.capture_y * float(v @ lat_dir) / omega
+        # Steering offsets: a commanded forward step + the swing-side stance width.
+        cmd_fwd = float(np.clip(cmd.forward_speed * self.step_duration, -0.16, 0.16))
+        lat = self._lateral_sign(self.swing) * self.nominal_width
+        target = (obs.com_xy
+                  + fwd_dir * (cap_fwd + cmd_fwd)
+                  + lat_dir * (cap_lat + lat))
+        # Clamp the reach from the stance foot so the IK target stays feasible.
+        stance_xy = self.planted[self.stance][:2]
+        d = target - stance_xy
+        r = float(np.linalg.norm(d))
+        if r > self.max_step:
+            target = stance_xy + d / r * self.max_step
+        return np.array([target[0], target[1], self.ground])
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        model = self.model
+        if self._first or (obs.t - self.t0) >= self.step_duration:
+            if not self._first:
+                self.planted[self.swing] = model.foot_pos(self.swing).copy()
+                self.stance, self.swing = self.swing, self.stance
+                self.theta += float(cmd.yaw_rate) * self.step_duration
+            self._first = False
+            self.t0 = obs.t
+            self.swing_from = model.foot_pos(self.swing).copy()
+            self.swing_to = self._plan_step(obs, cmd)
+
+        ph = float(np.clip((obs.t - self.t0) / self.step_duration, 0.0, 1.0))
+        sx = (1.0 - ph) * self.swing_from[:2] + ph * self.swing_to[:2]
+        sz = self.ground + self.step_lift * np.sin(np.pi * ph)
+        swing_target = np.array([sx[0], sx[1], sz])
+
+        roll, pitch, _ = obs.torso_rpy
+        rr, pr = obs.torso_ang_vel[0], obs.torso_ang_vel[1]
+        ap_fix = self.ankle_pitch_kp * pitch + self.ankle_kd * pr
+        ar_fix = self.ankle_roll_kp * roll + self.ankle_kd * rr
+
+        ctrl = self.stand.copy()
+        for foot, target in ((self.stance, self.planted[self.stance]),
+                             (self.swing, swing_target)):
+            angles = model.solve_leg_ik(foot, target)
+            for joint, value in zip(LEG_JOINTS[foot], angles):
+                ctrl[model.actuator(joint)] = value
+            ctrl[model.actuator(f"{foot}_ankle_pitch_joint")] += ap_fix
+            ctrl[model.actuator(f"{foot}_ankle_roll_joint")] += ar_fix
+        return ctrl
+
+
 class SteerableZMPWalk(ZMPPreviewWalk):
     """A *steerable* ZMP-preview walker — steering on the most balance-aware base.
 

@@ -344,3 +344,17 @@
   the curve does not fully develop before it topples: clean full-horizon steering
   remains the contact-constrained-WBC frontier. Covered by
   `test_steerable_zmp_plan_curves_and_walks`; suite at 28 gait_lab tests.
+- **Capstone — the synthesis attempt and the full map.** `ReactiveSteerableWalk`
+  unifies the two half-working ideas: every footstep target is the capture point
+  (balance, like `capture_step.py`) plus a commanded forward offset along a heading
+  that rotates with the yaw command (steering) — one reactive foot-placement lever.
+  Honest verdict (`test_reactive_steerable_walks_but_does_not_break_the_ceiling`):
+  it walks and responds to the command but is *less* stable than the open-loop
+  `steerable-zmp` (~1.2 s) — continuous reactive capture-stepping destabilises a
+  walk even though it rescues a stand. This closes the sweep: across CPG-residual,
+  capture-point, ZMP-preview, and this reactive synthesis, **no position-controlled
+  kinematic steerable walker reaches the full horizon**. Added a "full map" section
+  to the gait_lab README tying the whole investigation together (steering needs
+  foot placement; kinematic footsteps cap at ~1.5–2.5 s; the working balance win is
+  a capture step, not torque-mode standing; the frontier is a contact-constrained
+  torque WBC regulating a moving CoM/ZMP while stepping). Suite at 29 gait_lab tests.

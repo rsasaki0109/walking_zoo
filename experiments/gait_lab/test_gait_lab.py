@@ -468,6 +468,25 @@ def test_steerable_zmp_plan_curves_and_walks(model):
     assert m.forward_distance > 0.2
 
 
+def test_reactive_steerable_walks_but_does_not_break_the_ceiling(model):
+    # The synthesis attempt (capture step + steering through one reactive
+    # foot-placement law): it walks forward and responds to the command, but
+    # continuous reactive capture-stepping is LESS stable than the open-loop
+    # steerable-zmp -- closing the map that no position-controlled kinematic
+    # steerable walker reaches the full horizon.
+    from gait_lab import ReactiveSteerableWalk, SteerableZMPWalk
+
+    fwd = rollout(model, ReactiveSteerableWalk(), horizon=8.0, cmd=Command(0.12, 0.0))
+    # It walks forward (fast) before toppling...
+    assert fwd.forward_distance > 0.4
+    # ...but does not reach the full horizon (the kinematic ceiling holds)...
+    assert fwd.fell and fwd.survival_time < 4.0
+    # ...and is less stable than the (open-loop, smoother) steerable-zmp base.
+    zmp = pytest.importorskip("scipy") and rollout(
+        model, SteerableZMPWalk(0.12, 0.0), horizon=8.0)
+    assert zmp.survival_time > fwd.survival_time
+
+
 def test_capture_step_recovers_a_forward_push(model):
     # Push recovery that works: a forward shove topples the static position stand,
     # but a capture STEP (step the foot to the capture point) catches it. The

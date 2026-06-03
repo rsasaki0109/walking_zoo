@@ -28,6 +28,7 @@ from .controllers import (
     RLSteerableWalk,
     RLSteerableFootstepWalk,
     SteerableFootstepGait,
+    ReactiveSteerableWalk,
     CONTROLLERS,
 )
 from .harness import GaitHarness, rollout
@@ -50,6 +51,7 @@ __all__ = [
     "RLSteerableWalk",
     "RLSteerableFootstepWalk",
     "SteerableFootstepGait",
+    "ReactiveSteerableWalk",
     "CONTROLLERS",
     "GaitHarness",
     "rollout",

@@ -330,6 +330,36 @@ autonomy demo (`walking_zoo_bringup gait_lab_sil_nav2.launch.py`): the whole sta
 plans and the drive chain is verified end-to-end, but a robot that cannot turn
 cannot be steered to an arbitrary goal.
 
+## The full map: steering, balance, and where position control ends
+
+Pulling the threads together — this is the honest synthesis the testbed was built
+to produce. Two capabilities a useful robot needs, **steering** and **balance
+under disturbance**, and a complete sweep of where a *position-controlled*
+humanoid can and cannot deliver them:
+
+| approach | steers? | survives a shove / full horizon | why |
+|---|---|---|---|
+| `balanced-cpg` + RL residual (`rl-residual`) | no | full horizon straight | residual breaks the *lateral* ceiling but the rhythm is fixed |
+| command-conditioned RL (`rl-steerable`) | no (spirals) | full horizon | a residual on a fixed sinusoid has no lever on foot placement |
+| `steerable-footstep`, `steerable-zmp` | yes (plan curves) | ~1.5–2.5 s | foot placement steers, but kinematic footsteps have no force/ZMP balance |
+| `reactive-steerable` (capture step + steering) | yes | ~1.2 s | continuous reactive capture-stepping is *less* stable than a smooth plan |
+| capture step (`capture_step.py`) | n/a | **recovers** a forward shove to the horizon | the decision to *step* puts support back under the CoM |
+| torque ankle / CoM-WBC / contact-WBC (`force_balance.py`) | n/a | loses to the stiff stand | standing favours stiffness; open-loop gravity comp drifts |
+
+Three honest conclusions fall out. (1) **Steering needs foot placement** — the CPG
+substrate structurally cannot do it; footsteps can. (2) **Kinematic footstep
+walkers top out at ~1.5–2.5 s** — no choice of placement law (capture-point,
+ZMP-preview, reactive) carries a *steering* walk the full horizon, because none
+controls the ground-reaction force. (3) **The working balance win is a capture
+step, not torque-mode standing control** — force at the feet pays off in *motion*,
+and the one demonstrably-recovering move is stepping to the capture point. The
+genuine remaining frontier, mapped precisely and given its foundation here
+(`G1Model.set_torque_mode`, the contact-Jacobian WBC, the curved ZMP plan, the
+capture step), is a **contact-constrained torque WBC that regulates a moving
+CoM/ZMP while stepping** — leaving pure position control. That boundary *is* the
+result: this lab exists to find exactly where a position-controlled humanoid runs
+out, and for steerable, disturbance-robust walking, this is it.
+
 ## Running it
 
 `gait_lab` needs `mujoco` and the menagerie G1 model — neither is part of the
