@@ -2,5 +2,6 @@ out/
 __pycache__/
 *.pyc
 *.gif
-# ...except the committed hero artifact (regenerated in place by render_zoo_gif.py)
+# ...except the committed hero artifacts (regenerated in place by render_zoo_gif.py)
 !assets/gait_zoo.gif
+!assets/gait_zoo_push.gif

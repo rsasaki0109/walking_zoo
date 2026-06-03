@@ -25,6 +25,16 @@ and only `rl-residual` (CPG + a PPO residual) holds the full horizon. That sprea
 this lab exists to produce. Regenerate with `MUJOCO_GL=egl python3 render_zoo_gif.py`
 (add `--push 0.6` for the push-recovery cut).*
 
+![gait_lab gait zoo under a recurring shove](assets/gait_zoo_push.gif)
+
+*The same zoo under a recurring 0.6 m/s shove. Now **every** stand-and-walk
+controller topples — fastest first (`open-loop-cpg`, `capture-point` at ~1 s), the
+stiff stand and the RL walker last longest but still go down (~3–4 s). That is the
+lab's central finding made visible: regulating a stand cannot survive a real push,
+no matter the controller — the one move that recovers is to **step** (see
+`capture_step.py`, and the contact-QP WBC in `wbc_qp.py` that *certifies* "you must
+step" by going infeasible). Regenerate with `--push 0.6`.*
+
 ![gait_lab comparison montage](assets/gait_comparison.png)
 
 *Same robot, same 6 s, one row per algorithm (time runs left→right). Top to
