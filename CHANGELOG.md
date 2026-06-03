@@ -298,8 +298,14 @@
   torque (motor) mode in place (reversible), so a controller can command joint
   *torques* (ground-reaction / ZMP balance) the position gait structurally cannot
   — covered by `test_torque_mode_actuates_by_force`. `force_balance.py` is the
-  honest baseline on top of it: a naive ankle-strategy torque (gravity-comp
-  feedforward + compliant hold + lean feedback) does **not** beat a stiff
-  position-held ankle for a standing shove. The payoff needs whole-body CoM/ZMP
-  control (contact forces, hip + stepping strategies), not one feedback gain —
-  the documented next step, now that torque actuation is in place.
+  honest baseline on top of it, comparing three strategies under the same shove:
+  a stiff position stand, an ankle-strategy torque, and a whole-body CoM
+  controller (every leg joint in torque mode, a restoring CoM force mapped through
+  the CoM Jacobian, gravity-compensated each step via `mj_inverse`). **Neither**
+  force strategy beats the stiff position stand for a *standing* shove — two
+  instructive reasons: stiffness is itself resistance, and without the *contact*
+  Jacobian the unconstrained CoM Jacobian barely couples leg torque to CoM motion
+  (the CoM gain has ~no effect). The payoff is dynamic — a contact-constrained
+  whole-body controller (force-distribution QP) plus a capture *step*, which
+  position control cannot decide to take — the documented next rung, now that
+  torque actuation is in place.
