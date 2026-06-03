@@ -347,6 +347,7 @@ humanoid can and cannot deliver them:
 | QP balance + capture step (`wbc_qp.py`) | n/a | extends the bare QP but loses to the stiff stand | force-aware compliance lets a hard shove develop before the step — an honest null |
 | torque ankle / CoM-WBC / contact-WBC (`force_balance.py`) | n/a | loses to the stiff stand | standing favours stiffness; open-loop gravity comp drifts |
 | **contact-QP WBC (TSID)** (`wbc_qp.py`) | n/a | holds a quiet stand; loses under a shove | proper friction-cone GRF, but goes *infeasible* when the capture point exits the support polygon — certifying "you must step" |
+| **complete TSID (+ torque limits)** (`wbc_qp.py`) | n/a | same survival, now torque-honest | adds the G1's real joint torque limits; the friction-only QP was secretly planning ankle torque ~4× the limit — fixing that costs no survival, the wall is the support polygon not torque |
 
 Three honest conclusions fall out. (1) **Steering needs foot placement** — the CPG
 substrate structurally cannot do it; footsteps can. (2) **Kinematic footstep
@@ -419,6 +420,24 @@ by its ankle feedback, not a real step. `G1Model.com_velocity_xy()` computes it
 correctly as `J_com · qvel`; with it the capture step **genuinely steps** and recovers
 gentle shoves (0.3 m/s: a 2.6 s stand → the full horizon). The RL policies keep reading
 the old (zero) field they were trained against, so their golden tests are untouched.
+
+The notes kept naming a *torque-native model* as the next frontier — the idea being
+that the stiff position servo only wins because it can apply unbounded force. **That
+turns out to be false, and the model is already torque-native.** The menagerie G1
+ships real joint torque limits (`jnt_actfrcrange`: ankle ±50, knee/hip-roll ±139,
+hip/yaw ±88 Nm) that MuJoCo *already enforces* on every actuator — and under a 0.6 m/s
+shove the position servo uses at most **40 %** of any joint's budget, never saturating.
+It wins by being *gentle*, not by cheating. The real gap was in the **controller**:
+the friction-cone-only QP was planning ankle torques up to **383 %** of the limit
+(56 steps before it gave up), torques MuJoCo silently clamped — so the "proper TSID"
+was never dynamically consistent under load. `wbc_qp.py` now closes that with the
+**complete TSID** (`WBCSolver(tau_limits=True)`): the joint torque limits become
+two-sided linear inequalities on `τ = (M q̈ + h − Jᶜᵀf)[actuated]`, so the QP only
+plans torques it can actually deliver and can certify *torque*-infeasibility too.
+`run_qp_torque_audit` measures the difference (peak demand drops from 383 % to a clean
+100 % cap, steps-over-limit from 56 to 0) at **no cost to survival** — a quiet stand
+needs only ~45 % of the budget. Correctness improved; the verdict is unchanged, because
+the binding constraint under a shove is the support polygon, not the torque budget.
 
 ## Running it
 

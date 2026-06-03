@@ -83,7 +83,7 @@ class WBCSolver:
 
     def __init__(self, model: G1Model, mu: float = 0.7,
                  w_com=0.3, w_orient=0.0, w_posture=1.0, w_swing=4.0,
-                 eps_f=1e-4, eps_qdd=1e-6, fmin=1.0):
+                 eps_f=1e-4, eps_qdd=1e-6, fmin=1.0, tau_limits=False):
         import mujoco
         self._mj = mujoco
         self.m = model
@@ -94,11 +94,21 @@ class WBCSolver:
         self.w_com, self.w_orient, self.w_posture, self.w_swing = (
             w_com, w_orient, w_posture, w_swing)
         self.eps_f, self.eps_qdd, self.fmin = eps_f, eps_qdd, fmin
+        # When True the QP also constrains the actuated joint torques to the G1's
+        # real limits (jnt_actfrcrange: ankle +/-50, knee/hip-roll +/-139, ...),
+        # making it the *complete* TSID. Without this the QP happily plans ankle
+        # torques ~4x the limit that MuJoCo then silently clamps — see Experiment 4.
+        self.tau_limits = tau_limits
 
         # actuated dofs are 6..nv-1 (free base is dofs 0..5); map actuator->dof.
         self.act_dof = np.array(
             [int(self.M.jnt_dofadr[self.M.actuator_trnid[i, 0]])
              for i in range(self.M.nu)])
+        # real per-actuator torque bounds, from the joint actuatorfrcrange the
+        # menagerie G1 ships (and which MuJoCo already enforces on qfrc_actuator).
+        frc = np.array([self.M.jnt_actfrcrange[self.M.actuator_trnid[i, 0]]
+                        for i in range(self.M.nu)])
+        self.tau_lo, self.tau_hi = frc[:, 0].copy(), frc[:, 1].copy()
         self.foot_body = {f: mujoco.mj_name2id(self.M, mujoco.mjtObj.mjOBJ_BODY, b)
                           for f, b in FOOT_BODY.items()}
         self._Mbuf = np.zeros((self.nv, self.nv))
@@ -240,6 +250,25 @@ class WBCSolver:
         G = np.vstack(G_rows) if G_rows else None
         hg = np.array(h_rows) if h_rows else None
 
+        # ---- inequality: actuated joint torque limits (complete TSID) ----
+        # tau_act = (M qddot + h - Jc^T f)[actuated] is affine in x, so the real
+        # +/- limits become two-sided linear inequalities. This forbids the QP
+        # from planning torques MuJoCo would clamp (no silent dynamic-consistency
+        # break); the price is the QP can certify *torque-infeasible* too.
+        if self.tau_limits:
+            S = self.act_dof
+            A_tau = np.zeros((len(S), n))
+            A_tau[:, :nv] = Mm[S, :]
+            if nc:
+                A_tau[:, nv:] = -Jc_all[:, S].T
+            offset = h[S]
+            G_tau = np.vstack([A_tau, -A_tau])
+            h_tau = np.concatenate([self.tau_hi - offset, offset - self.tau_lo])
+            if G is None:
+                G, hg = G_tau, h_tau
+            else:
+                G, hg = np.vstack([G, G_tau]), np.concatenate([hg, h_tau])
+
         x = solve_qp(P, q, G, hg, A_eq, b_eq, solver="osqp",
                      eps_abs=1e-7, eps_rel=1e-7, max_iter=8000, polishing=True,
                      verbose=False)
@@ -260,6 +289,54 @@ def _all_actuator_names(model):
     import mujoco
     return [mujoco.mj_id2name(model.model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
             for i in range(model.model.nu)]
+
+
+def run_qp_torque_audit(model, horizon, fall_h, push_speed, push_at=0.3,
+                        direction=(1.0, 0.0), tau_limits=False):
+    """Run the QP stand-under-shove and AUDIT its torque demand.
+
+    Returns ``(survive_time, reason, steps_over_limit, max_tau_ratio)`` where the
+    ratio is ``max |tau_commanded| / actuatorfrcrange`` over the run. With
+    ``tau_limits=False`` (friction-cone-only QP) this exposes that the WBC plans
+    ankle torques several times the real limit — torques MuJoCo then silently
+    clamps, so the QP was never dynamically consistent. With ``tau_limits=True``
+    (the *complete* TSID) the ratio caps at 1.0 and ``steps_over_limit`` is 0:
+    the controller only plans torques it can actually deliver, at no real cost to
+    survival time — because the wall is the support polygon, not the torque budget."""
+    names = _all_actuator_names(model)
+    model.set_position_mode(names)
+    model.reset()
+    com0 = model.data.subtree_com[0].copy()
+    q_des = model.stand_targets.copy()
+    solver = WBCSolver(model, tau_limits=tau_limits)
+    lim = solver.tau_hi.copy()
+    model.set_torque_mode(names)
+    model.reset()
+    d = model.data
+    pushed = False
+    over = 0
+    max_ratio = 0.0
+    try:
+        for i in range(int(round(horizon / model.timestep))):
+            t = i * model.timestep
+            if not pushed and t >= push_at:
+                d.qvel[0] += push_speed * direction[0]
+                d.qvel[1] += push_speed * direction[1]
+                pushed = True
+            ctrl = solver.compute(com0, q_des=q_des)
+            if ctrl is None:
+                return t, "infeasible", over, max_ratio
+            ratio = float(np.max(np.abs(ctrl) / lim))
+            max_ratio = max(max_ratio, ratio)
+            if ratio > 1.001:
+                over += 1
+            d.ctrl[:] = ctrl
+            model.step()
+            if float(d.qpos[2]) < fall_h:
+                return t, "toppled", over, max_ratio
+        return horizon, "held", over, max_ratio
+    finally:
+        model.set_position_mode(names)
 
 
 # ---------------------------------------------------------------------------
@@ -572,6 +649,19 @@ def main():
         print(f"  {sp:.1f} m/s   stiff {stiff:4.2f}s   bare-QP {bare:4.2f}s ({why})"
               f"   capture-step {cs:4.2f}s   QP+step {whole:4.2f}s")
 
+    print("\nExperiment 4 — is the QP torque-honest? The menagerie G1 already ships\n"
+          "real joint torque limits (jnt_actfrcrange: ankle +/-50, knee +/-139 Nm)\n"
+          "that MuJoCo enforces on every actuator. Audit what the QP actually asks\n"
+          "for, friction-cone-only vs the complete TSID (+torque-limit constraints):\n")
+    for sp in (0.0, 0.6, 1.0):
+        for tl in (False, True):
+            tt, why, over, mr = run_qp_torque_audit(
+                model, args.horizon, args.fall_height, sp, tau_limits=tl)
+            kind = "complete-TSID " if tl else "friction-only "
+            print(f"  {sp:.1f} m/s  {kind}  {tt:5.2f}s ({why:10s})  "
+                  f"steps over torque limit {over:4d}   peak demand "
+                  f"{mr * 100:5.0f}% of limit")
+
     print(
         "\nVerdict — honest, including the negatives, which is the lab's job. The\n"
         "contact-QP WBC (proper TSID, the 'missing piece' the earlier notes named)\n"
@@ -587,7 +677,15 @@ def main():
         "yield of this thread: a built-and-tested contact-QP WBC whose infeasibility\n"
         "pinpoints the true boundary, and a bug it surfaced — the capture-point\n"
         "velocity term was silently zero lab-wide (no subtree-velocity sensor;\n"
-        "G1Model.com_velocity_xy fixes it), so the capture step now genuinely steps.")
+        "G1Model.com_velocity_xy fixes it), so the capture step now genuinely steps.\n"
+        "\nExperiment 4's coda on the 'torque-native model' frontier the notes named:\n"
+        "the model already IS torque-native (jnt_actfrcrange is enforced). The gap was\n"
+        "the CONTROLLER — the friction-only QP planned ankle torques ~4x the limit that\n"
+        "MuJoCo silently clamped, so it was never the consistent WBC it claimed. Adding\n"
+        "the torque-limit constraints (the complete TSID) fixes that fiction at no cost\n"
+        "to survival, but does NOT move the wall: a quiet stand needs only ~45% of the\n"
+        "torque budget and the stiff servo wins on ~40% — the binding limit is the\n"
+        "support polygon, not torque. Correctness improved; the verdict is unchanged.")
 
 
 if __name__ == "__main__":

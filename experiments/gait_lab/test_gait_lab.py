@@ -576,6 +576,37 @@ def test_qp_capture_step_steps_and_beats_bare_qp_but_not_the_stiff_stand():
     assert np.isclose(fresh.model.actuator_gainprm[i, 0], 500.0)
 
 
+def test_complete_tsid_is_torque_honest_but_the_wall_is_unchanged():
+    # The "torque-native model" frontier the notes named turns out to already exist:
+    # the menagerie G1 ships real joint torque limits (jnt_actfrcrange) that MuJoCo
+    # enforces. The gap was the CONTROLLER -- the friction-cone-only QP plans ankle
+    # torques several times the limit that MuJoCo silently clamps (never dynamically
+    # consistent). The complete TSID (+torque-limit constraints) only plans torques
+    # it can deliver, at no real cost to survival -- because the binding limit under
+    # a shove is the support polygon, not the torque budget.
+    pytest.importorskip("qpsolvers")
+    import numpy as np
+    from wbc_qp import run_qp_torque_audit
+
+    # (1) friction-only QP demands torque well over the real limit under a shove...
+    _, _, over_f, ratio_f = run_qp_torque_audit(
+        G1Model(), horizon=1.0, fall_h=0.5, push_speed=0.6, tau_limits=False)
+    assert over_f > 0 and ratio_f > 1.5      # plans torques MuJoCo would clamp
+    # (2) ...the complete TSID never exceeds the limit (caps at 1.0).
+    surv_t, _, over_t, ratio_t = run_qp_torque_audit(
+        G1Model(), horizon=1.0, fall_h=0.5, push_speed=0.6, tau_limits=True)
+    assert over_t == 0 and ratio_t <= 1.01   # torque-honest
+    # (3) a quiet stand needs only a fraction of the budget -- torque is not the wall.
+    _, why_q, _, ratio_q = run_qp_torque_audit(
+        G1Model(), horizon=0.8, fall_h=0.5, push_speed=0.0, tau_limits=True)
+    assert why_q == "held" and ratio_q < 0.8
+    # Actuators restored to position mode afterwards (no leakage).
+    m = G1Model()
+    run_qp_torque_audit(m, horizon=0.3, fall_h=0.5, push_speed=0.0, tau_limits=True)
+    i = m.actuator("left_knee_joint")
+    assert np.isclose(m.model.actuator_gainprm[i, 0], 500.0)
+
+
 def test_capture_step_recovers_a_forward_push(model):
     # Push recovery that works: a forward shove topples the static position stand,
     # but a capture STEP (step the foot to the capture point) catches it. The

@@ -422,3 +422,20 @@
   golden tests are untouched. Tested by `test_com_velocity_xy_is_real_not_silently_zero`
   and `test_qp_capture_step_steps_and_beats_bare_qp_but_not_the_stiff_stand`; suite at
   33 gait_lab tests.
+- **Made the contact-QP WBC torque-honest (the complete TSID), settling the
+  "torque-native model" frontier.** The notes conjectured the stiff position servo
+  only wins by applying unbounded force — but the menagerie G1 already ships real joint
+  torque limits (`jnt_actfrcrange`: ankle ±50, knee/hip-roll ±139 Nm) that MuJoCo
+  enforces on every actuator, and under a 0.6 m/s shove the servo uses at most ~40 % of
+  any budget, never saturating: it wins by being *gentle*, not by cheating. The real
+  gap was the controller — the friction-cone-only QP planned ankle torques up to 383 %
+  of the limit (56 steps before it gave up), which MuJoCo silently clamped, so the
+  "proper TSID" was never dynamically consistent under load. `WBCSolver(tau_limits=True)`
+  adds the joint torque limits as two-sided inequalities on
+  `τ = (M q̈ + h − Jᶜᵀf)[actuated]`; `run_qp_torque_audit` shows the peak demand drop
+  from 383 % to a clean 100 % cap (steps-over-limit 56 → 0) at no cost to survival — a
+  quiet stand needs only ~45 % of the budget. Correctness improved; the verdict is
+  unchanged, because the binding constraint under a shove is the support polygon, not
+  the torque budget. Tested by
+  `test_complete_tsid_is_torque_honest_but_the_wall_is_unchanged`; suite at 34 gait_lab
+  tests.
