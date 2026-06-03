@@ -394,6 +394,52 @@ def test_steerable_footstep_steers(model):
     assert left_yaw > straight_yaw + 0.1
 
 
+def test_torque_mode_actuates_by_force(model):
+    # Force-control foundation: an actuator switched to torque mode applies its
+    # ctrl value as a joint TORQUE (not a position target), and switching back
+    # restores position-servo behaviour. This is what lets a controller command
+    # ankle/CoM torques (ground-reaction / ZMP balance) the position gait cannot.
+    import numpy as np
+
+    knee = "left_knee_joint"
+    i = model.actuator(knee)
+    qadr = int(model.model.jnt_qposadr[model.model.actuator_trnid[i, 0]])
+
+    # Torque mode: a nonzero ctrl is a torque, so the joint accelerates that way.
+    model.set_torque_mode([knee])
+    try:
+        model.reset()
+        q0 = float(model.data.qpos[qadr])
+        for _ in range(40):
+            model.data.ctrl[:] = 0.0
+            model.data.ctrl[i] = 8.0   # constant joint torque
+            model.step()
+        moved_pos = float(model.data.qpos[qadr]) - q0
+
+        model.reset()
+        q0b = float(model.data.qpos[qadr])
+        for _ in range(40):
+            model.data.ctrl[:] = 0.0
+            model.data.ctrl[i] = -8.0  # opposite torque
+            model.step()
+        moved_neg = float(model.data.qpos[qadr]) - q0b
+    finally:
+        model.set_position_mode([knee])
+
+    # Opposite torques move the joint in opposite directions, by a real amount.
+    assert moved_pos * moved_neg < 0
+    assert abs(moved_pos) > 1e-3 and abs(moved_neg) > 1e-3
+
+    # Back in position mode: a position target above the current angle is tracked.
+    model.reset()
+    target = model.stand_targets.copy()
+    target[i] += 0.2
+    for _ in range(200):
+        model.data.ctrl[:] = target
+        model.step()
+    assert float(model.data.qpos[qadr]) > float(model.stand_qpos[qadr]) + 0.05
+
+
 def test_push_is_deterministic_and_disturbing(model):
     # A mid-rollout shove is reproducible for a given (push_seed, speed) and makes
     # a gait fall sooner than the same unshoved rollout — the basis of the

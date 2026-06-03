@@ -149,6 +149,39 @@ class G1Model:
     def has_actuator(self, name: str) -> bool:
         return name in self._name2act
 
+    # -- actuation mode (force control) ------------------------------------
+    def set_torque_mode(self, names) -> None:
+        """Switch the named actuators from position servos to *torque* (motor)
+        mode, in place. The G1 ships position actuators (force = kp*(target-q) +
+        damping); this is the foundation for *force-aware* control — a torque-mode
+        actuator's ``ctrl`` value IS the joint torque, so a controller can command
+        ankle/CoM torques (ground-reaction / ZMP balance) that position control
+        structurally cannot. Switch the rest back with :meth:`set_position_mode`.
+
+        Done by flipping the MuJoCo control law to ``force = gain * ctrl`` with
+        ``gain=1`` and no position/velocity bias (``gaintype=FIXED``,
+        ``biastype=NONE``). Reversible and per-actuator.
+        """
+        mj = self._mj
+        for name in names:
+            i = self._name2act[name]
+            self.model.actuator_gaintype[i] = mj.mjtGain.mjGAIN_FIXED
+            self.model.actuator_biastype[i] = mj.mjtBias.mjBIAS_NONE
+            self.model.actuator_gainprm[i, :3] = [1.0, 0.0, 0.0]
+            self.model.actuator_biasprm[i, :3] = [0.0, 0.0, 0.0]
+        self._torque_acts = set(self._name2act[n] for n in names)
+
+    def set_position_mode(self, names, kp: float = 500.0, kd: float = 5.0) -> None:
+        """Restore the named actuators to position-servo mode (the G1 default:
+        ``force = kp*(target - q) - kd*qvel``)."""
+        mj = self._mj
+        for name in names:
+            i = self._name2act[name]
+            self.model.actuator_gaintype[i] = mj.mjtGain.mjGAIN_FIXED
+            self.model.actuator_biastype[i] = mj.mjtBias.mjBIAS_AFFINE
+            self.model.actuator_gainprm[i, :3] = [kp, 0.0, 0.0]
+            self.model.actuator_biasprm[i, :3] = [0.0, -kp, -kd]
+
     # -- physics -----------------------------------------------------------
     def reset(self) -> None:
         """Reset to the standing keyframe (index 0 = 'stand')."""

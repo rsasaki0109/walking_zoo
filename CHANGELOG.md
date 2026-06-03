@@ -293,3 +293,13 @@
   frames and write a rolling filmstrip, and `tools/capture_sil_live.py` drives the
   robot through a command sequence over the real runtime + safety + bridge path
   and saves the SIL G1 as actually driven through ROS, not a harness rollout.
+- Started the **force-control** rung the steering / push-recovery frontier needs:
+  `G1Model.set_torque_mode` switches chosen actuators from position servos to
+  torque (motor) mode in place (reversible), so a controller can command joint
+  *torques* (ground-reaction / ZMP balance) the position gait structurally cannot
+  — covered by `test_torque_mode_actuates_by_force`. `force_balance.py` is the
+  honest baseline on top of it: a naive ankle-strategy torque (gravity-comp
+  feedforward + compliant hold + lean feedback) does **not** beat a stiff
+  position-held ankle for a standing shove. The payoff needs whole-body CoM/ZMP
+  control (contact forces, hip + stepping strategies), not one feedback gain —
+  the documented next step, now that torque actuation is in place.
