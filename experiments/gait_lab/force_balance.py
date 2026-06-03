@@ -7,23 +7,26 @@ fixed commanded angle, so under a disturbance they cannot push back — the ankl
 is the body's primary balance actuator and position control gives it away.
 
 This switches leg joints to **torque** mode (:meth:`G1Model.set_torque_mode`) and
-pits two force strategies against the stiff position stand under the same shove:
-an **ankle strategy** (ankle torque opposing the torso lean) and a **whole-body
-CoM** controller (every leg joint in torque mode, a restoring CoM force mapped to
-joint torques through the CoM Jacobian, gravity-compensated each step via
-``mj_inverse``).
+pits three force strategies against the stiff position stand under the same shove:
+an **ankle strategy**, a **CoM-Jacobian** whole-body controller, and the proper
+**contact-Jacobian** WBC (a restoring CoM force split across the feet and mapped
+to joint torques through each foot's *contact* Jacobian, gravity-compensated each
+step via ``mj_inverse``).
 
     python3 force_balance.py --speeds 0.3 0.5 0.7
 
 It establishes the *foundation* (torque actuation in gait_lab) and is honest about
-how far it gets: **neither** naive force strategy beats the stiff position stand
-for a *standing* shove. Two instructive reasons — stiffness is itself resistance
-(a 500-gain ankle just resists), and without the **contact** Jacobian the
-unconstrained CoM Jacobian barely couples leg torque to CoM motion (the CoM gain
-has almost no effect). The force-control payoff is *dynamic*: a contact-constrained
-whole-body controller (force-distribution QP) plus a capture **step** — catching a
-big shove by stepping, which position control cannot decide to do. That is the
-real next rung; this script is its foothold and honest floor.
+how far it gets: **none** of the torque strategies — not even the proper
+contact-Jacobian WBC — beats the stiff position stand for a *standing* shove. The
+reason is fundamental for standing on a position-controlled model: the 500-gain
+servo's feedback is very effective, and an open-loop gravity feedforward drifts
+(it does not even hold the stand without high-gain posture feedback that just
+recreates the servo). Standing favours stiffness. The genuine force-control payoff
+is *dynamic* — regulating a *moving* CoM/ZMP while walking, where position IK
+cannot — and the working balance improvement is the capture **step**
+(``capture_step.py``), which recovers shoves the stiff stand cannot. Force at the
+feet pays off in motion, not in standing — this script is the honest floor that
+maps exactly why.
 """
 
 from __future__ import annotations
@@ -194,6 +197,76 @@ def run_torque_ankle(model: G1Model, speed: float, theta: float,
         model.set_position_mode(ANKLES)
 
 
+def run_wbc_contact(model: G1Model, speed: float, theta: float,
+                    horizon: float, fall_h: float,
+                    kp_com=2600.0, kd_com=320.0,
+                    post_kp=260.0, post_kd=10.0) -> float:
+    """Contact-constrained whole-body balance — the fix the CoM-Jacobian version
+    needed. The CoM-Jacobian controller failed because, with the feet planted, the
+    *unconstrained* Jacobian barely couples leg torque to CoM motion. The real
+    coupling is through the **ground reaction at the feet**. So this forms a
+    desired horizontal restoring force on the CoM, splits it across the two
+    *contact points*, and maps each foot force to joint torques through that
+    foot's **contact (site) Jacobian** ``tau += J_foot[:, leg]^T @ f`` — the legs
+    push the ground to move the CoM, which is how a real WBC balances. Gravity is
+    compensated each step via ``mj_inverse``; a light posture task regularises."""
+    import mujoco
+
+    M = model.model
+    leg_acts = [model.actuator(n) for n in LEG_ACTUATORS]
+    leg_dofs = np.array([int(M.jnt_dofadr[M.actuator_trnid[a, 0]]) for a in leg_acts])
+    leg_qadr = [int(M.jnt_qposadr[M.actuator_trnid[a, 0]]) for a in leg_acts]
+    stand_q = np.array([float(model.stand_qpos[q]) for q in leg_qadr])
+    foot_sites = [model._foot_site["left"], model._foot_site["right"]]
+
+    model.set_position_mode(LEG_ACTUATORS)
+    model.reset()
+    stand = model.stand_targets.copy()
+    for _ in range(int(round(0.5 / model.timestep))):
+        model.data.ctrl[:] = stand
+        model.step()
+    com_ref = model.data.subtree_com[0, :2].copy()
+
+    model.set_torque_mode(LEG_ACTUATORS)
+    model.reset()
+    _push(model, speed, theta)
+    d = model.data
+    jacp = np.zeros((3, M.nv))
+    try:
+        for i in range(int(round(horizon / model.timestep))):
+            mujoco.mj_forward(M, d)
+            d.qacc[:] = 0.0
+            mujoco.mj_inverse(M, d)
+            grav = d.qfrc_inverse.copy()
+
+            com = d.subtree_com[0, :2]
+            com_vel = d.subtree_linvel[0, :2] if hasattr(d, "subtree_linvel") \
+                else d.qvel[:2]
+            # Desired horizontal restoring force on the CoM, split across both feet.
+            F = np.zeros(3)
+            F[:2] = kp_com * (com_ref - com) - kd_com * np.asarray(com_vel)
+            f_each = F / len(foot_sites)
+
+            tau = np.zeros(len(leg_acts))
+            for site in foot_sites:
+                mujoco.mj_jacSite(M, d, jacp, None, site)
+                tau += jacp[:, leg_dofs].T @ f_each
+            q = np.array([float(d.qpos[qa]) for qa in leg_qadr])
+            qd = np.array([float(d.qvel[dv]) for dv in leg_dofs])
+            tau_post = post_kp * (stand_q - q) - post_kd * qd
+
+            ctrl = stand.copy()
+            for k, a in enumerate(leg_acts):
+                ctrl[a] = float(grav[leg_dofs[k]]) + float(tau[k]) + float(tau_post[k])
+            d.ctrl[:] = ctrl
+            model.step()
+            if float(d.qpos[2]) < fall_h:
+                return i * model.timestep
+        return horizon
+    finally:
+        model.set_position_mode(LEG_ACTUATORS)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--speeds", type=float, nargs="*", default=[0.3, 0.5, 0.7, 0.9])
@@ -203,31 +276,36 @@ def main():
     args = ap.parse_args()
 
     model = G1Model()
-    print("balance under a shove — three actuation strategies on the same robot:\n"
-          "  position : every joint a stiff position servo (the gait_lab default)\n"
-          "  ankle    : ankles in torque mode running an ankle strategy\n"
-          "  wbc-com  : every leg joint in torque mode, restoring force mapped\n"
-          "             through the CoM Jacobian (gravity comp via mj_inverse)\n")
-    print(f"  {'shove':>7} | {'position':>10} | {'ankle':>10} | {'wbc-com':>10}")
+    print("balance under a shove — four actuation strategies on the same robot:\n"
+          "  position    : every joint a stiff position servo (the gait_lab default)\n"
+          "  ankle       : ankles in torque mode running an ankle strategy\n"
+          "  wbc-com     : leg torques from the (unconstrained) CoM Jacobian\n"
+          "  wbc-contact : leg torques from the CONTACT (foot) Jacobians + force\n"
+          "                split, gravity comp via mj_inverse — the proper WBC\n")
+    print(f"  {'shove':>7} | {'position':>9} | {'ankle':>8} | {'wbc-com':>8} | "
+          f"{'wbc-contact':>11}")
     for speed in args.speeds:
-        pos, tor, wbc = [], [], []
+        pos, tor, wc, wk = [], [], [], []
         for k in range(args.trials):
             theta = 2.0 * np.pi * k / args.trials
             pos.append(run_position(model, speed, theta, args.horizon, args.fall_height))
             tor.append(run_torque_ankle(model, speed, theta, args.horizon, args.fall_height))
-            wbc.append(run_wbc_com(model, speed, theta, args.horizon, args.fall_height))
-        print(f"  {speed:4.1f} m/s | {np.mean(pos):7.2f}s  | {np.mean(tor):7.2f}s  "
-              f"| {np.mean(wbc):7.2f}s")
-    print("\n  Honest read: torque actuation works (the legs are now force, not\n"
-          "  angle), but neither a naive ankle strategy NOR a whole-body CoM-Jacobian\n"
-          "  controller beats a stiff position stand for a *standing* shove. Two\n"
-          "  reasons, both instructive: (1) stiffness IS resistance — a 500-gain\n"
-          "  ankle simply resists a push; (2) without the CONTACT Jacobian the\n"
-          "  unconstrained CoM Jacobian barely couples leg torque to CoM motion\n"
-          "  (the com gain has ~no effect). The real payoff is dynamic: a proper\n"
-          "  contact-constrained WBC (force-distribution QP) plus a capture STEP —\n"
-          "  catching a big shove by stepping, which position control cannot decide\n"
-          "  to do. That is the next rung; this is its foundation and honest floor.")
+            wc.append(run_wbc_com(model, speed, theta, args.horizon, args.fall_height))
+            wk.append(run_wbc_contact(model, speed, theta, args.horizon, args.fall_height))
+        print(f"  {speed:4.1f} m/s | {np.mean(pos):6.2f}s  | {np.mean(tor):5.2f}s  "
+              f"| {np.mean(wc):5.2f}s  | {np.mean(wk):7.2f}s")
+    print("\n  Honest read: torque actuation works, but NO torque-mode standing\n"
+          "  strategy here — ankle, CoM-Jacobian, or the proper CONTACT-Jacobian WBC\n"
+          "  (gravity comp via mj_inverse, foot-force split through the contact\n"
+          "  Jacobians) — beats the stiff position stand. The reason is fundamental\n"
+          "  for *standing* on a position-controlled model: the 500-gain servo's\n"
+          "  feedback is very effective, and an open-loop gravity feedforward drifts\n"
+          "  (it does not even hold the stand without high-gain posture feedback that\n"
+          "  just recreates the servo). Standing favours stiffness. The genuine\n"
+          "  force-control payoff is DYNAMIC — regulating a *moving* CoM/ZMP while\n"
+          "  walking, where position IK cannot — and the working balance improvement\n"
+          "  is the capture STEP (see capture_step.py), which recovers shoves the\n"
+          "  stiff stand cannot. Force at the feet pays off in motion, not in standing.")
 
 
 if __name__ == "__main__":

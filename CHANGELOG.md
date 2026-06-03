@@ -309,6 +309,18 @@
   whole-body controller (force-distribution QP) plus a capture *step*, which
   position control cannot decide to take — the documented next rung, now that
   torque actuation is in place.
+- Implemented the proper **contact-Jacobian whole-body controller**
+  (`run_wbc_contact` in `force_balance.py`): a restoring CoM force split across
+  the feet and mapped to joint torques through each foot's *contact* (site)
+  Jacobian, gravity-compensated each step via `mj_inverse`. The finding sharpens
+  and becomes multi-method: **none** of the torque-mode standing strategies —
+  ankle, CoM-Jacobian, or the proper contact-Jacobian WBC — beats the stiff
+  position stand for a *standing* shove, because standing favours stiffness (the
+  500-gain servo's feedback is very effective) and an open-loop gravity
+  feedforward drifts (it does not even hold the stand without high-gain posture
+  feedback that just recreates the servo). Force at the feet pays off in *motion*,
+  not in standing — the working balance win is the capture step, and a contact-WBC's
+  place is regulating a moving CoM/ZMP inside a walker.
 - **Push recovery that works — a capture step.** Following the force-balance
   finding (in-place strategies cannot beat a stiff stand; the missing ingredient
   is the decision to *step*, not torque), `capture_step.py` holds a normal stand
