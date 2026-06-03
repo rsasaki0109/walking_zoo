@@ -440,6 +440,25 @@ def test_torque_mode_actuates_by_force(model):
     assert float(model.data.qpos[qadr]) > float(model.stand_qpos[qadr]) + 0.05
 
 
+def test_capture_step_recovers_a_forward_push(model):
+    # Push recovery that works: a forward shove topples the static position stand,
+    # but a capture STEP (step the foot to the capture point) catches it. The
+    # recovery is the *decision to step*, realised with the same position IK --
+    # the honest, working rung the in-place force strategies could not reach.
+    from capture_step import run_capture_step, run_stand
+
+    speed, theta, horizon = 0.4, 0.0, 4.0  # forward shove
+    stand = run_stand(model, speed, theta, horizon, fall_h=0.5)
+    step = run_capture_step(model, speed, theta, horizon, fall_h=0.5)
+    # The static stand topples well before the horizon...
+    assert stand < horizon - 0.5
+    # ...and the capture step survives markedly longer (here, the full horizon).
+    assert step > stand + 1.0
+    # Deterministic.
+    again = run_capture_step(model, speed, theta, horizon, fall_h=0.5)
+    assert step == pytest.approx(again)
+
+
 def test_push_is_deterministic_and_disturbing(model):
     # A mid-rollout shove is reproducible for a given (push_seed, speed) and makes
     # a gait fall sooner than the same unshoved rollout — the basis of the

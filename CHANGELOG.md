@@ -309,3 +309,15 @@
   whole-body controller (force-distribution QP) plus a capture *step*, which
   position control cannot decide to take — the documented next rung, now that
   torque actuation is in place.
+- **Push recovery that works — a capture step.** Following the force-balance
+  finding (in-place strategies cannot beat a stiff stand; the missing ingredient
+  is the decision to *step*, not torque), `capture_step.py` holds a normal stand
+  until a shove drives the capture point `xi = com + com_vel/omega` outside the
+  feet, then takes one (or, on re-trigger, several) step(s): it swings the foot on
+  the falling side to the reach-clamped capture point via the existing leg IK
+  while the stance foot holds. A forward shove that topples the static
+  position stand at ~2.1 s is recovered to the full horizon by the capture step --
+  the honest, working rung of push recovery (the earlier CPG-residual push-training
+  result was negative), and the reactive-footstep substrate a force-aware gait
+  would build on. Covered by `test_capture_step_recovers_a_forward_push`; suite at
+  27 gait_lab tests.

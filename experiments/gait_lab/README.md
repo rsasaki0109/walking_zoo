@@ -267,6 +267,24 @@ feedforward — the gait-class ceiling again, one level up. The benchmark and th
 `--push-*` training hooks are kept so the next substrate can be measured against
 them.
 
+**The working answer — a capture step.** `capture_step.py` is the positive
+result the negative one pointed to. The missing ingredient for push recovery was
+never torque (see `force_balance.py`: in-place ankle / whole-body-CoM strategies
+cannot beat a stiff stand) — it is the *decision to step*. It holds a normal
+stand until a shove drives the **capture point** `xi = com + com_vel/omega`
+outside the feet, then steps the foot on the falling side to the (reach-clamped)
+capture point via the same leg IK the footstep walkers use, putting support back
+under the falling CoM. A forward shove that topples the static stand at ~2.1 s is
+recovered to the full horizon. It is not bullet-proof (a backward shove is still
+hard, and a 1 m/s shove needs running, not one step), but it is the honest,
+working rung — and the reactive-footstep substrate a force-aware steerable gait
+would build on.
+
+```bash
+python3 capture_step.py --speeds 0.4 0.6 0.8 1.0   # static stand vs capture step
+python3 force_balance.py                            # why in-place force does not suffice
+```
+
 ## Steering (a substrate ladder, and where position control runs out)
 
 The `rl-residual` gait breaks the *survival* ceiling, but it only ever walks one
