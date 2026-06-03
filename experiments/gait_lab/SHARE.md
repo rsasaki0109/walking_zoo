@@ -45,7 +45,7 @@ stand — the model-based QP can. But apply the same audit to *walking* and the 
 does NOT flip: position tracking genuinely beats torque there. Standing balance was a
 crutch; walking authority was real.
 
-It's a research playground next to a ROS2 walking runtime, not a product. ~48 tests,
+It's a research playground next to a ROS2 walking runtime, not a product. ~50 tests,
 every controller reproducible, the GIFs regenerate from one script. Happy to take
 holes in the methodology — finding them is the point.
 
@@ -129,6 +129,11 @@ benchmarks, negatives included: https://github.com/rsasaki0109/walking_zoo
   capture step recovers a forward shove to 0.35 m/s; the QP-balance-then-step
   synthesis (`qp-capture-step`) never recovers but *doubles* the bare QP's time-to-fall
   (~1.2 s plateau vs ~0.55 s) — force authority delays the fall, only stepping recovers.
+- The lab's recurring "~1 s collapse" is now *predicted* (`fall_time_theory.py`): the
+  push frontier is geometry — `v* = d·ω` matches the measured lateral/backward radii to
+  ~5% (forward is ankle-torque-limited) — and the fall clock is leg length, `1/ω =
+  √(z/g) ≈ 0.27 s`, so the ~1 s ceiling is a few of those clocks, controller-independent.
+  That's *why* force-vs-position never moved the wall.
 - `dcm-walk` (continuous DCM step adjustment) walks 2nd-farthest of the steppers
   (0.81 m) but its closed loop buys no survival on position control — the open-loop
   zmp-preview outlives it. The DCM's robustness edge needs force authority; an honest

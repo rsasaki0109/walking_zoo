@@ -547,3 +547,19 @@
   `test_detail_time_parses_the_survival_time_from_every_adapter_format` and
   `test_survival_curve_separates_recovering_from_merely_delaying`; suite at 48 gait_lab
   tests.
+- **Predicted the lab's recurring ~1 s collapse from first principles
+  (`fall_time_theory.py`, `render_fall_theory.py`).** The "balance is lost in about a
+  second, for every controller" finding repeated across a dozen experiments becomes a
+  prediction from the LIPM's two quantities. *Claim 1 — the push frontier is geometry*:
+  the max in-place-recoverable kick is `v* = d·ω` (support margin × `ω=√(g/z)`), which
+  matches the measured frontier within ~5 % **laterally (0.56 vs 0.57 m/s) and backward
+  (0.20 vs 0.20)** where the support polygon binds, and **over-predicts forward (0.44 vs
+  0.28)** where ankle-pitch torque binds instead — the gap localises which limit is
+  active (corroborating `wbc_qp.py` Experiment 4's torque budget). *Claim 2 — the fall
+  clock is leg length, not the controller*: the measured stiff-stand fall time asymptotes
+  to **~2/ω ≈ 0.53 s** under hard shoves with the free-inverted-pendulum topple a strict
+  lower bound beneath it, so the universal **~1 s ceiling is a few multiples of `1/ω =
+  √(z/g) ≈ 0.27 s`** — which is why force-vs-position control never moved the wall. Tested
+  by `test_capturability_predicts_the_frontier_anisotropy_from_geometry` and
+  `test_free_inverted_pendulum_topple_is_the_two_over_omega_floor_and_a_lower_bound`;
+  suite at 50 gait_lab tests.

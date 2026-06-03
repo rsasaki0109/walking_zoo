@@ -939,6 +939,55 @@ def test_survival_curve_separates_recovering_from_merely_delaying():
     assert t_qp_step < H            # ...yet still does not recover the horizon
 
 
+# --- fall-time theory: the ~1s collapse predicted from 1/omega (fall_time_theory.py)
+
+def test_capturability_predicts_the_frontier_anisotropy_from_geometry():
+    # v* = d*omega (the largest in-place-recoverable kick) is set by the support
+    # margin. The lab's measured push frontier is anisotropic for exactly this
+    # reason: the lateral/forward margins are wide, the backward heel margin narrow.
+    # Pure geometry from the settled stand -- assert the ordering and the timescale.
+    import numpy as np
+    from fall_time_theory import lipm_capturability
+
+    cap = lipm_capturability(G1Model())
+    # the LIPM clock 1/omega = sqrt(z/g) is ~0.27s for this CoM height...
+    assert cap["tau"] == pytest.approx(0.266, abs=0.03)
+    assert cap["omega"] == pytest.approx(1.0 / cap["tau"], rel=1e-3)
+    # ...and the capturability kick ranks lateral > forward > backward (wide stance,
+    # long foot, narrow heel) -- the frontier's measured shape.
+    v = cap["vstar"]
+    assert v["lat"] > v["fwd"] > v["back"]
+    # backward is the worst case and v*=d*omega lands near the measured ~0.20 m/s.
+    assert v["back"] == pytest.approx(0.20, abs=0.04)
+
+
+def test_free_inverted_pendulum_topple_is_the_two_over_omega_floor_and_a_lower_bound():
+    # Claim 2: once balance is lost the fall clock is 1/omega, not the controller. The
+    # free inverted-pendulum topple from upright is ~2/omega (~0.53s) and is a LOWER
+    # bound on the measured stiff-stand fall (the servo can only delay within the
+    # leg-length budget, never escape it).
+    from fall_time_theory import (lipm_capturability, fall_angle,
+                                  free_ip_fall_time, measure_stiff_fall)
+
+    model = G1Model()
+    cap = lipm_capturability(model)
+    omega, tau = cap["omega"], cap["tau"]
+    phi_fall = fall_angle(cap["pelvis0"], 0.5)
+    # the free-IP topple shortens monotonically as the kick grows (more momentum =
+    # faster fall) -- the fall is governed by the divergence, not a fixed duration.
+    t_soft = free_ip_fall_time(omega, 0.3, phi_fall)
+    t_hard = free_ip_fall_time(omega, 1.3, phi_fall)
+    assert t_hard < t_soft
+    # a hard kick topples sooner in the free model than the robot measures, because
+    # the real stiff servo fights the fall the whole way down: free-IP is a strict
+    # LOWER bound on the measured fall.
+    (_, t_meas), = measure_stiff_fall(model, [1.3])
+    assert t_hard < t_meas
+    # and the measured hard-kick fall asymptotes to ~2/omega (the leg-length topple
+    # floor) -- the universal ~1s ceiling is a few of these clocks, controller-free.
+    assert t_meas == pytest.approx(2 * tau, abs=0.15)
+
+
 # --- adaptive step duration on restricted footholds (adaptive_step.py) ------------
 # A from-paper port of "Adaptive Step Duration for Accurate Foot Placement"
 # (arXiv:2403.17136, 2024), which ships no public code.

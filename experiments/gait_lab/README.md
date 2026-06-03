@@ -400,6 +400,39 @@ python3 force_balance.py                            # why in-place force does no
 python3 push_frontier.py && python3 render_frontier.py   # the robustness frontier
 ```
 
+## Why ~1 second? The collapse, predicted from `1/ω = √(z/g)`
+
+Every controller here loses balance on roughly the same clock — a second or so.
+That has been an *observation* repeated across a dozen experiments; `fall_time_theory.py`
+turns it into a *prediction* from the linear inverted pendulum's two first-principles
+quantities, and checks it against the measured numbers.
+
+![gait_lab fall-time theory](assets/fall_time_theory.png)
+
+**Claim 1 — the push frontier is geometry.** The largest in-place-recoverable kick
+from a direction is `v* = d·ω`, where `d` is the support margin (CoM-to-edge) and
+`ω = √(g/z)`. With the G1's measured margins this predicts the frontier's *anisotropy*
+— and lands within ~5 % **laterally (0.56 vs 0.57 m/s) and backward (0.20 vs 0.20)**,
+where the support polygon is the binding limit. **Forward it over-predicts** (0.44 vs a
+measured 0.28): there the binding limit is not the long foot but the **ankle-pitch
+torque** that cannot drive the CoP to the toe — the same budget `wbc_qp.py` Experiment 4
+found. So `v*=d·ω` is tight where geometry binds and loose where actuation binds, and
+the gap *localises which limit is active*.
+
+**Claim 2 — the fall clock is leg length, not the controller.** Once balance is lost
+the body is a near-free inverted pendulum whose topple time is set by `1/ω = √(z/g) ≈
+0.27 s` alone. The measured stiff-stand fall time asymptotes to **~2/ω ≈ 0.53 s** under
+hard shoves regardless of kick size, with the free-IP topple a strict lower bound
+beneath it (the servo can only *delay* within the leg-length budget, never escape). The
+universal **~1 s ceiling is just a few multiples of `1/ω`**: a humanoid that loses
+balance has a quarter-second timescale to act on, so "topple + one futile step" lands
+near a second — for *any* controller. **That is why force-vs-position never moved the
+wall: the wall is `√(z/g)`.**
+
+```bash
+python3 fall_time_theory.py && python3 render_fall_theory.py   # the ~1s collapse, derived
+```
+
 ## Adaptive step *duration*: a 2024 method with no public code
 
 Footstep walkers choose *where* to step. A more recent idea is to also choose
