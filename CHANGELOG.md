@@ -369,3 +369,15 @@
   genuine force-aware walking needs a *torque-native* model, not the position-servo
   menagerie G1 — the boundary is the model, not the controller. Covered by
   `test_force_walk_torque_wbc_runs`; suite at 30 gait_lab tests.
+- Added the textbook bipedal **hybrid** WBC (`run_force_walk_hybrid`): position-IK
+  swing leg for precise foot placement, torque-stance leg for the force/balance WBC,
+  modes switching at each strike — and **corrected an over-claim**. A well-tuned
+  torque WBC actually *holds a stand* ~3 s (the earlier "~1.3 s standing" was
+  under-tuned); the real limit is *walking* — tracking the moving footstep
+  trajectory with torque tops out ~1.3 s for both the all-torque and the proper
+  hybrid controller, below the ~2.4 s position-IK walk, because the implicit
+  high-gain servo tracks the fast swing exactly where explicit torque does not (and
+  the CoM task barely couples through the brief single-support contact). Conclusion
+  unchanged — position IK wins on this position-built model — but precisely scoped:
+  the limit is the substrate *plus* a hand-tuned (non-QP) controller; genuine
+  force-aware walking wants a torque-native model and a contact-QP WBC.

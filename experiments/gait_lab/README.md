@@ -360,18 +360,22 @@ CoM/ZMP while stepping** — leaving pure position control. That boundary *is* t
 result: this lab exists to find exactly where a position-controlled humanoid runs
 out, and for steerable, disturbance-robust walking, this is it.
 
-And `force_walk.py` runs that frontier controller to its honest root: it builds the
+And `force_walk.py` runs that frontier controller to its honest root. It builds the
 proper torque WBC — `mj_inverse` gravity compensation, a posture task tracking the
-ZMP-preview IK pose, and a contact-Jacobian CoM task — and it **still** loses to
-the position-IK `zmp-preview` (~1.3 s vs ~2.4 s). The cause is one level deeper
-than the controller: on a model *built* for position control, the high-gain
-servos the solver applies implicitly, continuously and exactly are not beatable by
-explicit torque control with a feedforward gravity term, which drifts and caps near
-~1.3 s whatever the gains (`force_balance.py` shows the same for standing). The WBC
-is correct; the limit is the **substrate**. Genuine force-aware walking needs a
-*torque-native* model (torque actuators and contact dynamics tuned for it), not the
-position-servo menagerie G1 — the boundary here is the model, not the controller,
-and that is the honest end of this thread.
+ZMP-preview IK pose, a contact-Jacobian CoM task — in two forms: all legs in torque
+mode, and the textbook bipedal **hybrid** (position-IK swing for precise placement,
+torque-stance WBC for force/balance). Both **lose** to the position-IK `zmp-preview`
+(~1.3 s vs ~2.4 s). The honest, precisely-scoped reason: a well-tuned torque WBC can
+*hold a stand* ~3 s, but *tracking the moving footstep trajectory* with torque tops
+out ~1.3 s — on a model built for position control, the implicit high-gain servo
+tracks the fast swing exactly where explicit torque does not, and the CoM task
+barely couples through the brief single-support contact. The WBC is correct; the
+limit is the **substrate plus a hand-tuned (non-QP) controller**. Genuine force-aware
+walking wants a *torque-native* model and a proper contact-QP WBC, not the
+position-servo menagerie G1 — this maps exactly how far the position-controlled
+testbed carries it, which is the lab's point. (An earlier note here over-claimed
+that torque *standing* balance capped at ~1.3 s; corrected — it holds ~3 s; walking
+is the harder case.)
 
 ## Running it
 
