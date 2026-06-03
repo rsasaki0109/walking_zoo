@@ -35,6 +35,18 @@ no matter the controller — the one move that recovers is to **step** (see
 `capture_step.py`, and the contact-QP WBC in `wbc_qp.py` that *certifies* "you must
 step" by going infeasible). Regenerate with `--push 0.6`.*
 
+![gait_lab push-recovery showdown](assets/push_recovery_showdown.gif)
+
+*The answer, in one shot. Three controllers, the same forward 0.3 m/s shove. The
+**stiff position stand** (the 500-gain servo that wins every other comparison)
+topples. The **contact-QP WBC** goes infeasible the instant the capture point exits
+the support polygon — a *certificate*, "you must step," not a crash. The **capture
+step** listens to exactly that certificate, steps to the capture point, and holds the
+full horizon. The one move that survives a real push is stepping, taken when the QP
+says you must — the through-line of the whole lab in a single loop. Each tile is the
+unmodified, tested rollout with `model.step` wrapped to record frames. Regenerate with
+`MUJOCO_GL=egl python3 render_showdown.py`.*
+
 ![gait_lab comparison montage](assets/gait_comparison.png)
 
 *Same robot, same 6 s, one row per algorithm (time runs left→right). Top to

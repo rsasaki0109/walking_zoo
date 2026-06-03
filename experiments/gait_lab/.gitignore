@@ -5,3 +5,5 @@ __pycache__/
 # ...except the committed hero artifacts (regenerated in place by render_zoo_gif.py)
 !assets/gait_zoo.gif
 !assets/gait_zoo_push.gif
+!assets/push_recovery_showdown.gif
+!assets/social_preview.png
