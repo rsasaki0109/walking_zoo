@@ -321,3 +321,14 @@
   result was negative), and the reactive-footstep substrate a force-aware gait
   would build on. Covered by `test_capture_step_recovers_a_forward_push`; suite at
   27 gait_lab tests.
+- Added `SteerableZMPWalk`: steering on the most balance-aware base. It subclasses
+  the `zmp-preview` walker (Kajita preview control — the CoM trajectory leads the
+  ZMP, the most stable model-based gait here) and makes the footstep schedule
+  *curve*: each step advances by `forward_speed*step_duration` along a heading that
+  rotates by `yaw_rate*step_duration`, plant offset half a stance-width across it,
+  with the preview-tracked CoM swaying along the arc. It walks forward (+0.7 m) on
+  a more stable base than the kinematic `steerable-footstep`, but — like every
+  position-controlled footstep walker — still tops out near the ~2 s ceiling, so
+  the curve does not fully develop before it topples: clean full-horizon steering
+  remains the contact-constrained-WBC frontier. Covered by
+  `test_steerable_zmp_plan_curves_and_walks`; suite at 28 gait_lab tests.

@@ -440,6 +440,34 @@ def test_torque_mode_actuates_by_force(model):
     assert float(model.data.qpos[qadr]) > float(model.stand_qpos[qadr]) + 0.05
 
 
+def test_steerable_zmp_plan_curves_and_walks(model):
+    # Steering on the most balance-aware base: the ZMP-preview walker made
+    # command-conditioned. Its footstep schedule curves with a yaw command, and it
+    # walks forward on its (more stable) base. It still tops out near the ~2 s
+    # kinematic ceiling like every footstep walker — clean full-horizon steering
+    # is the contact-WBC frontier — but it is the most stable steerable base.
+    pytest.importorskip("scipy")
+    import numpy as np
+
+    from gait_lab import SteerableZMPWalk
+
+    # A yaw command curves the footstep schedule: late plants rotate (CCW for +yaw)
+    # relative to the straight plan's axis.
+    straight = SteerableZMPWalk(0.12, 0.0)
+    straight.reset(model)
+    left = SteerableZMPWalk(0.12, 0.4)
+    left.reset(model)
+    seg_straight = straight._foot_plants[6] - straight._foot_plants[2]
+    seg_left = left._foot_plants[6] - left._foot_plants[2]
+    ang_straight = np.arctan2(seg_straight[1], seg_straight[0])
+    ang_left = np.arctan2(seg_left[1], seg_left[0])
+    assert ang_left > ang_straight + 0.2   # the +yaw plan heads more CCW
+
+    # Straight: walks forward on the ZMP base before the kinematic ceiling.
+    m = rollout(model, SteerableZMPWalk(0.12, 0.0), horizon=2.0)
+    assert m.forward_distance > 0.2
+
+
 def test_capture_step_recovers_a_forward_push(model):
     # Push recovery that works: a forward shove topples the static position stand,
     # but a capture STEP (step the foot to the capture point) catches it. The

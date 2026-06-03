@@ -554,6 +554,79 @@ class SteerableFootstepGait(CapturePointWalk):
         return super().update(obs, cmd)
 
 
+class SteerableZMPWalk(ZMPPreviewWalk):
+    """A *steerable* ZMP-preview walker — steering on the most balance-aware base.
+
+    The kinematic footstep walkers (:class:`CapturePointWalk`,
+    :class:`SteerableFootstepGait`) steer but topple near a ~2 s ceiling because
+    they only *place feet* — they never control the CoM trajectory. :class:`ZMPPreviewWalk`
+    is the most stable model-based gait here precisely because it does: Kajita
+    preview control gives a smooth CoM trajectory whose induced ZMP leads the
+    support foot. This subclass keeps that dynamic balance and makes the footstep
+    schedule **curve**: each step advances by ``forward_speed * step_duration``
+    along a heading ``theta`` that rotates by ``yaw_rate * step_duration``, with the
+    plant offset half a stance-width across the heading. The preview-tracked CoM
+    then sways along the *curved* path, so the robot walks an arc while staying
+    balanced — steering on a base that does not just fall over at ~2 s.
+
+    The command is fixed at construction (the plan is precomputed, like the
+    parent); a reactive re-planning version is the natural next step.
+    """
+
+    name = "steerable-zmp"
+
+    def __init__(self, forward_speed: float = 0.12, yaw_rate: float = 0.0):
+        self._fs = float(forward_speed)
+        self._yr = float(yaw_rate)
+
+    def reset(self, model: G1Model) -> None:
+        GaitController.reset(self, model)
+        from .zmp_preview import PreviewAxis, design_preview
+
+        left0 = model.foot_pos("left")
+        right0 = model.foot_pos("right")
+        self.ground = float(left0[2])
+        self.base0 = model.data.qpos[0:2].copy()
+        self._init_foot = {"left": left0[:2].copy(), "right": right0[:2].copy()}
+
+        # Curved footstep schedule: a centreline that advances along a rotating
+        # heading, each plant offset half a stance-width across it. theta rotates
+        # by yaw_rate*step_duration per step, so the steps — and the walk — curve.
+        adv = float(np.clip(self._fs * self.step_duration, 0.0, 0.16))
+        theta = float(model.observe(0.0).torso_rpy[2])
+        pos = self.base0.astype(float).copy()
+        self._foot_plants = []
+        for s in range(int(self.plan_seconds / self.step_duration) + 4):
+            fwd = np.array([np.cos(theta), np.sin(theta)])
+            perp = np.array([-np.sin(theta), np.cos(theta)])
+            y_sign = -1.0 if s % 2 == 0 else 1.0     # right on even, left on odd
+            self._foot_plants.append(pos + perp * (y_sign * self.nominal_y))
+            pos = pos + fwd * adv
+            theta += self._yr * self.step_duration
+
+        # ZMP reference (centre during the initial double support, then the support
+        # foot) and the preview-tracked CoM trajectory — identical to the parent.
+        n = int(self.plan_seconds / self.plan_dt)
+        N = self.preview_horizon
+        zmp = np.zeros((n + N, 2))
+        for k in range(n + N):
+            t = k * self.plan_dt
+            if t >= self.double_support:
+                s = int((t - self.double_support) // self.step_duration)
+                zmp[k] = self._foot_plants[min(s, len(self._foot_plants) - 1)]
+            else:
+                zmp[k] = self.base0
+        gains = design_preview(self.plan_dt, self.com_height, N)
+        ax, ay = PreviewAxis(gains), PreviewAxis(gains)
+        ax.reset(float(self.base0[0]))
+        ay.reset(float(self.base0[1]))
+        self._com = np.zeros((n, 2))
+        for k in range(n):
+            self._com[k, 0] = ax.step(zmp[k:k + N, 0])
+            self._com[k, 1] = ay.step(zmp[k:k + N, 1])
+        self._n = n
+
+
 # Linear feedback policy (4 outputs x 6 observations, row-major) found by
 # `train_policy.py`. Trained ROBUSTLY: each candidate is scored on the WORST of
 # several perturbed initial states, because a falling humanoid is chaotic and a
