@@ -240,6 +240,20 @@ class G1Model:
     def step(self) -> None:
         self._mj.mj_step(self.model, self.data)
 
+    def com_velocity_xy(self) -> np.ndarray:
+        """Whole-body CoM velocity (world x, y), computed correctly.
+
+        ``data.subtree_linvel`` is NOT filled by ``mj_step``/``mj_forward`` unless a
+        subtree-velocity sensor exists — the menagerie G1 has none, so reading it
+        (as :meth:`observe` does, for backward compatibility with policies trained
+        against that field) yields zero. Capture-point controllers need the real
+        velocity, so this computes it as ``J_com @ qvel`` (the CoM Jacobian times the
+        generalised velocity), which depends only on the current kinematics and is
+        robust regardless of whether the velocity pipeline (``cvel``) is up to date."""
+        jac = np.zeros((3, self.model.nv))
+        self._mj.mj_jacSubtreeCom(self.model, self.data, jac, 0)
+        return (jac @ self.data.qvel)[0:2].copy()
+
     def observe(self, t: float) -> Observation:
         d = self.data
         return Observation(

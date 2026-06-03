@@ -89,8 +89,10 @@ def run_capture_step(model: G1Model, speed: float, theta: float,
         t = i * model.timestep
         obs = model.observe(t)
         com = obs.com_xy
+        com_vel = model.com_velocity_xy()          # real CoM velocity (observe's
+        # com_vel_xy reads the unpopulated subtree_linvel and is silently zero)
         omega = np.sqrt(_GRAVITY / max(obs.com_z, 0.3))
-        xi = com + obs.com_vel_xy / omega          # capture point
+        xi = com + com_vel / omega                 # capture point
 
         ctrl = stand.copy()
         ap_fix, ar_fix = ankle_fix(obs)

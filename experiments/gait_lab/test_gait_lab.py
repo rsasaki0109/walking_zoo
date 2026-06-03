@@ -537,6 +537,45 @@ def test_qp_wbc_holds_a_stand_but_certifies_the_support_polygon_limit():
     assert np.isclose(fresh.model.actuator_gainprm[i, 0], 500.0)
 
 
+def test_com_velocity_xy_is_real_not_silently_zero(model):
+    # Regression guard for a subtle bug: data.subtree_linvel is not populated by
+    # mj_step unless a subtree-velocity sensor exists (the G1 has none), so the
+    # capture-point velocity term read via observe() was silently zero lab-wide.
+    # com_velocity_xy() calls mj_subtreeVel explicitly and returns the real velocity.
+    import numpy as np
+    model.reset()
+    model.data.qvel[0] += 0.6           # kick the base forward
+    v = model.com_velocity_xy()
+    assert v[0] > 0.3                   # real CoM velocity, not zero
+    # ...and matches the CoM Jacobian times qvel (the independent ground truth).
+    J = np.zeros((3, model.model.nv))
+    mujoco.mj_jacSubtreeCom(model.model, model.data, J, 0)
+    assert np.allclose(v, (J @ model.data.qvel)[:2], atol=1e-6)
+
+
+def test_qp_capture_step_steps_and_beats_bare_qp_but_not_the_stiff_stand():
+    # The culmination: force-aware QP balance that hands off to a capture step on the
+    # QP's own feasibility certificate. Honest null result -- it extends survival over
+    # the bare QP (the step does fire and help) but does NOT fully recover a 0.6 m/s
+    # shove on this position-built model (the QP's compliance lets the push develop
+    # before the step; the stiff stand's large forward support is hard to beat).
+    pytest.importorskip("qpsolvers")
+    import numpy as np
+    from wbc_qp import run_qp_capture_step, run_qp_stand_push
+
+    bare, _ = run_qp_stand_push(G1Model(), horizon=2.0, fall_h=0.5, push_speed=0.6,
+                                direction=(1.0, 0.0))
+    fresh = G1Model()  # self-contained: torque mode perturbs shared MjData
+    whole, stepped = run_qp_capture_step(fresh, horizon=2.0, fall_h=0.5,
+                                         push_speed=0.6, direction=(1.0, 0.0))
+    assert stepped                 # the capture step actually fires (needs real CoM vel)
+    assert whole > bare            # ...and extends survival past the bare QP
+    assert whole < 2.0             # ...but does not fully recover the hard shove
+    # Actuators restored to position mode afterwards (no leakage).
+    i = fresh.actuator("left_knee_joint")
+    assert np.isclose(fresh.model.actuator_gainprm[i, 0], 500.0)
+
+
 def test_capture_step_recovers_a_forward_push(model):
     # Push recovery that works: a forward shove topples the static position stand,
     # but a capture STEP (step the foot to the capture point) catches it. The

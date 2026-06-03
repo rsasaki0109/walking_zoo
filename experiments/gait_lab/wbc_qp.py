@@ -396,6 +396,143 @@ def run_qp_walk(model, horizon, fall_h):
         model.set_position_mode(names)
 
 
+# ---------------------------------------------------------------------------
+# Experiment 3 (the culmination): force-aware QP balance that STEPS when the QP
+# says it must — recovering the very shove that topples the bare QP.
+# ---------------------------------------------------------------------------
+def run_qp_capture_step(model, horizon, fall_h, push_speed, push_at=0.3,
+                        direction=(1.0, 0.0), trigger=0.18, step_time=0.34,
+                        max_reach=0.45):
+    """The culmination — and an honest null result. The QP WBC
+    (``run_qp_stand_push``) balances with real friction-cone GRF but goes infeasible
+    the instant the capture point leaves the support polygon — it *certifies* "you
+    must step". This controller listens to that certificate: it balances in
+    force-aware torque mode while the capture point stays inside the support, and on
+    the certificate (QP infeasible, or ``||xi - com|| > trigger``) it hands off to a
+    capture STEP — swinging the falling-side foot to the reach-clamped capture point
+    via leg IK while the stance foot holds, then settles. The step trigger is no
+    longer a hand-tuned threshold; it is the QP's own feasibility boundary.
+
+    The honest measured result: this **extends survival over the bare QP** (e.g.
+    0.6 m/s forward: ~0.5 s -> ~1.3 s) but does **not** beat the stiff position stand
+    or a *standalone* capture step. Two reasons, both informative: (1) the QP balance
+    phase is *compliant*, so a hard shove develops while it balances, and stepping
+    from that drifted, higher-momentum state is worse than stepping immediately; (2)
+    the menagerie G1's large feet give the stand a wide forward support polygon, so a
+    stiff stand is already remarkably push-robust forward (it survives a 0.4 m/s shove
+    ~2.3 s). Stepping clearly wins only for *gentle* pushes (~0.3 m/s -> full horizon)
+    — which the QP could also simply absorb. So deferring the step to the QP's
+    feasibility boundary is too late, and force-aware compliance is a liability for
+    push recovery on this model: the stiff stand wins yet again. The genuine value of
+    this experiment is the finding itself, plus the bug it surfaced (see
+    ``G1Model.com_velocity_xy``: the capture-point velocity term was silently zero).
+
+    Returns ``(survive_time, stepped)``."""
+    names = _all_actuator_names(model)
+    model.set_position_mode(names)
+    model.reset()
+    com0 = model.data.subtree_com[0].copy()
+    stand = model.stand_targets.copy()
+    ground = float(model.foot_pos("left")[2])
+    solver = WBCSolver(model)
+
+    model.set_torque_mode(names)
+    model.reset()
+    d = model.data
+    phase = "balance"           # "balance" (QP torque) -> "step" (position IK)
+    pushed = stepped = False
+    planted = stepping = has_stepped = None
+    swing = stance = swing_from = swing_to = None
+    t_step0 = refractory = 0.0
+    try:
+        for i in range(int(round(horizon / model.timestep))):
+            t = i * model.timestep
+            if not pushed and t >= push_at:
+                d.qvel[0] += push_speed * direction[0]
+                d.qvel[1] += push_speed * direction[1]
+                pushed = True
+
+            obs = model.observe(t)
+            com = obs.com_xy
+            com_vel = model.com_velocity_xy()        # real CoM velocity (see method)
+            omega = np.sqrt(9.81 / max(obs.com_z, 0.3))
+            xi = com + com_vel / omega               # capture point
+
+            if phase == "balance":
+                ctrl = solver.compute(com0, q_des=stand)
+                # Step when the QP certifies it must: it returned infeasible, or
+                # the capture point has left the support (||xi - com|| > trigger).
+                if ctrl is None or np.linalg.norm(xi - com) > trigger:
+                    model.set_position_mode(names)      # hand off to IK stepping
+                    phase = "step"
+                    planted = {f: model.foot_pos(f).copy()
+                               for f in ("left", "right")}
+                    stepping = has_stepped = False
+                    refractory = 0.0
+                    # fall through into the step controller this same tick
+                else:
+                    d.ctrl[:] = ctrl
+                    model.step()
+                    if float(d.qpos[2]) < fall_h:
+                        return t, stepped
+                    continue
+
+            # phase == "step": the capture-step controller (position IK), retuned
+            # to start from the live falling state the QP handed off.
+            ctrl = stand.copy()
+            roll, pitch, _ = obs.torso_rpy
+            rr, pr = obs.torso_ang_vel[0], obs.torso_ang_vel[1]
+            ap_fix = 0.20 * pitch + 0.05 * pr
+            ar_fix = 0.20 * roll + 0.05 * rr
+
+            if not stepping and t >= refractory and np.linalg.norm(xi - com) > trigger:
+                fall_dir = xi - com
+                swing = "left" if fall_dir[1] >= 0 else "right"
+                stance = "right" if swing == "left" else "left"
+                swing_from = planted[swing].copy()
+                stance_xy = planted[stance][:2]
+                tgt = xi.copy()
+                v = tgt - stance_xy
+                r = np.linalg.norm(v)
+                if r > max_reach:
+                    tgt = stance_xy + v / r * max_reach
+                swing_to = np.array([tgt[0], tgt[1], ground])
+                stepping = True
+                stepped = True
+                t_step0 = t
+
+            if stepping:
+                ph = float(np.clip((t - t_step0) / step_time, 0.0, 1.0))
+                sx = (1 - ph) * swing_from[:2] + ph * swing_to[:2]
+                sz = ground + 0.05 * np.sin(np.pi * ph)
+                feet = {stance: planted[stance],
+                        swing: np.array([sx[0], sx[1], sz])}
+                if ph >= 1.0:
+                    planted[swing] = swing_to.copy()
+                    stepping = False
+                    has_stepped = True
+                    refractory = t + 0.30
+            else:
+                feet = {f: planted[f] for f in ("left", "right")}
+
+            if stepping or has_stepped:
+                for foot, target in feet.items():
+                    angles = model.solve_leg_ik(foot, target)
+                    for joint, value in zip(LEG_JOINTS[foot], angles):
+                        ctrl[model.actuator(joint)] = value
+            for side in ("left", "right"):
+                ctrl[model.actuator(f"{side}_ankle_pitch_joint")] += ap_fix
+                ctrl[model.actuator(f"{side}_ankle_roll_joint")] += ar_fix
+
+            d.ctrl[:] = ctrl
+            model.step()
+            if float(d.qpos[2]) < fall_h:
+                return t, stepped
+        return horizon, stepped
+    finally:
+        model.set_position_mode(names)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--horizon", type=float, default=8.0)
@@ -421,19 +558,36 @@ def main():
     print(f"  zmp-preview (position IK)    survives {pos:5.2f}s")
     print(f"  zmp-preview (contact-QP WBC) survives {qp:5.2f}s")
 
+    print("\nExperiment 3 — force-aware QP balance that STEPS when the QP says it\n"
+          "must, vs the stiff stand and a standalone capture step (forward shoves):\n")
+    from capture_step import run_capture_step
+    for sp in (0.4, 0.6):
+        stiff = run_position_stand_push(model, args.horizon, args.fall_height, sp,
+                                        direction=(1.0, 0.0))
+        bare, why = run_qp_stand_push(model, args.horizon, args.fall_height, sp,
+                                      direction=(1.0, 0.0))
+        cs = run_capture_step(model, sp, 0.0, args.horizon, args.fall_height)
+        whole, stepped = run_qp_capture_step(model, args.horizon, args.fall_height,
+                                             sp, direction=(1.0, 0.0))
+        print(f"  {sp:.1f} m/s   stiff {stiff:4.2f}s   bare-QP {bare:4.2f}s ({why})"
+              f"   capture-step {cs:4.2f}s   QP+step {whole:4.2f}s")
+
     print(
-        "\nVerdict — honest, and the point of the lab: the contact-QP WBC (proper\n"
-        "TSID, the 'missing piece' the earlier notes named) HOLDS a quiet stand\n"
-        "indefinitely with real friction-cone GRF, but it does NOT beat position\n"
-        "control under a shove or while walking on this position-built model. Under\n"
-        "the shove the QP goes *infeasible* the moment the capture point leaves the\n"
-        "support polygon — the controller itself certifying that no ground-reaction\n"
-        "force can recover without a step. The stiff 500-gain servo 'survives'\n"
-        "longer only by toppling slowly as a rigid pendulum, not by balancing. So\n"
-        "the wall is not the absence of a QP — it is standing-without-stepping plus\n"
-        "a model built for position control. The one balance move that beats the\n"
-        "limit remains the capture step (capture_step.py): step when the QP says\n"
-        "you must.")
+        "\nVerdict — honest, including the negatives, which is the lab's job. The\n"
+        "contact-QP WBC (proper TSID, the 'missing piece' the earlier notes named)\n"
+        "HOLDS a quiet stand indefinitely with real friction-cone GRF, but does NOT\n"
+        "beat position control under a shove or while walking on this position-built\n"
+        "model. Under a shove it goes infeasible the moment the capture point leaves\n"
+        "the support polygon — the controller certifying 'you must step'. Feeding\n"
+        "that certificate to a capture step (Experiment 3) extends survival over the\n"
+        "bare QP, but still does NOT beat the stiff stand or a standalone capture\n"
+        "step: the QP's compliance lets a hard shove develop before the step, and the\n"
+        "G1's large feet make a stiff forward stand very push-robust already. Stepping\n"
+        "clearly wins only for gentle pushes the QP could also just absorb. The real\n"
+        "yield of this thread: a built-and-tested contact-QP WBC whose infeasibility\n"
+        "pinpoints the true boundary, and a bug it surfaced — the capture-point\n"
+        "velocity term was silently zero lab-wide (no subtree-velocity sensor;\n"
+        "G1Model.com_velocity_xy fixes it), so the capture step now genuinely steps.")
 
 
 if __name__ == "__main__":

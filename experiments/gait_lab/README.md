@@ -343,7 +343,8 @@ humanoid can and cannot deliver them:
 | command-conditioned RL (`rl-steerable`) | no (spirals) | full horizon | a residual on a fixed sinusoid has no lever on foot placement |
 | `steerable-footstep`, `steerable-zmp` | yes (plan curves) | ~1.5–2.5 s | foot placement steers, but kinematic footsteps have no force/ZMP balance |
 | `reactive-steerable` (capture step + steering) | yes | ~1.2 s | continuous reactive capture-stepping is *less* stable than a smooth plan |
-| capture step (`capture_step.py`) | n/a | **recovers** a forward shove to the horizon | the decision to *step* puts support back under the CoM |
+| capture step (`capture_step.py`) | n/a | **recovers** a gentle shove (~0.3 m/s) to the horizon; fades above ~0.5 | the decision to *step* puts support back under the CoM (now a real step — see the CoM-velocity fix below) |
+| QP balance + capture step (`wbc_qp.py`) | n/a | extends the bare QP but loses to the stiff stand | force-aware compliance lets a hard shove develop before the step — an honest null |
 | torque ankle / CoM-WBC / contact-WBC (`force_balance.py`) | n/a | loses to the stiff stand | standing favours stiffness; open-loop gravity comp drifts |
 | **contact-QP WBC (TSID)** (`wbc_qp.py`) | n/a | holds a quiet stand; loses under a shove | proper friction-cone GRF, but goes *infeasible* when the capture point exits the support polygon — certifying "you must step" |
 
@@ -395,6 +396,29 @@ statement of "step, don't push." So building the proper QP confirms the boundary
 **standing-without-stepping plus a position-built model**, not the absence of a QP;
 the one move that beats the limit remains the capture step, taken exactly when the QP
 says you must.
+
+So `wbc_qp.py` also tries exactly that culmination (`run_qp_capture_step`): balance in
+force-aware torque mode, and on the QP's own certificate (infeasible / capture point
+out of support) hand off to a capture step. The honest result is a **null** — and the
+lab's job is to report those too. Feeding the certificate to a step **extends survival
+over the bare QP** (0.6 m/s forward: ~0.5 s → ~1.3 s), but it does **not** beat the
+stiff stand or a *standalone* capture step: the QP's compliance lets a hard shove
+develop before the step fires, and the menagerie G1's large feet make a stiff forward
+stand remarkably push-robust already (it rides out a 0.4 m/s shove ~2.3 s). Stepping
+clearly wins only for *gentle* pushes (~0.3 m/s → full horizon) that the QP could also
+simply absorb — so deferring the step to the feasibility boundary is *too late*, and
+force-aware compliance is a liability for push recovery on this model. The stiff stand
+wins yet again, which is the through-line of the whole map.
+
+That experiment also surfaced a real bug worth its own line: the **capture-point
+velocity term was silently zero lab-wide**. `data.subtree_linvel` (whole-body CoM
+velocity) is only filled by MuJoCo when a subtree-velocity sensor exists, and the
+menagerie G1 has none — so `observe().com_vel_xy`, and every capture point built on it
+(`xi = com + com_vel/omega`), used a zero velocity. The capture step was being carried
+by its ankle feedback, not a real step. `G1Model.com_velocity_xy()` computes it
+correctly as `J_com · qvel`; with it the capture step **genuinely steps** and recovers
+gentle shoves (0.3 m/s: a 2.6 s stand → the full horizon). The RL policies keep reading
+the old (zero) field they were trained against, so their golden tests are untouched.
 
 ## Running it
 

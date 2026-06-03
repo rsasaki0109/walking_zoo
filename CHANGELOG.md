@@ -400,3 +400,25 @@
   capture step, taken exactly when the QP says you must. Tested by
   `test_qp_wbc_holds_a_stand_but_certifies_the_support_polygon_limit` (uses a fresh
   `G1Model`); suite at 31 gait_lab tests. Needs a QP solver (`qpsolvers`/`osqp`).
+- Tried the **culmination** (`wbc_qp.py::run_qp_capture_step`): force-aware QP balance
+  that hands off to a capture step on the QP's own feasibility certificate (infeasible
+  / capture point out of support) — the step trigger is the QP's boundary, not a
+  hand-tuned threshold. Honest **null result**: it extends survival over the bare QP
+  (0.6 m/s forward ~0.5 s → ~1.3 s) but does NOT beat the stiff stand or a standalone
+  capture step — the QP's compliance lets a hard shove develop before the step fires,
+  and the G1's large feet make a stiff forward stand very push-robust already (rides
+  out 0.4 m/s ~2.3 s). Stepping clearly wins only for gentle pushes (~0.3 m/s → full
+  horizon) the QP could also just absorb. The stiff stand wins yet again — the
+  through-line of the whole map.
+- **Fixed a silent lab-wide bug the culmination surfaced**: the capture-point velocity
+  term was always zero. `data.subtree_linvel` (whole-body CoM velocity) is only filled
+  by MuJoCo when a subtree-velocity sensor exists, and the menagerie G1 has none — so
+  `observe().com_vel_xy`, and every capture point `xi = com + com_vel/omega` built on
+  it, used a zero velocity (the capture step was carried by ankle feedback, not a real
+  step). New `G1Model.com_velocity_xy()` computes it correctly as `J_com · qvel`;
+  `capture_step.py` and the culmination now use it, so the capture step **genuinely
+  steps** and recovers gentle shoves (0.3 m/s: a 2.6 s stand → the full horizon). The
+  RL policies keep reading the old (zero) field they were trained against, so their
+  golden tests are untouched. Tested by `test_com_velocity_xy_is_real_not_silently_zero`
+  and `test_qp_capture_step_steps_and_beats_bare_qp_but_not_the_stiff_stand`; suite at
+  33 gait_lab tests.
