@@ -600,8 +600,12 @@
   `check_gait_lab_sil_ros2_control_e2e.py` and `--forward` pass with
   `rl-residual`.
 - **B2 first rung: rl-steerable on ros2_control SIL.** Extended
-  `check_gait_lab_sil_ros2_control_e2e.py` with `--steer` (yaw velocity goal on
-  the embedded 500 Hz relay path with `rl-steerable`).
+  `check_gait_lab_sil_ros2_control_e2e.py` with `--steer-loose` (yaw velocity
+  goal on the embedded relay path with `rl-steerable`).
+- **B2 quantitative rung: signed yaw gate.** `--steer` requires embedded
+  `rl-steerable` to walk an 8 s ``ExecuteVelocity`` (0.2 m/s, 0.25 rad/s yaw)
+  with ≥0.20 rad signed heading change, ≥0.25 m travel, no fall during the
+  command, and logs a tracking ratio vs the commanded yaw.
 - **B3 deep first rung: embedded C++ RL policy.** Added `GaitLabRlPolicy` (npz
   loader + MLP), `GaitLabSilRlResidualController`, `use_embedded_rl_policy:=true`
   launch mode, and gtest coverage. Python gait node publishes CPG feedforward and

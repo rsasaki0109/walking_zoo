@@ -86,7 +86,8 @@ ros2 launch locomotion_ros2_bringup gait_lab_sil_ros2_control_runtime.launch.py 
   inference in C++; enable with `use_embedded_rl_policy:=true` (Python node
   publishes CPG feedforward + observations only).
 * **B2 (steerable)** — `controller:=rl-steerable` on the split stack; E2E
-  `--steer` uses the embedded relay path.
+  `--steer` (B2 quantitative yaw gate) and `--steer-loose` (first rung) use the
+  embedded relay path.
 
 Verified by `tools/check_gait_lab_sil_ros2_control_e2e.py` (`--forward`,
 `--embedded`, `--steer`; needs MuJoCo).
