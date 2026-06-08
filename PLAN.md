@@ -665,8 +665,11 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B3 first rung** — ros2_control joint-state bridge for gait_lab SIL: topic
   hardware interface, split sim (physics) + gait controller (policy),
   `joint_state_broadcaster`, and E2E check. Legacy monolithic launch unchanged.
-- [ ] **B3 deep** — gait_lab controllers as loadable ros2_control controller
-  plugins (beyond topic bridge + split nodes).
+- [x] **B3 deep first rung** — `GaitLabSilJointForwardController` plugin
+  (queued `~/commands` → position command interfaces); default launch still uses
+  the direct policy path; opt-in spawner + hardware `write()` wiring next.
+- [ ] **B3 deep** — close the loop in launch/E2E and move policy inference into
+  the controller plugin (C++ or embedded), not only a forwarder node.
 - [ ] **B4** — drive the SIL robot from a Nav2 goal through a steering gait
   (depends on B2).
 

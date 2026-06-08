@@ -1,0 +1,10 @@
+<library path="locomotion_ros2_gait_lab_sil_ros2_control_controllers">
+  <class
+    name="locomotion_ros2_gait_lab_sil/GaitLabSilJointForwardController"
+    type="locomotion_ros2_gait_lab_sil::GaitLabSilJointForwardController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Queued forwarder from gait_lab policy joint targets into ros2_control position commands.
+    </description>
+  </class>
+</library>

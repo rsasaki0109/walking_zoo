@@ -6,6 +6,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(controller_interface REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
@@ -53,11 +54,35 @@ ament_target_dependencies(${PROJECT_NAME}_ros2_control
 )
 pluginlib_export_plugin_description_file(hardware_interface plugins_ros2_control.xml)
 
+add_library(${PROJECT_NAME}_ros2_control_controllers SHARED
+  src/gait_lab_sil_joint_forward_controller.cpp
+)
+target_compile_features(${PROJECT_NAME}_ros2_control_controllers PUBLIC cxx_std_17)
+target_include_directories(${PROJECT_NAME}_ros2_control_controllers PUBLIC
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>"
+)
+ament_target_dependencies(${PROJECT_NAME}_ros2_control_controllers
+  controller_interface
+  hardware_interface
+  pluginlib
+  rclcpp
+  rclcpp_lifecycle
+  std_msgs
+)
+target_link_libraries(${PROJECT_NAME}_ros2_control_controllers
+  controller_interface::controller_interface
+)
+pluginlib_export_plugin_description_file(
+  controller_interface plugins_ros2_control_controllers.xml)
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
-install(FILES plugins.xml plugins_ros2_control.xml README.md DESTINATION share/${PROJECT_NAME})
+install(
+  FILES plugins.xml plugins_ros2_control.xml plugins_ros2_control_controllers.xml README.md
+  DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY assets DESTINATION share/${PROJECT_NAME})
 install(
-  TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_ros2_control
+  TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_ros2_control ${PROJECT_NAME}_ros2_control_controllers
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -66,7 +91,8 @@ install(
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
-  geometry_msgs hardware_interface pluginlib rclcpp rclcpp_lifecycle sensor_msgs std_msgs
+  controller_interface geometry_msgs hardware_interface pluginlib rclcpp rclcpp_lifecycle
+  sensor_msgs std_msgs
   locomotion_ros2_core locomotion_ros2_msgs)
 
 if(BUILD_TESTING)
