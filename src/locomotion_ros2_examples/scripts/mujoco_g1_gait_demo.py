@@ -116,23 +116,26 @@ class UnitreeG1Renderer:
         ]
 
     def _forward_gait(self, qpos, sin_phase, cos_phase, fast=False):
-        hip_amp = 0.62 if fast else 0.30
-        knee_base = 0.30 if fast else 0.18
-        knee_amp = 0.74 if fast else 0.38
-        ankle_base = -0.22 if fast else -0.13
-        ankle_amp = 0.22 if fast else 0.12
-        arm_amp = 0.58 if fast else 0.36
+        hip_amp = 0.70 if fast else 0.30
+        knee_base = 0.26 if fast else 0.18
+        knee_amp = 0.92 if fast else 0.38
+        ankle_base = -0.26 if fast else -0.13
+        ankle_amp = 0.30 if fast else 0.12
+        arm_amp = 0.38 if fast else 0.36
 
         for side, value in (("left", sin_phase), ("right", -sin_phase)):
             swing = max(0.0, value)
             stance = max(0.0, -value)
-            hip_drive = -hip_amp * value - (0.10 * stance if fast else 0.0)
-            knee_drive = knee_base + knee_amp * swing + (0.12 * stance if fast else 0.0)
+            swing_lift = swing ** 0.82 if fast else swing
+            hip_drive = -hip_amp * value - (0.16 * stance if fast else 0.0)
+            if fast:
+                hip_drive += 0.12 * swing_lift
+            knee_drive = knee_base + knee_amp * swing_lift + (0.10 * stance if fast else 0.0)
             ankle_drive = (
                 ankle_base
-                - ankle_amp * swing
-                + (0.14 if fast else 0.10) * value
-                - (0.06 * stance if fast else 0.0)
+                - ankle_amp * swing_lift
+                + (0.16 if fast else 0.10) * value
+                - (0.10 * stance if fast else 0.0)
             )
             self._set_joint(qpos, f"{side}_hip_pitch_joint", hip_drive)
             self._set_joint(qpos, f"{side}_knee_joint", knee_drive)
@@ -142,18 +145,18 @@ class UnitreeG1Renderer:
                 ankle_drive,
             )
 
-        roll_amp = 0.07 if fast else 0.04
+        roll_amp = 0.05 if fast else 0.04
         self._set_joint(qpos, "left_hip_roll_joint", roll_amp * cos_phase)
         self._set_joint(qpos, "right_hip_roll_joint", -roll_amp * cos_phase)
-        self._set_joint(qpos, "waist_pitch_joint", -0.11 if fast else -0.07)
-        self._set_joint(qpos, "waist_yaw_joint", (0.08 if fast else 0.05) * sin_phase)
-        self._set_joint(qpos, "waist_roll_joint", 0.035 * cos_phase if fast else 0.0)
+        self._set_joint(qpos, "waist_pitch_joint", -0.12 if fast else -0.07)
+        self._set_joint(qpos, "waist_yaw_joint", (0.04 if fast else 0.05) * sin_phase)
+        self._set_joint(qpos, "waist_roll_joint", 0.02 * cos_phase if fast else 0.0)
         self._set_joint(qpos, "left_shoulder_pitch_joint", -arm_amp * sin_phase)
         self._set_joint(qpos, "right_shoulder_pitch_joint", arm_amp * sin_phase)
-        self._set_joint(qpos, "left_shoulder_roll_joint", 0.16 if fast else 0.10)
-        self._set_joint(qpos, "right_shoulder_roll_joint", -0.16 if fast else -0.10)
-        elbow_base = 0.95 if fast else 0.50
-        elbow_amp = 0.18 if fast else 0.20
+        self._set_joint(qpos, "left_shoulder_roll_joint", 0.12 if fast else 0.10)
+        self._set_joint(qpos, "right_shoulder_roll_joint", -0.12 if fast else -0.10)
+        elbow_base = 0.82 if fast else 0.50
+        elbow_amp = 0.14 if fast else 0.20
         self._set_joint(qpos, "left_elbow_joint", elbow_base + elbow_amp * max(0.0, -sin_phase))
         self._set_joint(qpos, "right_elbow_joint", elbow_base + elbow_amp * max(0.0, sin_phase))
 
@@ -182,7 +185,7 @@ class UnitreeG1Renderer:
 
     def pose(self, frame_index, gait):
         qpos = self.stand_qpos.copy()
-        period = 18.0 if gait == "run" else (30.0 if gait == "walk" else 24.0)
+        period = 15.0 if gait == "run" else (30.0 if gait == "walk" else 24.0)
         phase = 2.0 * math.pi * (frame_index / period)
         sin_phase = math.sin(phase)
         cos_phase = math.cos(phase)
@@ -219,9 +222,9 @@ class UnitreeG1Renderer:
             self._forward_gait(qpos, sin_phase, cos_phase, fast=False)
             return qpos
         if gait == "run":
-            qpos[0] = 0.046 * frame_index
-            qpos[2] = 0.815 + 0.026 * (0.5 + 0.5 * math.cos(2.0 * phase))
-            qpos[3:7] = self._body_quat(0.0, -0.07 + 0.012 * sin_phase, 0.0)
+            qpos[0] = 0.054 * frame_index
+            qpos[2] = 0.814 + 0.018 * (0.5 + 0.5 * math.cos(2.0 * phase))
+            qpos[3:7] = self._body_quat(0.0, -0.11 + 0.006 * sin_phase, 0.0)
             self._forward_gait(qpos, sin_phase, cos_phase, fast=True)
             return qpos
         if gait == "walk_backward":

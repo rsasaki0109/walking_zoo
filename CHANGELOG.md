@@ -579,3 +579,10 @@
   roughly doubled) until even a step lands on ground that keeps falling away (~8°). Tested
   by `test_terrain_critical_slope_is_torque_limited_and_stepping_extends_it` and
   `test_slope_biases_the_capturability_frontier_uphill`; suite at 52 gait_lab tests.
+- **Refined the MuJoCo Unitree G1 `run_forward` gait for a clearer walk/run split.**
+  Faster cadence (period 15 vs 30), higher forward speed, stronger knee lift and
+  toe-off, a more natural forward lean with a subtler vertical bounce, and reduced
+  arm/torso sway so running reads as running rather than sped-up walking. Updated
+  the live demo, hero showcase renderer, and gait gallery assets; validated with
+  `check_mujoco_g1_showcase_assets.py`, `check_readme_gallery_assets.py`, and the
+  runtime showcase smoke path.
