@@ -239,27 +239,31 @@ class GaitLabSilGaitController(Node):
             self._pending_push = None
 
         cmd = self._Command(forward_speed=float(self.cmd_speed), yaw_rate=float(self.cmd_yaw))
+        if self.use_embedded_rl_policy:
+            # Physics runs in gait_lab_sil_sim; publish obs/ff from the synced snapshot
+            # only (no local mj_step — stepping here desyncs policy input from the sim).
+            if walking:
+                obs = self.model.observe(self.gait_t)
+                ctrl, policy_obs, refresh = self.controller.feedforward_and_observation(
+                    obs, cmd)
+                if refresh:
+                    self._publish_embedded_rl(ctrl, policy_obs)
+                else:
+                    self._publish_embedded_ff(ctrl)
+                self.gait_t += self.model.timestep * self.substeps
+            else:
+                self._publish_embedded_rl_stand()
+            return
+
         for _ in range(self.substeps):
             if walking:
                 obs = self.model.observe(self.gait_t)
-                if self.use_embedded_rl_policy:
-                    ctrl, policy_obs, refresh = self.controller.feedforward_and_observation(
-                        obs, cmd)
-                    if refresh:
-                        self._publish_embedded_rl(ctrl, policy_obs)
-                    else:
-                        self._publish_embedded_ff(ctrl)
-                else:
-                    ctrl = self.controller.update(obs, cmd)
-                    self._publish_joint_command(ctrl)
+                ctrl = self.controller.update(obs, cmd)
+                self._publish_joint_command(ctrl)
                 self.gait_t += self.model.timestep
             else:
-                ctrl = self.stand
-                if self.use_embedded_rl_policy:
-                    self._publish_embedded_rl_stand()
-                else:
-                    self._publish_joint_command(ctrl)
-            self.model.data.ctrl[:] = ctrl
+                self._publish_joint_command(self.stand)
+            self.model.data.ctrl[:] = ctrl if walking else self.stand
             self.model.step()
 
         if float(self.model.data.qpos[2]) < 0.5:
