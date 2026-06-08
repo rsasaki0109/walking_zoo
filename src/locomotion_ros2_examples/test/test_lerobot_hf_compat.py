@@ -12,8 +12,21 @@ from pathlib import Path
 
 import pytest
 
-datasets = pytest.importorskip("datasets")
-pytest.importorskip("pyarrow")
+# Skip (rather than ``importorskip``) so the tests are still *collected* and
+# reported as skipped when the optional deps are absent. A module-level
+# ``importorskip`` collects zero tests, which makes pytest exit with code 5
+# ("no tests collected") — and ament/colcon treat that as a test failure.
+try:
+    import datasets
+    import pyarrow  # noqa: F401
+
+    _HAVE_HF = True
+except ImportError:  # pragma: no cover - exercised only where deps are absent
+    datasets = None
+    _HAVE_HF = False
+
+pytestmark = pytest.mark.skipif(
+    not _HAVE_HF, reason="datasets/pyarrow not installed")
 
 _MODULE_PATH = Path(__file__).resolve().parent.parent / "scripts" / "locomotion_ros2_lerobot_export.py"
 _spec = importlib.util.spec_from_file_location("locomotion_ros2_lerobot_export", _MODULE_PATH)
