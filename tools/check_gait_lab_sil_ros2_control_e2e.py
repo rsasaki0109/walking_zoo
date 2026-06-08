@@ -4,8 +4,12 @@
 Brings up ``gait_lab_sil_ros2_control_runtime.launch.py`` and confirms:
   - ``/joint_states`` is published with the 12 G1 leg joints
   - the runtime still drives walking through the split sim + gait controller
+
+Pass ``--forward`` to exercise the ``GaitLabSilJointForwardController`` path
+(use_ros2_control_forward:=true).
 """
 
+import argparse
 import os
 from pathlib import Path
 import signal
@@ -31,20 +35,33 @@ def terminate_process_group(process):
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--forward",
+        action="store_true",
+        help="use GaitLabSilJointForwardController (ros2_control command loop)",
+    )
+    args = parser.parse_args()
+
     env = os.environ.copy()
     env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
-    env.setdefault("ROS_DOMAIN_ID", "58")
+    # Fresh domain per run avoids stale processes from prior failed launches.
+    env.setdefault("ROS_DOMAIN_ID", str(80 + (int(time.time()) % 20)))
     env.setdefault("LOCOMOTION_ROS2_GAIT_LAB_PATH", str(REPO / "experiments" / "gait_lab"))
     env.setdefault("MUJOCO_GL", "egl")
     os.environ["RMW_IMPLEMENTATION"] = env["RMW_IMPLEMENTATION"]
     os.environ["ROS_DOMAIN_ID"] = env["ROS_DOMAIN_ID"]
 
+    launch_args = [
+        "ros2", "launch", "locomotion_ros2_bringup",
+        "gait_lab_sil_ros2_control_runtime.launch.py",
+        "controller:=rl-residual",
+    ]
+    if args.forward:
+        launch_args.append("use_ros2_control_forward:=true")
+
     launch = subprocess.Popen(
-        [
-            "ros2", "launch", "locomotion_ros2_bringup",
-            "gait_lab_sil_ros2_control_runtime.launch.py",
-            "controller:=rl-residual",
-        ],
+        launch_args,
         env=env,
         preexec_fn=os.setsid,
     )
@@ -52,6 +69,7 @@ def main() -> int:
     node = None
     rclpy = None
     exit_code = 1
+    path_label = "forward" if args.forward else "direct"
     try:
         import rclpy
         from rclpy.action import ActionClient
@@ -87,7 +105,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"ros2_control joint_states ok: {len(joint_names)} joints")
+        print(f"ros2_control joint_states ok: {len(joint_names)} joints ({path_label})")
 
         s = latest.get("state")
         if s is None or not s.adapter_connected:
@@ -99,8 +117,7 @@ def main() -> int:
             print("no execute_velocity server", file=sys.stderr)
             return 1
 
-        # Let the split sim + gait controller exchange a few state/command cycles.
-        settle_deadline = time.time() + 3.0
+        settle_deadline = time.time() + (5.0 if args.forward else 3.0)
         while time.time() < settle_deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
 
@@ -132,12 +149,12 @@ def main() -> int:
         final = latest.get("state")
         final_fallen = bool(final and final.is_fallen)
         if result.success and observed["walking"] and not final_fallen:
-            print("gait_lab SIL ros2_control E2E passed")
+            print(f"gait_lab SIL ros2_control E2E passed ({path_label})")
             exit_code = 0
         else:
             print(
-                f"gait_lab SIL ros2_control E2E failed "
-                f"(final_fallen={final_fallen})",
+                f"gait_lab SIL ros2_control E2E failed ({path_label}, "
+                f"final_fallen={final_fallen})",
                 file=sys.stderr,
             )
     except Exception as error:  # noqa: BLE001

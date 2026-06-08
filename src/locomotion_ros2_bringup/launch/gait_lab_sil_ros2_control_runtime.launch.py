@@ -5,12 +5,16 @@ runs in ``gait_lab_sil_gait_controller`` and publishes ros2_control joint comman
 A ``joint_state_topic_hardware_interface`` + ``joint_state_broadcaster`` exposes
 standard ``/joint_states`` for tools and future controllers.
 
+Set ``use_ros2_control_forward:=true`` to route policy targets through the
+``GaitLabSilJointForwardController`` plugin instead of direct joint_commands.
+
 The legacy monolithic path remains the default
 (``gait_lab_sil_runtime.launch.py``).
 """
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
@@ -29,6 +33,7 @@ def generate_launch_description():
     menagerie_path = LaunchConfiguration("menagerie_path")
     gait_lab_path = LaunchConfiguration("gait_lab_path")
     controller = LaunchConfiguration("controller")
+    use_ros2_control_forward = LaunchConfiguration("use_ros2_control_forward")
 
     sim_env = {
         "LOCOMOTION_ROS2_GAIT_LAB_PATH": gait_lab_path,
@@ -55,7 +60,7 @@ def generate_launch_description():
         ],
     )
 
-    joint_state_broadcaster_spawner = Node(
+    direct_spawner = Node(
         package="controller_manager",
         executable="spawner",
         arguments=[
@@ -63,6 +68,19 @@ def generate_launch_description():
             "--controller-manager", "/controller_manager",
         ],
         output="screen",
+        condition=UnlessCondition(use_ros2_control_forward),
+    )
+
+    forward_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[
+            "joint_state_broadcaster",
+            "gait_lab_sil_gait_forward",
+            "--controller-manager", "/controller_manager",
+        ],
+        output="screen",
+        condition=IfCondition(use_ros2_control_forward),
     )
 
     runtime_node = Node(
@@ -102,6 +120,7 @@ def generate_launch_description():
         parameters=[{
             "controller": controller,
             "ros2_control_split": True,
+            "batch_substeps_per_command": False,
         }],
     )
 
@@ -111,12 +130,23 @@ def generate_launch_description():
         name="gait_lab_sil_gait_controller",
         output="screen",
         additional_env=sim_env,
-        parameters=[{"controller": controller}],
+        parameters=[{
+            "controller": controller,
+            "use_ros2_control_forward": use_ros2_control_forward,
+            "ros2_control_forward_topic": "/gait_lab_sil_gait_forward/commands",
+        }],
     )
 
     delayed_spawner = TimerAction(
         period=2.0,
-        actions=[joint_state_broadcaster_spawner],
+        actions=[direct_spawner, forward_spawner],
+    )
+
+    # Start sim + policy after ros2_control controllers are spawned so the
+    # forward-controller path does not drop the first command burst.
+    delayed_sim_stack = TimerAction(
+        period=3.0,
+        actions=[sim_node, gait_controller_node],
     )
 
     return LaunchDescription([
@@ -124,11 +154,11 @@ def generate_launch_description():
             "menagerie_path", default_value="/tmp/locomotion_ros2_mujoco_menagerie"),
         DeclareLaunchArgument("gait_lab_path", default_value=""),
         DeclareLaunchArgument("controller", default_value="rl-residual"),
+        DeclareLaunchArgument("use_ros2_control_forward", default_value="false"),
         robot_state_publisher,
         ros2_control_node,
         delayed_spawner,
+        delayed_sim_stack,
         runtime_node,
         cmd_vel_bridge,
-        sim_node,
-        gait_controller_node,
     ])

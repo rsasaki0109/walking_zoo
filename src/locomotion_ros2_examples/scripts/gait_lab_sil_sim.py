@@ -104,8 +104,12 @@ class GaitLabSilSim(Node):
             "joint_commands_topic", "/gait_lab_sil/ros2_control/joint_commands")
         self.declare_parameter(
             "joint_states_topic", "/gait_lab_sil/ros2_control/joint_states")
+        # When true, each joint command runs all substeps (ros2_control forward path).
+        self.declare_parameter("batch_substeps_per_command", False)
 
         self.ros2_control_split = bool(self.get_parameter("ros2_control_split").value)
+        self.batch_substeps_per_command = bool(
+            self.get_parameter("batch_substeps_per_command").value)
         controller_name = self.get_parameter("controller").value
         self.substeps = int(self.get_parameter("substeps").value)
         self.move_threshold = float(self.get_parameter("move_threshold").value)
@@ -226,6 +230,7 @@ class GaitLabSilSim(Node):
             self.estop = False
             if self.ros2_control_split:
                 self._publish_ros2_control_joint_states()
+                self._publish_state(False)
         elif signal == "deactivate":
             self.active = False
             self.moving = False
@@ -357,6 +362,23 @@ class GaitLabSilSim(Node):
     def _step_ros2_control_split(self):
         walking = self.active and not self.estop and not self.fallen \
             and self._commanded_to_move()
+        if self.batch_substeps_per_command:
+            if walking and not self.walking_prev:
+                self._rehome_posture()
+            self.walking_prev = walking
+            if self._pending_push is not None and walking:
+                kx, ky = self._pending_push
+                self.model.data.qvel[0] += kx
+                self.model.data.qvel[1] += ky
+                self._pending_push = None
+                self.get_logger().info(
+                    f"gait_lab SIL push applied: ({kx:+.2f}, {ky:+.2f}) m/s")
+            self._apply_split_joint_commands()
+            for _ in range(self.substeps):
+                self.model.step()
+            self._finish_ros2_control_tick(walking)
+            return
+
         if walking and not self.walking_prev and self._split_steps_this_tick == 0:
             self._rehome_posture()
         if self._split_steps_this_tick == 0:

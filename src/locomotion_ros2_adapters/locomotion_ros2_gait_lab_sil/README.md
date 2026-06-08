@@ -79,12 +79,12 @@ ros2 launch locomotion_ros2_bringup gait_lab_sil_ros2_control_runtime.launch.py 
 * **Policy** — `gait_lab_sil_gait_controller.py` (swap with `controller:=…`)
 * **ros2_control** — `g1_sil_ros2_control.urdf` +
   `locomotion_ros2_gait_lab_sil/GaitLabSilTopicSystem` + `joint_state_broadcaster`
-* **B3 deep (first rung)** — optional
-  `locomotion_ros2_gait_lab_sil/GaitLabSilJointForwardController` plugin in
-  `gait_lab_sil_ros2_control.yaml` (spawn manually; default launch still drives
+* **B3 deep** — optional `GaitLabSilJointForwardController` plugin; enable with
+  `use_ros2_control_forward:=true` on the ros2_control launch (default remains
   the direct `joint_commands` policy path).
 
-Verified by `tools/check_gait_lab_sil_ros2_control_e2e.py` (needs MuJoCo).
+Verified by `tools/check_gait_lab_sil_ros2_control_e2e.py` (and `--forward`;
+needs MuJoCo).
 
 ### Driving it from Nav2
 

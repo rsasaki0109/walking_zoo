@@ -62,11 +62,17 @@ class GaitLabSilGaitController(Node):
         self.declare_parameter("move_threshold", 0.02)
         self.declare_parameter("joint_commands_topic", "/gait_lab_sil/ros2_control/joint_commands")
         self.declare_parameter("joint_states_topic", "/gait_lab_sil/ros2_control/joint_states")
+        self.declare_parameter("use_ros2_control_forward", False)
+        self.declare_parameter(
+            "ros2_control_forward_topic", "/gait_lab_sil_gait_forward/commands")
 
         controller_name = self.get_parameter("controller").value
         self.substeps = int(self.get_parameter("substeps").value)
         self.move_threshold = float(self.get_parameter("move_threshold").value)
+        self.use_ros2_control_forward = bool(
+            self.get_parameter("use_ros2_control_forward").value)
         commands_topic = self.get_parameter("joint_commands_topic").value
+        forward_topic = self.get_parameter("ros2_control_forward_topic").value
 
         sys.path.insert(0, _locate_gait_lab())
         from gait_lab import CONTROLLERS, Command, G1Model  # noqa: E402
@@ -92,6 +98,7 @@ class GaitLabSilGaitController(Node):
         self.walking_prev = False
         self._pending_push = None
         self._state_synced = False
+        self._last_forward_positions = None
         from rclpy.qos import DurabilityPolicy, QoSProfile
 
         self.create_subscription(TwistStamped, "gait_lab_sil/command_velocity", self._on_cmd, 10)
@@ -102,12 +109,19 @@ class GaitLabSilGaitController(Node):
         self.create_subscription(
             Float64MultiArray, "gait_lab_sil/physics_snapshot",
             self._on_physics_snapshot, 10)
-        self.joint_cmd_pub = self.create_publisher(JointState, commands_topic, 10)
+        self.joint_cmd_pub = None
+        self.forward_cmd_pub = None
+        if self.use_ros2_control_forward:
+            self.forward_cmd_pub = self.create_publisher(
+                Float64MultiArray, forward_topic, 10)
+        else:
+            self.joint_cmd_pub = self.create_publisher(JointState, commands_topic, 10)
 
         hz = float(self.get_parameter("control_hz").value)
+        path = "ros2_control forward" if self.use_ros2_control_forward else "direct joint_commands"
         self.get_logger().info(
             f"gait_lab SIL gait controller up: policy={controller_name} "
-            f"(driven by joint_states, ~{hz:.0f} Hz)")
+            f"({path}, physics_snapshot-driven, ~{hz:.0f} Hz)")
 
     def _on_cmd(self, msg: TwistStamped):
         self.cmd_speed = msg.twist.linear.x
@@ -204,7 +218,6 @@ class GaitLabSilGaitController(Node):
             else:
                 ctrl = self.stand
             self._publish_joint_command(ctrl)
-            # Step the shadow model so the next observe() matches monolithic timing.
             self.model.data.ctrl[:] = ctrl
             self.model.step()
 
@@ -212,10 +225,17 @@ class GaitLabSilGaitController(Node):
             self.fallen = True
 
     def _publish_joint_command(self, ctrl):
+        positions = [float(ctrl[self.model.actuator(name)]) for name in LEG_ACTUATORS]
+        if self.forward_cmd_pub is not None:
+            self._last_forward_positions = positions
+            msg = Float64MultiArray()
+            msg.data = positions
+            self.forward_cmd_pub.publish(msg)
+            return
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(LEG_ACTUATORS)
-        msg.position = [float(ctrl[self.model.actuator(name)]) for name in LEG_ACTUATORS]
+        msg.position = positions
         self.joint_cmd_pub.publish(msg)
 
 

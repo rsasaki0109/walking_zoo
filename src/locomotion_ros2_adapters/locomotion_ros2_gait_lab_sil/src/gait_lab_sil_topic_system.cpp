@@ -120,9 +120,44 @@ hardware_interface::return_type GaitLabSilTopicSystem::read(
 hardware_interface::return_type GaitLabSilTopicSystem::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  // B3 first rung: gait_lab_sil_gait_controller publishes actuator targets
-  // directly. ros2_control only mirrors joint states for /joint_states.
-  (void)joint_command_pub_;
+  // Direct policy path: gait_lab_sil_gait_controller publishes joint commands.
+  // Forward-controller path publishes when a loaded controller writes targets
+  // that differ from the reported state (see use_ros2_control_forward launch).
+  if (!joint_command_pub_ || joint_names_.empty()) {
+    return hardware_interface::return_type::OK;
+  }
+
+  bool differs_from_state = false;
+  for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
+    if (hw_commands_[i] != hw_positions_[i]) {
+      differs_from_state = true;
+      break;
+    }
+  }
+  if (!differs_from_state) {
+    return hardware_interface::return_type::OK;
+  }
+
+  static thread_local std::vector<double> last_published;
+  if (last_published.size() == hw_commands_.size()) {
+    bool unchanged = true;
+    for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
+      if (hw_commands_[i] != last_published[i]) {
+        unchanged = false;
+        break;
+      }
+    }
+    if (unchanged) {
+      return hardware_interface::return_type::OK;
+    }
+  }
+  last_published = hw_commands_;
+
+  sensor_msgs::msg::JointState msg;
+  msg.header.stamp = node_->now();
+  msg.name = joint_names_;
+  msg.position = hw_commands_;
+  joint_command_pub_->publish(msg);
   return hardware_interface::return_type::OK;
 }
 
