@@ -213,7 +213,7 @@ def generate_launch_description():
         condition=IfCondition(direct_active),
     )
 
-    sim_node_split = Node(
+    sim_node_forward = Node(
         package="locomotion_ros2_examples",
         executable="gait_lab_sil_sim.py",
         name="gait_lab_sil_sim",
@@ -225,7 +225,22 @@ def generate_launch_description():
             "batch_substeps_per_command": False,
             "substeps": 10,
         }],
-        condition=IfCondition(split_active),
+        condition=IfCondition(forward_only),
+    )
+
+    sim_node_embedded = Node(
+        package="locomotion_ros2_examples",
+        executable="gait_lab_sil_sim.py",
+        name="gait_lab_sil_sim",
+        output="screen",
+        additional_env=sim_env,
+        parameters=[{
+            "controller": controller,
+            "ros2_control_split": True,
+            "batch_substeps_per_command": False,
+            "substeps": 1,
+        }],
+        condition=IfCondition(use_embedded_rl_policy),
     )
 
     gait_controller_node_direct = Node(
@@ -269,7 +284,7 @@ def generate_launch_description():
             "controller": controller,
             "use_ros2_control_forward": False,
             "use_embedded_rl_policy": True,
-            "substeps": 10,
+            "substeps": 1,
             "steer_yaw_ramp_rate": 0.15,
         }],
         condition=IfCondition(use_embedded_rl_policy),
@@ -284,7 +299,8 @@ def generate_launch_description():
         period=3.0,
         actions=[
             sim_node_direct,
-            sim_node_split,
+            sim_node_forward,
+            sim_node_embedded,
             gait_controller_node_direct,
             gait_controller_node_forward,
             gait_controller_node_embedded,

@@ -669,6 +669,10 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B2 flake reduction** — per-substep yaw ramp (`steer_yaw_ramp_rate`) on
   `rl-steerable*` in the split gait controller; `--steer` primes straight walking,
   retries with `clear_fault`, and uses gentler arc commands (0.15 m/s, 0.20 rad/s).
+- [x] **B3 embedded parity fix** — embedded RL lockstep (`substeps:=1`): one CPG
+  tick + obs/ff pair per MuJoCo step (was 10 virtual ticks → 1 command). C++
+  infers residual when feedforward arrives after observation. Forward embedded E2E
+  passes; steer flake remains the `rl-steerable` gait limit, not MLP divergence.
 - [ ] **B2** — reactive steering that holds the full horizon (depends on B1).
 - [x] **B3 first rung** — ros2_control joint-state bridge for gait_lab SIL: topic
   hardware interface, split sim (physics) + gait controller (policy),

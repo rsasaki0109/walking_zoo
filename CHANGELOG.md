@@ -624,6 +624,10 @@
   `feedforward_and_observation` once per MuJoCo substep so C++ RL runs at 50 Hz,
   not 5 Hz). Tightened Nav2 yaw/forward caps for `rl-steerable` spiral control;
   `--embedded` Nav2 E2E reaches 2 m at 0.8 m tolerance.
+- **B3 embedded parity fix.** Diagnosed embedded steer falls: the split path batched
+  ten CPG ticks into one feedforward command per snapshot. Embedded launch now uses
+  `substeps:=1` lockstep; the C++ RL controller pairs observation + feedforward and
+  infers on feedforward arrival. `--steer-direct` compares the Python policy path.
 - **B2 flake reduction.** Split gait controller ramps commanded yaw per MuJoCo
   substep for `rl-steerable*` (mirrors harness stability); `--steer` E2E primes
   straight walking, retries up to three times with `/locomotion_ros2/clear_fault`,

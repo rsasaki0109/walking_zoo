@@ -101,6 +101,7 @@ controller_interface::CallbackReturn GaitLabSilRlResidualController::on_activate
   std::lock_guard<std::mutex> lock(sample_mutex_);
   have_feedforward_.store(false);
   have_residual_.store(false);
+  have_pending_observation_.store(false);
   residual_.assign(joint_names_.size(), 0.0);
   for (std::size_t i = 0; i < command_interfaces_.size(); ++i) {
     hold_command_[i] = command_interfaces_[i].get_value();
@@ -113,6 +114,7 @@ controller_interface::CallbackReturn GaitLabSilRlResidualController::on_deactiva
 {
   have_feedforward_.store(false);
   have_residual_.store(false);
+  have_pending_observation_.store(false);
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -126,6 +128,17 @@ void GaitLabSilRlResidualController::on_feedforward(
     return;
   }
   std::lock_guard<std::mutex> lock(sample_mutex_);
+  if (have_pending_observation_.load()) {
+    const auto action = policy_.infer(pending_observation_);
+    if (action.size() == joint_names_.size()) {
+      residual_.resize(action.size());
+      for (std::size_t i = 0; i < action.size(); ++i) {
+        residual_[i] = action_scale_ * std::clamp(action[i], -1.0, 1.0);
+      }
+      have_residual_.store(true);
+    }
+    have_pending_observation_.store(false);
+  }
   feedforward_.assign(msg->data.begin(), msg->data.end());
   have_feedforward_.store(true);
 }
@@ -139,19 +152,9 @@ void GaitLabSilRlResidualController::on_observation(
       "observation size %zu != policy %zu", msg->data.size(), policy_.observation_dim());
     return;
   }
-  const auto action = policy_.infer(msg->data);
-  if (action.size() != joint_names_.size()) {
-    RCLCPP_WARN_THROTTLE(
-      get_node()->get_logger(), *get_node()->get_clock(), 5000,
-      "policy action size %zu != joints %zu", action.size(), joint_names_.size());
-    return;
-  }
   std::lock_guard<std::mutex> lock(sample_mutex_);
-  residual_.resize(action.size());
-  for (std::size_t i = 0; i < action.size(); ++i) {
-    residual_[i] = action_scale_ * std::clamp(action[i], -1.0, 1.0);
-  }
-  have_residual_.store(true);
+  pending_observation_.assign(msg->data.begin(), msg->data.end());
+  have_pending_observation_.store(true);
 }
 
 controller_interface::return_type GaitLabSilRlResidualController::update(

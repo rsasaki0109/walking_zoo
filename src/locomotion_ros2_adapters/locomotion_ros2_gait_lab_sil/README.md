@@ -84,13 +84,16 @@ ros2 launch locomotion_ros2_bringup gait_lab_sil_ros2_control_runtime.launch.py 
   the direct `joint_commands` policy path).
 * **B3 deep (embedded RL)** — `GaitLabSilRlResidualController` runs npz MLP
   inference in C++; enable with `use_embedded_rl_policy:=true` (Python node
-  publishes CPG feedforward + observations only).
+  publishes CPG feedforward + observations only). Embedded launch uses
+  `substeps:=1` lockstep so each MuJoCo step gets a fresh feedforward + paired
+  residual (batched virtual ticks desynced the CPG from physics).
 * **B2 (steerable)** — `controller:=rl-steerable` on the split stack; E2E
   `--steer` (B2 quantitative yaw gate) and `--steer-loose` (first rung) use the
-  embedded relay path.
+  embedded relay path. `--steer-direct` exercises the Python policy path for
+  comparison.
 
 Verified by `tools/check_gait_lab_sil_ros2_control_e2e.py` (`--forward`,
-`--embedded`, `--steer`; needs MuJoCo).
+`--embedded`, `--steer`, `--steer-direct`; needs MuJoCo).
 
 ### Driving it from Nav2
 

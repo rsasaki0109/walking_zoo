@@ -77,6 +77,11 @@ def main() -> int:
         help="first-rung steer check (any yaw/travel while walking)",
     )
     parser.add_argument(
+        "--steer-direct",
+        action="store_true",
+        help="B2 gate on Python policy path (no embedded C++ RL)",
+    )
+    parser.add_argument(
         "--controller",
         default="rl-residual",
         help="gait_lab controller (use rl-steerable with --steer)",
@@ -88,9 +93,11 @@ def main() -> int:
         return 2
     if args.steer or args.steer_loose:
         args.controller = "rl-steerable"
-    if (args.steer or args.steer_loose) and not args.forward:
-        # Turning needs the 500 Hz relay path; embedded RL keeps policy parity.
+    if (args.steer or args.steer_loose) and not args.forward and not args.steer_direct:
+        # Default B2 gate uses embedded C++ RL on the 500 Hz split path.
         args.embedded = True
+    if args.steer_direct:
+        args.embedded = False
 
     env = os.environ.copy()
     env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
@@ -127,7 +134,7 @@ def main() -> int:
     else:
         path_label = "direct"
     if args.steer:
-        path_label += "+steer"
+        path_label += "+steer-direct" if args.steer_direct else "+steer"
     elif args.steer_loose:
         path_label += "+steer-loose"
     try:

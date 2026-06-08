@@ -52,8 +52,10 @@ private:
   std::mutex sample_mutex_;
   std::vector<double> feedforward_;
   std::vector<double> residual_;
+  std::vector<double> pending_observation_;
   std::atomic<bool> have_feedforward_{false};
   std::atomic<bool> have_residual_{false};
+  std::atomic<bool> have_pending_observation_{false};
   std::vector<double> hold_command_;
 
   rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr observation_sub_;
