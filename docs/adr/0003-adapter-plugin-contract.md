@@ -6,7 +6,7 @@ Accepted.
 
 ## Decision
 
-Robot SDK integration happens behind `walking_zoo_core::WalkingAdapter`
+Robot SDK integration happens behind `locomotion_ros2_core::WalkingAdapter`
 pluginlib classes.
 
 ## Consequences

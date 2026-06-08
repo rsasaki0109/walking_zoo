@@ -1,0 +1,19 @@
+<root BTCPP_format="4" main_tree_to_execute="LocomotionRos2Recovery">
+  <!--
+    Recovery tree for a locomotion_ros2 robot. A host populates the `walking_state`
+    blackboard entry from /locomotion_ros2/state and sets `clear_succeeded` from the
+    result of a /locomotion_ros2/clear_fault service call before each evaluation.
+
+    If the robot is already ready, succeed immediately. Otherwise attempt to
+    clear the fault and re-check readiness on the refreshed state.
+  -->
+  <BehaviorTree ID="LocomotionRos2Recovery">
+    <Fallback name="locomotion_ros2_recovery">
+      <CheckWalkingReady walking_state="{walking_state}"/>
+      <Sequence name="clear_and_recheck">
+        <ClearWalkingFault clear_succeeded="{clear_succeeded}"/>
+        <CheckWalkingReady walking_state="{walking_state}"/>
+      </Sequence>
+    </Fallback>
+  </BehaviorTree>
+</root>

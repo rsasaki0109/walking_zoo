@@ -3,10 +3,10 @@ import argparse
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate a conservative walking_zoo robot profile.")
+    parser = argparse.ArgumentParser(description="Generate a conservative locomotion_ros2 robot profile.")
     parser.add_argument("robot_model")
     parser.add_argument("--family", default="quadruped")
-    parser.add_argument("--adapter", default="walking_zoo_mock_adapter/MockWalkingAdapter")
+    parser.add_argument("--adapter", default="locomotion_ros2_mock_adapter/MockWalkingAdapter")
     args = parser.parse_args()
 
     print(f"""robot_model: {args.robot_model}

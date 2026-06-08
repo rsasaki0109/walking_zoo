@@ -4,7 +4,7 @@
 Publishes a synthetic Nav2-style ``nav_msgs/OccupancyGrid`` (latched) with a
 lethal patch over the first foothold, then launches the real
 ``footstep_marker_publisher`` subscribed to that costmap topic. It subscribes to
-the published ``/walking_zoo/footstep_plan`` and asserts the planner reacted to
+the published ``/locomotion_ros2/footstep_plan`` and asserts the planner reacted to
 the *map data* (not hand-authored boxes): the foot over the lethal patch is
 nudged clear and no placed foot lands in a blocked cell. This exercises the
 OccupancyGrid -> TerrainGrid -> FootstepPlanner path through a live ROS node.
@@ -76,13 +76,13 @@ def main() -> int:
     rclpy = None
     exit_code = 1
     node_log = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="walking_zoo_costmap_e2e_", suffix=".log", delete=False)
+        mode="w+", prefix="locomotion_ros2_costmap_e2e_", suffix=".log", delete=False)
     launch = subprocess.Popen(
         [
-            "ros2", "run", "walking_zoo_runtime", "footstep_marker_publisher",
+            "ros2", "run", "locomotion_ros2_runtime", "footstep_marker_publisher",
             "--ros-args",
             "-p", "step_count:=6",
-            "-p", "costmap_topic:=/walking_zoo/terrain_costmap",
+            "-p", "costmap_topic:=/locomotion_ros2/terrain_costmap",
         ],
         env=env,
         stdout=node_log,
@@ -94,20 +94,20 @@ def main() -> int:
         import rclpy
         from rclpy.qos import QoSDurabilityPolicy, QoSProfile
         from nav_msgs.msg import OccupancyGrid
-        from walking_zoo_msgs.msg import FootstepPlan
+        from locomotion_ros2_msgs.msg import FootstepPlan
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_costmap_e2e_check")
+        node = rclpy.create_node("locomotion_ros2_costmap_e2e_check")
 
         latched = QoSProfile(depth=1)
         latched.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
         costmap_pub = node.create_publisher(
-            OccupancyGrid, "/walking_zoo/terrain_costmap", latched)
+            OccupancyGrid, "/locomotion_ros2/terrain_costmap", latched)
         costmap_pub.publish(build_costmap(OccupancyGrid))
 
         received = []
         node.create_subscription(
-            FootstepPlan, "/walking_zoo/footstep_plan",
+            FootstepPlan, "/locomotion_ros2/footstep_plan",
             lambda msg: received.append(msg), 10)
 
         # Keep republishing for a moment so a late-joining node still latches it.
@@ -115,7 +115,7 @@ def main() -> int:
         while time.time() < deadline:
             costmap_pub.publish(build_costmap(OccupancyGrid))
             rclpy.spin_once(node, timeout_sec=0.3)
-            if received and received[-1].planner_id == "walking_zoo_terrain_planner":
+            if received and received[-1].planner_id == "locomotion_ros2_terrain_planner":
                 break
 
         if not received:
@@ -123,7 +123,7 @@ def main() -> int:
             return 1
 
         plan = received[-1]
-        if plan.planner_id != "walking_zoo_terrain_planner":
+        if plan.planner_id != "locomotion_ros2_terrain_planner":
             print(f"planner did not consume terrain (planner_id={plan.planner_id})",
                   file=sys.stderr)
             return 1

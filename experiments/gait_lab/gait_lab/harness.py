@@ -2,7 +2,7 @@
 
 This is the "runtime" for gait_lab. It owns the physics loop (``mj_step``),
 feeds each controller's ``ctrl`` into the position actuators, watches for a
-fall, and optionally records frames for a GIF — exactly the loop walking_zoo's
+fall, and optionally records frames for a GIF — exactly the loop locomotion_ros2's
 real adapters run, just instrumented for comparison.
 """
 

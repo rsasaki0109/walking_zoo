@@ -103,7 +103,7 @@ def main() -> int:
     ax1.legend(loc="upper left", facecolor="#15171c", edgecolor="#2a2e38",
                labelcolor="#e8e9ee", fontsize=8.5)
 
-    fig.suptitle("walking_zoo · adaptive step duration on restricted footholds",
+    fig.suptitle("locomotion_ros2 · adaptive step duration on restricted footholds",
                  color="#7cc4ff", fontsize=14, fontweight="bold", x=0.5, y=0.985)
     fig.text(0.5, 0.925, "irregular stepping stones (arXiv:2403.17136) — both hit the "
              "stones; only adaptive timing keeps the DCM viable",

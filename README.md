@@ -1,16 +1,16 @@
-# walking_zoo
+# locomotion_ros2
 
 ROS2-native Walking Runtime & Adapter Hub for Humanoid and Legged Robots.
 
-walking_zoo is not another locomotion policy repository. It is a ROS2-native
+locomotion_ros2 is not another locomotion policy repository. It is a ROS2-native
 walking runtime layer for operating humanoid and legged robots in the real
 world.
 
 Think **Nav2 for walking robots**: Nav2 decides where a robot should go;
-walking_zoo owns how walking commands are admitted, limited, dispatched, and
+locomotion_ros2 owns how walking commands are admitted, limited, dispatched, and
 observed across robot-specific SDKs.
 
-![MuJoCo Unitree G1 walking_zoo gait showcase](docs/assets/readme/mujoco_unitree_g1_showcase.gif)
+![MuJoCo Unitree G1 locomotion_ros2 gait showcase](docs/assets/readme/mujoco_unitree_g1_showcase.gif)
 
 Want proof behind the GIF? See [Demo Evidence](docs/demo_evidence.md) for the
 reproducible MuJoCo G1 runtime showcase, generated GIF, JSON trace, Markdown
@@ -19,34 +19,34 @@ timeline, and e-stop evidence.
 ## Visual Tour
 
 Run the same humanoid gait sequence locally with one launch command:
-`ros2 launch walking_zoo_bringup mujoco_g1_gait_showcase.launch.py`.
+`ros2 launch locomotion_ros2_bringup mujoco_g1_gait_showcase.launch.py`.
 
 Preview the humanoid target path with a Unitree G1 model rendered in MuJoCo as
-a walking_zoo runtime target.
+a locomotion_ros2 runtime target.
 
-![walking_zoo MuJoCo Unitree G1 humanoid demo](docs/assets/readme/mujoco_unitree_g1_runtime.gif)
+![locomotion_ros2 MuJoCo Unitree G1 humanoid demo](docs/assets/readme/mujoco_unitree_g1_runtime.gif)
 
-The gait gallery shows the command surface walking_zoo is designed to normalize:
+The gait gallery shows the command surface locomotion_ros2 is designed to normalize:
 forward walk, forward run, reverse walk, sidestep, turn-in-place, and stand/stop.
 
-![walking_zoo MuJoCo Unitree G1 gait gallery](docs/assets/readme/mujoco_unitree_g1_gait_gallery.gif)
+![locomotion_ros2 MuJoCo Unitree G1 gait gallery](docs/assets/readme/mujoco_unitree_g1_gait_gallery.gif)
 
-Beyond locomotion, walking_zoo also models body-pose commands (`MODE_BODY_POSE`):
+Beyond locomotion, locomotion_ros2 also models body-pose commands (`MODE_BODY_POSE`):
 a neutral stand next to body crouch, pitch, and roll holds.
 
-![walking_zoo MuJoCo Unitree G1 body pose gallery](docs/assets/readme/mujoco_unitree_g1_body_pose_gallery.gif)
+![locomotion_ros2 MuJoCo Unitree G1 body pose gallery](docs/assets/readme/mujoco_unitree_g1_body_pose_gallery.gif)
 
 Send a Nav2-style velocity command and watch a Laikago robot rendered in
 PyBullet move through the same runtime path without real hardware.
 
-![walking_zoo PyBullet Laikago runtime demo](docs/assets/readme/pybullet_laikago_runtime.gif)
+![locomotion_ros2 PyBullet Laikago runtime demo](docs/assets/readme/pybullet_laikago_runtime.gif)
 
 Trip the e-stop gate and the simulated robot stops before another adapter
 command can pass through.
 
-![walking_zoo PyBullet estop demo](docs/assets/readme/pybullet_laikago_estop.gif)
+![locomotion_ros2 PyBullet estop demo](docs/assets/readme/pybullet_laikago_estop.gif)
 
-## Why walking_zoo?
+## Why locomotion_ros2?
 
 Walking robots need a runtime layer, not just policies.
 
@@ -56,7 +56,7 @@ Walking robots need a runtime layer, not just policies.
   platforms.
 - Learned policies and VLA systems still need a safe runtime boundary before
   they can operate real walking robots.
-- walking_zoo provides the missing layer between Nav2, teleoperation, learned
+- locomotion_ros2 provides the missing layer between Nav2, teleoperation, learned
   policies, future VLA systems, and vendor SDKs.
 
 ## What This Is Not
@@ -72,7 +72,7 @@ Walking robots need a runtime layer, not just policies.
 ```mermaid
 flowchart LR
   Teleop[Teleop] --> Runtime
-  Nav2[Nav2 / cmd_vel] --> Bridge[walking_zoo_nav2 bridge] --> Runtime
+  Nav2[Nav2 / cmd_vel] --> Bridge[locomotion_ros2_nav2 bridge] --> Runtime
   VLA[VLA / semantic action] --> Runtime
   Runtime[Walking Runtime Manager] --> Safety[Safety Pipeline]
   Safety --> Adapter[Adapter Plugin Contract]
@@ -83,12 +83,12 @@ flowchart LR
 
 Core layers:
 
-- `walking_zoo_msgs`: stable ROS2 msg/srv/action interfaces.
-- `walking_zoo_core`: C++ adapter contract and shared types.
-- `walking_zoo_safety`: velocity limiter, watchdog, estop gate.
-- `walking_zoo_runtime`: lifecycle runtime, command dispatch, state publishing.
-- `walking_zoo_mock_adapter`: always-buildable demo adapter.
-- `walking_zoo_nav2`: `/cmd_vel` bridge for Nav2 integration.
+- `locomotion_ros2_msgs`: stable ROS2 msg/srv/action interfaces.
+- `locomotion_ros2_core`: C++ adapter contract and shared types.
+- `locomotion_ros2_safety`: velocity limiter, watchdog, estop gate.
+- `locomotion_ros2_runtime`: lifecycle runtime, command dispatch, state publishing.
+- `locomotion_ros2_mock_adapter`: always-buildable demo adapter.
+- `locomotion_ros2_nav2`: `/cmd_vel` bridge for Nav2 integration.
 
 ## Quick Demo
 
@@ -97,7 +97,7 @@ Run a walking runtime without a real robot:
 ```bash
 colcon build --symlink-install
 source install/setup.bash
-ros2 launch walking_zoo_bringup mock_runtime.launch.py
+ros2 launch locomotion_ros2_bringup mock_runtime.launch.py
 ```
 
 In another terminal:
@@ -105,13 +105,13 @@ In another terminal:
 ```bash
 source install/setup.bash
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.2}, angular: {z: 0.1}}" --once
-ros2 topic echo /walking_zoo/state
+ros2 topic echo /locomotion_ros2/state
 ```
 
 Trigger the emergency stop gate:
 
 ```bash
-ros2 service call /walking_zoo/estop walking_zoo_msgs/srv/EmergencyStop "{stop: true, reason: demo}"
+ros2 service call /locomotion_ros2/estop locomotion_ros2_msgs/srv/EmergencyStop "{stop: true, reason: demo}"
 ```
 
 Or run the end-to-end mock runtime check:
@@ -122,15 +122,15 @@ python3 tools/check_mock_runtime_e2e.py
 
 ## Live MuJoCo G1 Demo
 
-Run a headless Unitree G1 gait visualizer that listens to walking_zoo ROS2
+Run a headless Unitree G1 gait visualizer that listens to locomotion_ros2 ROS2
 topics and writes `latest.png` plus `live.gif`:
 
 ```bash
 colcon build --symlink-install
 source install/setup.bash
 python3 -m pip install -r tools/readme_gif_requirements.txt
-git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
-ros2 launch walking_zoo_bringup mujoco_g1_gait_demo.launch.py
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/locomotion_ros2_mujoco_menagerie
+ros2 launch locomotion_ros2_bringup mujoco_g1_gait_demo.launch.py
 ```
 
 Drive the demo through standard velocity commands:
@@ -142,52 +142,52 @@ ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.25}, angular: {z
 Or switch gaits through semantic actions:
 
 ```bash
-ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'walk_backward'}" --once
-ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'sidestep_left'}" --once
-ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'turn_right'}" --once
+ros2 topic pub /locomotion_ros2/semantic_action locomotion_ros2_msgs/msg/SemanticAction "{action: 'walk_backward'}" --once
+ros2 topic pub /locomotion_ros2/semantic_action locomotion_ros2_msgs/msg/SemanticAction "{action: 'sidestep_left'}" --once
+ros2 topic pub /locomotion_ros2/semantic_action locomotion_ros2_msgs/msg/SemanticAction "{action: 'turn_right'}" --once
 ```
 
 Or hold a body pose (`MODE_BODY_POSE`) instead of locomotion:
 
 ```bash
-ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'body_crouch'}" --once
-ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'body_pitch'}" --once
-ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'body_roll'}" --once
+ros2 topic pub /locomotion_ros2/semantic_action locomotion_ros2_msgs/msg/SemanticAction "{action: 'body_crouch'}" --once
+ros2 topic pub /locomotion_ros2/semantic_action locomotion_ros2_msgs/msg/SemanticAction "{action: 'body_pitch'}" --once
+ros2 topic pub /locomotion_ros2/semantic_action locomotion_ros2_msgs/msg/SemanticAction "{action: 'body_roll'}" --once
 ```
 
 The demo can also render a fall-detected placeholder state (the
-`walking_zoo_safety` `FallDetector` flags it from body tilt, and recovery stays
+`locomotion_ros2_safety` `FallDetector` flags it from body tilt, and recovery stays
 blocked by the safety gate):
 
 ```bash
-ros2 topic pub /walking_zoo/semantic_action walking_zoo_msgs/msg/SemanticAction "{action: 'fall_detected'}" --once
+ros2 topic pub /locomotion_ros2/semantic_action locomotion_ros2_msgs/msg/SemanticAction "{action: 'fall_detected'}" --once
 ```
 
-Open `/tmp/walking_zoo_mujoco_g1_demo/latest.png` or
-`/tmp/walking_zoo_mujoco_g1_demo/live.gif` to inspect the current simulated
+Open `/tmp/locomotion_ros2_mujoco_g1_demo/latest.png` or
+`/tmp/locomotion_ros2_mujoco_g1_demo/live.gif` to inspect the current simulated
 runtime target.
 
 Run the one-command gait showcase to capture multiple walking styles:
 
 ```bash
-ros2 launch walking_zoo_bringup mujoco_g1_gait_showcase.launch.py
+ros2 launch locomotion_ros2_bringup mujoco_g1_gait_showcase.launch.py
 ```
 
 The showcase automatically steps through forward walk, forward run, reverse
 walk, sidestep, turn-in-place, stop, and the runtime e-stop gate. It writes
-`/tmp/walking_zoo_mujoco_g1_showcase/latest.png` and `live.gif`.
+`/tmp/locomotion_ros2_mujoco_g1_showcase/latest.png` and `live.gif`.
 
 Run the runtime proof version to capture the GIF plus ROS2 topic trace:
 
 ```bash
-ros2 launch walking_zoo_bringup mujoco_g1_runtime_showcase.launch.py
-python3 tools/check_demo_trace.py /tmp/walking_zoo_mujoco_g1_runtime_showcase/demo_trace.json --require-estop
+ros2 launch locomotion_ros2_bringup mujoco_g1_runtime_showcase.launch.py
+python3 tools/check_demo_trace.py /tmp/locomotion_ros2_mujoco_g1_runtime_showcase/demo_trace.json --require-estop
 ```
 
 This writes `latest.png`, `live.gif`, `demo_trace.json`, and `demo_trace.md`.
-The trace records `/walking_zoo/state`, `/walking_zoo/adapter_status`,
-`/walking_zoo/safety_state`, `/cmd_vel`, `/walking_zoo/cmd_vel`, and
-`/walking_zoo/semantic_action`.
+The trace records `/locomotion_ros2/state`, `/locomotion_ros2/adapter_status`,
+`/locomotion_ros2/safety_state`, `/cmd_vel`, `/locomotion_ros2/cmd_vel`, and
+`/locomotion_ros2/semantic_action`.
 
 Each gait in the GIF maps to a concrete command path. The
 [command-to-visual traceability table](docs/demo_evidence.md#command-to-visual-traceability)
@@ -200,24 +200,24 @@ for the short example guide.
 
 ## Footstep Plan Preview
 
-Humanoids need more than `/cmd_vel`. walking_zoo ships a deterministic stub
+Humanoids need more than `/cmd_vel`. locomotion_ros2 ships a deterministic stub
 footstep planner and an RViz marker preview so the footstep interface is visible
 before any real footstep controller exists:
 
 ```bash
-ros2 launch walking_zoo_runtime footstep_markers.launch.py step_count:=6 lateral_shift:=0.0
+ros2 launch locomotion_ros2_runtime footstep_markers.launch.py step_count:=6 lateral_shift:=0.0
 ```
 
-This publishes a `walking_zoo_msgs/FootstepPlan` on `/walking_zoo/footstep_plan`
+This publishes a `locomotion_ros2_msgs/FootstepPlan` on `/locomotion_ros2/footstep_plan`
 and matching `visualization_msgs/MarkerArray` foot markers on
-`/walking_zoo/footstep_markers` (add a `MarkerArray` display in RViz with the
+`/locomotion_ros2/footstep_markers` (add a `MarkerArray` display in RViz with the
 fixed frame set to `base_link`). Left and right feet are colored blue and green,
 and any step the placeholder feasibility check rejects (over-long stride, too far
 lateral, or too high a swing) turns red. Try `lateral_shift:=0.3` to push later
 steps out of range and see them flagged.
 
 The runtime itself accepts footstep plans through the `ExecuteFootstepPlan`
-action on `/walking_zoo/execute_footstep_plan`. The runtime runs the same
+action on `/locomotion_ros2/execute_footstep_plan`. The runtime runs the same
 feasibility gate before dispatching the plan to the adapter, publishes per-step
 feedback, and aborts infeasible plans instead of executing them. End-to-end:
 
@@ -232,26 +232,26 @@ check terrain; it is a placeholder for a real footstep controller.
 Regenerate the README GIFs:
 
 ```bash
-python3 -m venv /tmp/walking_zoo_gif_venv
-/tmp/walking_zoo_gif_venv/bin/python -m pip install -r tools/readme_gif_requirements.txt
-git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
-/tmp/walking_zoo_gif_venv/bin/python tools/render_mujoco_g1_showcase_gif.py
-/tmp/walking_zoo_gif_venv/bin/python tools/render_readme_gifs.py
+python3 -m venv /tmp/locomotion_ros2_gif_venv
+/tmp/locomotion_ros2_gif_venv/bin/python -m pip install -r tools/readme_gif_requirements.txt
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/locomotion_ros2_mujoco_menagerie
+/tmp/locomotion_ros2_gif_venv/bin/python tools/render_mujoco_g1_showcase_gif.py
+/tmp/locomotion_ros2_gif_venv/bin/python tools/render_readme_gifs.py
 python3 tools/check_mujoco_g1_showcase_assets.py
 ```
 
 The README robot GIFs are rendered with MuJoCo and PyBullet using existing robot
 assets. They are documentation assets, not a runtime dependency and not a new
-simulator inside walking_zoo.
+simulator inside locomotion_ros2.
 
 Expected behavior:
 
 - The runtime autostarts as a lifecycle node.
 - The mock adapter is loaded through pluginlib.
-- `/cmd_vel` is converted to `/walking_zoo/cmd_vel`.
+- `/cmd_vel` is converted to `/locomotion_ros2/cmd_vel`.
 - Velocity commands pass through conservative safety limits.
-- `/walking_zoo/state`, `/walking_zoo/adapter_status`, and
-  `/walking_zoo/safety_state` are published.
+- `/locomotion_ros2/state`, `/locomotion_ros2/adapter_status`, and
+  `/locomotion_ros2/safety_state` are published.
 - E-stop blocks further motion commands.
 
 If Fast DDS shared-memory ports are stale on your machine, run the demo with a
@@ -267,20 +267,20 @@ export ROS_DOMAIN_ID=42
 Phase 1 is intentionally simple:
 
 ```text
-Nav2 controller -> /cmd_vel -> walking_zoo_nav2 -> /walking_zoo/cmd_vel
+Nav2 controller -> /cmd_vel -> locomotion_ros2_nav2 -> /locomotion_ros2/cmd_vel
   -> WalkingRuntimeManager -> SafetyPipeline -> Adapter
 ```
 
-walking_zoo complements Nav2. Nav2 handles global/local navigation, costmaps,
-and recovery behavior. walking_zoo handles walking modes, safety gates, adapter
+locomotion_ros2 complements Nav2. Nav2 handles global/local navigation, costmaps,
+and recovery behavior. locomotion_ros2 handles walking modes, safety gates, adapter
 dispatch, and walking-specific commands.
 
 ## Adapter Contract
 
-Robot support is added by implementing `walking_zoo_core::WalkingAdapter` and
+Robot support is added by implementing `locomotion_ros2_core::WalkingAdapter` and
 exporting it as a pluginlib class. Adapter rules:
 
-- Do not leak vendor SDK types into `walking_zoo_core` or `walking_zoo_msgs`.
+- Do not leak vendor SDK types into `locomotion_ros2_core` or `locomotion_ros2_msgs`.
 - Keep real robot motion disabled by default.
 - Require explicit `allow_motion:=true` before any real motion command.
 - Return adapter health and robot state even when SDK connection fails.

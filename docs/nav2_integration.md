@@ -1,33 +1,33 @@
 # Nav2 Integration
 
-Phase 1 uses a bridge from `/cmd_vel` to `/walking_zoo/cmd_vel`.
+Phase 1 uses a bridge from `/cmd_vel` to `/locomotion_ros2/cmd_vel`.
 
 ```text
-Nav2 Controller -> /cmd_vel -> walking_zoo_nav2 cmd_vel_bridge
-  -> /walking_zoo/cmd_vel -> WalkingRuntimeManager -> SafetyPipeline -> Adapter
+Nav2 Controller -> /cmd_vel -> locomotion_ros2_nav2 cmd_vel_bridge
+  -> /locomotion_ros2/cmd_vel -> WalkingRuntimeManager -> SafetyPipeline -> Adapter
 ```
 
 This lets a legged robot appear as a Nav2 mobile base while keeping walking
-execution inside walking_zoo.
+execution inside locomotion_ros2.
 
 ## Walking Recovery In The Nav2 BT Navigator
 
-Beyond the velocity bridge, walking_zoo ships BT nodes that drop directly into a
+Beyond the velocity bridge, locomotion_ros2 ships BT nodes that drop directly into a
 Nav2 `bt_navigator` recovery branch, so a walking-specific fault (an e-stop
 residual, a driver fault) is recovered as part of normal Nav2 navigation instead
 of needing a separate standalone node.
 
-The `walking_zoo_nav2_bt_nodes` plugin library (in `walking_zoo_bt`) exports two
+The `locomotion_ros2_nav2_bt_nodes` plugin library (in `locomotion_ros2_bt`) exports two
 Nav2-loadable BT nodes that follow the Nav2 plugin convention — they take the ROS
 node from the `node` blackboard entry the bt_navigator sets, and reuse the Nav2
 `BtServiceNode` machinery:
 
-- `IsWalkingReady` — condition. Subscribes to `/walking_zoo/state` and succeeds
+- `IsWalkingReady` — condition. Subscribes to `/locomotion_ros2/state` and succeeds
   when the runtime reports the robot ready to walk (same `CheckWalkingReady` rule
   used everywhere else).
 - `ClearWalkingFault` — service action built on
-  `nav2_behavior_tree::BtServiceNode<walking_zoo_msgs::srv::ClearFault>`. Calls
-  `/walking_zoo/clear_fault` and succeeds only when the runtime confirms the
+  `nav2_behavior_tree::BtServiceNode<locomotion_ros2_msgs::srv::ClearFault>`. Calls
+  `/locomotion_ros2/clear_fault` and succeeds only when the runtime confirms the
   fault is cleared.
 
 `bt_xml/navigate_to_pose_w_walking_recovery.xml` is the stock Nav2
@@ -37,8 +37,8 @@ the `RoundRobin` recovery set:
 ```xml
 <RoundRobin name="RecoveryActions">
   <Sequence name="WalkingFaultRecovery">
-    <Inverter><IsWalkingReady state_topic="/walking_zoo/state"/></Inverter>
-    <ClearWalkingFault service_name="/walking_zoo/clear_fault"/>
+    <Inverter><IsWalkingReady state_topic="/locomotion_ros2/state"/></Inverter>
+    <ClearWalkingFault service_name="/locomotion_ros2/clear_fault"/>
   </Sequence>
   <Sequence name="ClearingActions"> ... </Sequence>
   <Spin .../>
@@ -50,7 +50,7 @@ the `RoundRobin` recovery set:
 The `Inverter` makes the walking recovery a no-op when the robot is already
 ready, so Nav2 falls straight through to its generic costmap-clear / spin / wait
 / back-up recoveries. Enable it by overlaying `config/nav2_bt_navigator.yaml`,
-which appends `walking_zoo_nav2_bt_nodes` to the bt_navigator `plugin_lib_names`
+which appends `locomotion_ros2_nav2_bt_nodes` to the bt_navigator `plugin_lib_names`
 (Nav2 still loads its built-ins automatically) and points
 `default_nav_to_pose_bt_xml` at the tree.
 
@@ -81,7 +81,7 @@ cover the planning origin — a robot-centred or transformed costmap is the natu
 input.
 
 ```bash
-ros2 launch walking_zoo_runtime footstep_markers.launch.py \
+ros2 launch locomotion_ros2_runtime footstep_markers.launch.py \
   costmap_topic:=/global_costmap/costmap
 ```
 
@@ -90,7 +90,7 @@ Covered by `test_occupancy_terrain` (OccupancyGrid → terrain → planner) and
 
 ## Frames
 
-walking_zoo follows REP-105 style expectations:
+locomotion_ros2 follows REP-105 style expectations:
 
 - `map`: globally consistent navigation frame.
 - `odom`: locally continuous odometry frame.
@@ -103,4 +103,4 @@ walking_zoo follows REP-105 style expectations:
 - Turn-in-place footstep sequences.
 - Stairs, slope, and terrain capability profiles.
 - Nav2 BT plugins for stand and sit (ready checks and fault recovery shipped via
-  `walking_zoo_nav2_bt_nodes`).
+  `locomotion_ros2_nav2_bt_nodes`).

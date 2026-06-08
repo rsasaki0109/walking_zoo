@@ -1,6 +1,6 @@
 # Security And Safety
 
-walking_zoo is robotics infrastructure. Treat unsafe motion behavior as a
+locomotion_ros2 is robotics infrastructure. Treat unsafe motion behavior as a
 security-sensitive issue.
 
 Report privately if you find:

@@ -32,7 +32,7 @@ def terminate_process_group(process):
 
 def make_plan(footsteps):
     from geometry_msgs.msg import Pose
-    from walking_zoo_msgs.msg import Footstep, FootstepPlan
+    from locomotion_ros2_msgs.msg import Footstep, FootstepPlan
 
     plan = FootstepPlan()
     plan.frame_id = "base_link"
@@ -52,7 +52,7 @@ def make_plan(footsteps):
 
 
 def send_plan(rclpy, node, ActionClient, ExecuteFootstepPlan, plan):
-    client = ActionClient(node, ExecuteFootstepPlan, "/walking_zoo/execute_footstep_plan")
+    client = ActionClient(node, ExecuteFootstepPlan, "/locomotion_ros2/execute_footstep_plan")
     if not client.wait_for_server(timeout_sec=10.0):
         return None, 0
 
@@ -91,12 +91,12 @@ def main() -> int:
     exit_code = 1
     launch_log = tempfile.NamedTemporaryFile(
         mode="w+",
-        prefix="walking_zoo_footstep_e2e_",
+        prefix="locomotion_ros2_footstep_e2e_",
         suffix=".log",
         delete=False,
     )
     launch = subprocess.Popen(
-        ["ros2", "launch", "walking_zoo_bringup", "mock_runtime.launch.py"],
+        ["ros2", "launch", "locomotion_ros2_bringup", "mock_runtime.launch.py"],
         env=env,
         stdout=launch_log,
         stderr=subprocess.STDOUT,
@@ -106,10 +106,10 @@ def main() -> int:
     try:
         import rclpy
         from rclpy.action import ActionClient
-        from walking_zoo_msgs.action import ExecuteFootstepPlan
+        from locomotion_ros2_msgs.action import ExecuteFootstepPlan
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_footstep_e2e_check")
+        node = rclpy.create_node("locomotion_ros2_footstep_e2e_check")
 
         feasible = make_plan([
             ("left", 0.10, 0.16),

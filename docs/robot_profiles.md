@@ -8,7 +8,7 @@ Example:
 ```yaml
 robot_model: unitree_go2
 robot_family: quadruped
-adapter_plugin: walking_zoo_unitree_sdk2/UnitreeSdk2Adapter
+adapter_plugin: locomotion_ros2_unitree_sdk2/UnitreeSdk2Adapter
 capabilities:
   velocity_command: true
   body_pose_command: true

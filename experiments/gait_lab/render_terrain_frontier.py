@@ -98,7 +98,7 @@ def main() -> int:
     axR.legend(facecolor="#15171c", edgecolor="#2a2e38", labelcolor="#e8e9ee",
                fontsize=9, loc="upper right")
 
-    fig.suptitle("walking_zoo · terrain frontier — capturability on a slope",
+    fig.suptitle("locomotion_ros2 · terrain frontier — capturability on a slope",
                  color="#7cc4ff", fontsize=14.5, fontweight="bold", x=0.5, y=0.99)
     fig.text(0.5, 0.925, "tilting gravity by α: the downhill margin shrinks and the "
              "critical slope is torque-limited (≪ geometry); stepping pushes both back",

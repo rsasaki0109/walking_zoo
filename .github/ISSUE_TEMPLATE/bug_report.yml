@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a walking_zoo bug
+description: Report a locomotion_ros2 bug
 title: "[Bug]: "
 labels: ["bug"]
 body:

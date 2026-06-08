@@ -3,7 +3,7 @@
 Start the mock runtime and bridge:
 
 ```bash
-ros2 launch walking_zoo_bringup mock_runtime.launch.py
+ros2 launch locomotion_ros2_bringup mock_runtime.launch.py
 ```
 
 Publish a Nav2-style velocity command:

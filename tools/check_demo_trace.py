@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a walking_zoo demo trace JSON file."""
+"""Validate a locomotion_ros2 demo trace JSON file."""
 
 from pathlib import Path
 import argparse
@@ -8,11 +8,11 @@ import json
 
 REQUIRED_TOPICS = {
     "/cmd_vel",
-    "/walking_zoo/cmd_vel",
-    "/walking_zoo/state",
-    "/walking_zoo/adapter_status",
-    "/walking_zoo/safety_state",
-    "/walking_zoo/semantic_action",
+    "/locomotion_ros2/cmd_vel",
+    "/locomotion_ros2/state",
+    "/locomotion_ros2/adapter_status",
+    "/locomotion_ros2/safety_state",
+    "/locomotion_ros2/semantic_action",
 }
 
 
@@ -47,7 +47,7 @@ def main():
     parser.add_argument(
         "trace",
         nargs="?",
-        default="/tmp/walking_zoo_mujoco_g1_runtime_showcase/demo_trace.json",
+        default="/tmp/locomotion_ros2_mujoco_g1_runtime_showcase/demo_trace.json",
         help="Path to demo_trace.json.",
     )
     parser.add_argument("--require-estop", action="store_true")
@@ -57,7 +57,7 @@ def main():
     if not trace_path.exists():
         raise SystemExit(f"missing trace: {trace_path}")
     payload = json.loads(trace_path.read_text(encoding="utf-8"))
-    if payload.get("schema") != "walking_zoo.demo_trace.v1":
+    if payload.get("schema") != "locomotion_ros2.demo_trace.v1":
         raise SystemExit(f"unexpected schema in {trace_path}")
 
     events = payload.get("events", [])

@@ -2,7 +2,7 @@
 """Render README GIFs with existing simulators.
 
 Robot GIFs are rendered by MuJoCo and PyBullet using existing robot assets.
-The script is intentionally optional and is not part of the walking_zoo runtime
+The script is intentionally optional and is not part of the locomotion_ros2 runtime
 dependency set.
 """
 
@@ -22,8 +22,8 @@ try:
 except ImportError as error:
     raise SystemExit(
         "MuJoCo and PyBullet are required for README robot GIF generation.\n"
-        "Use: python3 -m venv /tmp/walking_zoo_gif_venv && "
-        "/tmp/walking_zoo_gif_venv/bin/python -m pip install -r "
+        "Use: python3 -m venv /tmp/locomotion_ros2_gif_venv && "
+        "/tmp/locomotion_ros2_gif_venv/bin/python -m pip install -r "
         "tools/readme_gif_requirements.txt"
     ) from error
 
@@ -31,7 +31,7 @@ except ImportError as error:
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "assets" / "readme"
 MENAGERIE = Path(
-    os.environ.get("WALKING_ZOO_MENAGERIE_PATH", "/tmp/walking_zoo_mujoco_menagerie")
+    os.environ.get("LOCOMOTION_ROS2_MENAGERIE_PATH", "/tmp/locomotion_ros2_mujoco_menagerie")
 )
 SIZE = (960, 540)
 
@@ -238,7 +238,7 @@ def pybullet_laikago_runtime():
             draw = ImageDraw.Draw(img)
             draw_round(draw, (26, 24, 595, 110), (8, 14, 22), GREEN, radius=18)
             draw.text((48, 40), "PyBullet Laikago simulation", font=FONT_TITLE, fill=TEXT)
-            draw.text((50, 84), "Nav2 /cmd_vel -> walking_zoo runtime -> mock adapter", font=FONT_SMALL, fill=MUTED)
+            draw.text((50, 84), "Nav2 /cmd_vel -> locomotion_ros2 runtime -> mock adapter", font=FONT_SMALL, fill=MUTED)
             overlay_panel(
                 img,
                 "ROS2 runtime",
@@ -301,9 +301,9 @@ class MujocoUnitreeG1Scene:
         if not scene_path.exists():
             raise SystemExit(
                 "Unitree G1 MJCF assets were not found.\n"
-                "Clone mujoco_menagerie or set WALKING_ZOO_MENAGERIE_PATH:\n"
+                "Clone mujoco_menagerie or set LOCOMOTION_ROS2_MENAGERIE_PATH:\n"
                 "  git clone --depth 1 https://github.com/google-deepmind/"
-                "mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie"
+                "mujoco_menagerie.git /tmp/locomotion_ros2_mujoco_menagerie"
             )
         self.model = mujoco.MjModel.from_xml_path(str(scene_path))
         self.model.vis.global_.offwidth = SIZE[0]
@@ -600,7 +600,7 @@ def mujoco_unitree_g1_runtime(scene=None):
             draw = ImageDraw.Draw(img)
             draw_round(draw, (26, 24, 405, 112), (8, 14, 22), PURPLE, radius=18)
             draw.text((48, 40), "MuJoCo Unitree G1", font=FONT_SUB, fill=TEXT)
-            draw.text((50, 76), "walking_zoo runtime target", font=FONT_SMALL, fill=MUTED)
+            draw.text((50, 76), "locomotion_ros2 runtime target", font=FONT_SMALL, fill=MUTED)
             overlay_panel(
                 img,
                 "Humanoid runtime",
@@ -624,14 +624,14 @@ def runtime_flow():
     boxes = [
         ((44, 175, 228, 285), "Nav2", "/cmd_vel", BLUE),
         ((44, 325, 228, 435), "Teleop / VLA", "intent", PURPLE),
-        ((312, 235, 548, 365), "walking_zoo", "runtime manager", GREEN),
+        ((312, 235, 548, 365), "locomotion_ros2", "runtime manager", GREEN),
         ((632, 165, 890, 275), "Safety", "limit / watchdog / estop", YELLOW),
         ((632, 325, 890, 435), "Adapter Hub", "mock / Unitree / future", BLUE),
     ]
     for active in range(8):
         img = Image.new("RGB", SIZE, BG)
         draw = ImageDraw.Draw(img)
-        draw.text((42, 30), "walking_zoo", font=FONT_TITLE, fill=TEXT)
+        draw.text((42, 30), "locomotion_ros2", font=FONT_TITLE, fill=TEXT)
         draw.text((44, 78), "ROS2-native Walking Runtime & Adapter Hub", font=FONT_SUB, fill=MUTED)
         for idx, (box, title, sub, color) in enumerate(boxes):
             fill = PANEL_2 if idx <= active // 2 else PANEL
@@ -645,7 +645,7 @@ def runtime_flow():
         arrow(draw, (548, 300), (632, 220), YELLOW, progress=min(1.0, max(0.0, (active - 3) / 2)))
         arrow(draw, (760, 275), (760, 325), GREEN, progress=min(1.0, max(0.0, (active - 5) / 2)))
         frames.append(img)
-    save_gif("walking_zoo_runtime_flow.gif", frames, duration=760)
+    save_gif("locomotion_ros2_runtime_flow.gif", frames, duration=760)
 
 
 def nav2_bridge():
@@ -653,7 +653,7 @@ def nav2_bridge():
     labels = [
         ((56, 235, 232, 335), "Nav2", "/cmd_vel", BLUE),
         ((306, 235, 512, 335), "Bridge", "TwistStamped", GREEN),
-        ((586, 235, 868, 335), "Runtime", "/walking_zoo/cmd_vel", YELLOW),
+        ((586, 235, 868, 335), "Runtime", "/locomotion_ros2/cmd_vel", YELLOW),
     ]
     for step in range(7):
         img = Image.new("RGB", SIZE, BG)
@@ -666,7 +666,7 @@ def nav2_bridge():
             text_center(draw, (box[0], box[1] + 52, box[2], box[3] - 8), sub, MUTED, FONT_SMALL)
         arrow(draw, (232, 285), (306, 285), BLUE, progress=min(1.0, step / 2))
         arrow(draw, (512, 285), (586, 285), GREEN, progress=min(1.0, max(0.0, (step - 3) / 2)))
-        draw.text((86, 394), "Nav2 owns where to go. walking_zoo owns how to walk safely.", font=FONT_BODY, fill=TEXT)
+        draw.text((86, 394), "Nav2 owns where to go. locomotion_ros2 owns how to walk safely.", font=FONT_BODY, fill=TEXT)
         frames.append(img)
     save_gif("nav2_cmd_vel_bridge.gif", frames, duration=760)
 

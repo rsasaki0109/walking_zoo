@@ -1,0 +1,18 @@
+<root>
+  <description>
+    BehaviorTree.CPP node manifest for locomotion_ros2. The shared library
+    liblocomotion_ros2_bt.so registers its nodes via BT_REGISTER_NODES and can be
+    loaded with BT::BehaviorTreeFactory::registerFromPlugin(...), or linked
+    directly and registered with locomotion_ros2_bt::register_locomotion_ros2_bt_nodes.
+
+    Registered nodes:
+      - CheckWalkingReady (Condition): SUCCESS when the WalkingState on the
+        walking_state input port reports the robot ready to walk.
+      - ClearWalkingFault (Action): SUCCESS when the clear_succeeded input port
+        indicates the clear-fault service call succeeded.
+
+    The locomotion_ros2_bt_recovery_node additionally registers a ROS-integrated
+    ClearWalkingFaultService action that calls /locomotion_ros2/clear_fault directly
+    and drives the live recovery tree (bt_xml/locomotion_ros2_recovery_live.xml).
+  </description>
+</root>

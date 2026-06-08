@@ -4,8 +4,8 @@ Copy-paste posts for surfacing the honest gait benchmark. The hook is always the
 same: **a physics testbed where bad humanoid gaits actually fall over, and the
 textbook controllers lose for reasons you can watch.** Lead with `assets/gait_zoo.gif`.
 
-Repo: https://github.com/rsasaki0109/walking_zoo
-Lab: https://github.com/rsasaki0109/walking_zoo/tree/main/experiments/gait_lab
+Repo: https://github.com/rsasaki0109/locomotion_ros2
+Lab: https://github.com/rsasaki0109/locomotion_ros2/tree/main/experiments/gait_lab
 
 > Honesty note before posting: every number below is in the repo's tests and
 > README. Don't round up. The whole appeal is that the negatives are reported.
@@ -84,7 +84,7 @@ The interesting results are the negatives:
 Second GIF (`--push 0.6`): the same zoo under a recurring shove — every stand-and-walk
 controller goes down, which is the whole point.
 
-Repo + reproducible tests: https://github.com/rsasaki0109/walking_zoo/tree/main/experiments/gait_lab
+Repo + reproducible tests: https://github.com/rsasaki0109/locomotion_ros2/tree/main/experiments/gait_lab
 Tear the methodology apart — that's what it's for.
 
 ---
@@ -105,7 +105,7 @@ can't even hold a quiet stand; the model-based QP can.
 
 4/ But run the SAME audit on walking and it does NOT flip — position tracking really
 beats torque there. Standing balance was a crutch; walking authority was real. Honest
-benchmarks, negatives included: https://github.com/rsasaki0109/walking_zoo
+benchmarks, negatives included: https://github.com/rsasaki0109/locomotion_ros2
 
 ---
 

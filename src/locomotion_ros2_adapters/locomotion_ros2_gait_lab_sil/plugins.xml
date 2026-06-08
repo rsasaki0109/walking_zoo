@@ -1,0 +1,11 @@
+<library path="locomotion_ros2_gait_lab_sil">
+  <class
+    name="locomotion_ros2_gait_lab_sil/GaitLabSilAdapter"
+    type="locomotion_ros2_gait_lab_sil::GaitLabSilAdapter"
+    base_class_type="locomotion_ros2_core::WalkingAdapter">
+    <description>
+      Software-in-the-loop adapter driving a MuJoCo Unitree G1 through a gait_lab
+      controller (default: the RL rl-residual policy), via a companion Python sim.
+    </description>
+  </class>
+</library>

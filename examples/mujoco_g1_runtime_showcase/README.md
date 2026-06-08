@@ -1,6 +1,6 @@
 # MuJoCo G1 Runtime Showcase
 
-This example runs the Unitree G1 visualizer, the walking_zoo runtime, the
+This example runs the Unitree G1 visualizer, the locomotion_ros2 runtime, the
 `/cmd_vel` bridge, the gait showcase driver, and the demo trace recorder.
 
 ## Run
@@ -9,15 +9,15 @@ This example runs the Unitree G1 visualizer, the walking_zoo runtime, the
 colcon build --symlink-install
 source install/setup.bash
 python3 -m pip install -r tools/readme_gif_requirements.txt
-git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/locomotion_ros2_mujoco_menagerie
 
-ros2 launch walking_zoo_bringup mujoco_g1_runtime_showcase.launch.py
+ros2 launch locomotion_ros2_bringup mujoco_g1_runtime_showcase.launch.py
 ```
 
 Validate the generated trace:
 
 ```bash
-python3 tools/check_demo_trace.py /tmp/walking_zoo_mujoco_g1_runtime_showcase/demo_trace.json --require-estop
+python3 tools/check_demo_trace.py /tmp/locomotion_ros2_mujoco_g1_runtime_showcase/demo_trace.json --require-estop
 ```
 
 ## Output
@@ -25,7 +25,7 @@ python3 tools/check_demo_trace.py /tmp/walking_zoo_mujoco_g1_runtime_showcase/de
 Default output directory:
 
 ```text
-/tmp/walking_zoo_mujoco_g1_runtime_showcase
+/tmp/locomotion_ros2_mujoco_g1_runtime_showcase
 ```
 
 Generated files:
@@ -40,11 +40,11 @@ Generated files:
 The trace should show:
 
 - `/cmd_vel` commands from the showcase driver.
-- `/walking_zoo/cmd_vel` commands from the Nav2 bridge.
-- `/walking_zoo/state` moving through `STANDING`, `WALKING`, `TURNING`, and
+- `/locomotion_ros2/cmd_vel` commands from the Nav2 bridge.
+- `/locomotion_ros2/state` moving through `STANDING`, `WALKING`, `TURNING`, and
   `ESTOPPED`.
-- `/walking_zoo/adapter_status` reporting the mock adapter state.
-- `/walking_zoo/safety_state` reporting `ESTOPPED` after the e-stop.
+- `/locomotion_ros2/adapter_status` reporting the mock adapter state.
+- `/locomotion_ros2/safety_state` reporting `ESTOPPED` after the e-stop.
 
 ## Troubleshooting
 
@@ -65,7 +65,7 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 If the G1 model is missing:
 
 ```bash
-git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/locomotion_ros2_mujoco_menagerie
 ```
 
 If MuJoCo cannot create an OpenGL context in a headless environment:

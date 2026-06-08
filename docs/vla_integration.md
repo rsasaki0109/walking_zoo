@@ -1,11 +1,11 @@
 # VLA Integration
 
 VLA systems should not directly command joints, controllers, or vendor SDKs.
-They should produce bounded semantic intent that walking_zoo can arbitrate and
+They should produce bounded semantic intent that locomotion_ros2 can arbitrate and
 send through safety gates.
 
 ```text
-VLA / LLM Agent -> SemanticAction -> walking_zoo_vla
+VLA / LLM Agent -> SemanticAction -> locomotion_ros2_vla
   -> Nav2 or WalkingRuntime -> SafetyPipeline -> Adapter -> Robot
 ```
 

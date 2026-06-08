@@ -4,8 +4,8 @@
 The full navigate_to_pose tree cannot be instantiated offline (its Nav2 action
 nodes wait for live action servers in their constructors), so this check guards
 the droppable artifact statically: it confirms the tree is well-formed, targets
-MainTree, and embeds the walking_zoo recovery (IsWalkingReady + ClearWalkingFault,
-the node IDs registered by walking_zoo_nav2_bt_nodes) inside the Nav2 RoundRobin
+MainTree, and embeds the locomotion_ros2 recovery (IsWalkingReady + ClearWalkingFault,
+the node IDs registered by locomotion_ros2_nav2_bt_nodes) inside the Nav2 RoundRobin
 recovery branch with the expected ports wired.
 
 This pairs with test_nav2_bt_recovery_nodes (the nodes are genuinely Nav2-loaded)
@@ -20,7 +20,7 @@ from pathlib import Path
 def find_recovery_tree() -> Path:
     here = Path(__file__).resolve().parent.parent
     candidates = [
-        here / "src/walking_zoo_bt/bt_xml/navigate_to_pose_w_walking_recovery.xml",
+        here / "src/locomotion_ros2_bt/bt_xml/navigate_to_pose_w_walking_recovery.xml",
     ]
     for path in candidates:
         if path.is_file():
@@ -73,14 +73,14 @@ def main() -> int:
         fail("WalkingFaultRecovery must guard ClearWalkingFault with Inverter/IsWalkingReady")
 
     is_ready = inverter.find("IsWalkingReady")
-    if is_ready.get("state_topic") != "/walking_zoo/state":
-        fail("IsWalkingReady must monitor state_topic=\"/walking_zoo/state\"")
+    if is_ready.get("state_topic") != "/locomotion_ros2/state":
+        fail("IsWalkingReady must monitor state_topic=\"/locomotion_ros2/state\"")
 
     clear = walking_seq.find("ClearWalkingFault")
     if clear is None:
         fail("WalkingFaultRecovery has no ClearWalkingFault action")
-    if clear.get("service_name") != "/walking_zoo/clear_fault":
-        fail("ClearWalkingFault must call service_name=\"/walking_zoo/clear_fault\"")
+    if clear.get("service_name") != "/locomotion_ros2/clear_fault":
+        fail("ClearWalkingFault must call service_name=\"/locomotion_ros2/clear_fault\"")
 
     # The generic Nav2 recoveries must still be present after the walking recovery.
     for required in ("Spin", "Wait", "BackUp"):
@@ -90,7 +90,7 @@ def main() -> int:
     print(f"nav2 recovery tree check passed: {path.name}")
     print("  - well-formed BTCPP v4 tree targeting MainTree")
     print("  - WalkingFaultRecovery embedded in the RoundRobin recovery branch")
-    print("  - Inverter/IsWalkingReady guards ClearWalkingFault(/walking_zoo/clear_fault)")
+    print("  - Inverter/IsWalkingReady guards ClearWalkingFault(/locomotion_ros2/clear_fault)")
     print("  - generic Nav2 recoveries (Spin/Wait/BackUp) preserved")
     return 0
 

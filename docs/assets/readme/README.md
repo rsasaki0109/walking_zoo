@@ -7,11 +7,11 @@ using MuJoCo and PyBullet with existing robot assets.
 Install the optional generator dependencies:
 
 ```bash
-python3 -m venv /tmp/walking_zoo_gif_venv
-/tmp/walking_zoo_gif_venv/bin/python -m pip install -r tools/readme_gif_requirements.txt
-git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
-/tmp/walking_zoo_gif_venv/bin/python tools/render_mujoco_g1_showcase_gif.py
-/tmp/walking_zoo_gif_venv/bin/python tools/render_readme_gifs.py
+python3 -m venv /tmp/locomotion_ros2_gif_venv
+/tmp/locomotion_ros2_gif_venv/bin/python -m pip install -r tools/readme_gif_requirements.txt
+git clone --depth 1 https://github.com/google-deepmind/mujoco_menagerie.git /tmp/locomotion_ros2_mujoco_menagerie
+/tmp/locomotion_ros2_gif_venv/bin/python tools/render_mujoco_g1_showcase_gif.py
+/tmp/locomotion_ros2_gif_venv/bin/python tools/render_readme_gifs.py
 python3 tools/check_mujoco_g1_showcase_assets.py
 ```
 
@@ -24,6 +24,6 @@ Simulator-rendered robot GIFs:
 - `pybullet_laikago_runtime.gif`: Laikago velocity runtime path.
 - `pybullet_laikago_estop.gif`: Laikago e-stop behavior.
 
-These are not part of the walking_zoo runtime and do not turn the project into a
+These are not part of the locomotion_ros2 runtime and do not turn the project into a
 simulator. They exist so the README shows walking behavior from an existing
 simulator instead of static architecture diagrams or hand-animated toy poses.

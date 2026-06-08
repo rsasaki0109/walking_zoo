@@ -5,7 +5,7 @@ link to the repo shows, anywhere.
 A static, legible-at-thumbnail composition: a title band over a single frame of the
 gait zoo at the moment the story is readable (several controllers already down in red,
 the survivors still green). Set it once under repo Settings -> Social preview; then
-every link to walking_zoo — search results, Slack, X, anywhere — carries the honest
+every link to locomotion_ros2 — search results, Slack, X, anywhere — carries the honest
 benchmark instead of a generic card.
 
     MUJOCO_GL=egl python3 render_og_card.py --out assets/social_preview.png
@@ -27,7 +27,7 @@ def _title_band(width, height, fonts_big):
     f_brand, f_tag, f_sub = fonts_big
     band = Image.new("RGB", (width, height), (16, 17, 22))
     d = ImageDraw.Draw(band)
-    d.text((22, 14), "walking_zoo", font=f_brand, fill=(124, 196, 255))
+    d.text((22, 14), "locomotion_ros2", font=f_brand, fill=(124, 196, 255))
     d.text((24, 58), "honest physics benchmarks for walking robots — bad gaits "
                      "actually fall over", font=f_tag, fill=(232, 233, 238))
     d.text((24, 84), "9 controllers · one MuJoCo Unitree G1 · live fall detection",

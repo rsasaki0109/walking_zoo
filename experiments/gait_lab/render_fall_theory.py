@@ -102,7 +102,7 @@ def main() -> int:
     axR.legend(facecolor="#15171c", edgecolor="#2a2e38", labelcolor="#e8e9ee",
                fontsize=8.8, loc="upper right")
 
-    fig.suptitle("walking_zoo · why ~1 second?  the collapse predicted from "
+    fig.suptitle("locomotion_ros2 · why ~1 second?  the collapse predicted from "
                  f"1/ω = √(z/g) = {tau:.2f} s", color="#7cc4ff", fontsize=14.5,
                  fontweight="bold", x=0.5, y=0.99)
     fig.text(0.5, 0.925, "the support polygon sets which shove you recover (left); "

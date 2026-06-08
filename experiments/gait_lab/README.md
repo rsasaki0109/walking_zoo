@@ -7,7 +7,7 @@ the same metrics. A bad gait topples; a good one stays up and walks — apples-t
 and the negatives are reported (the whole point: see the textbook whole-body controller
 *lose*, below).
 
-It lives *alongside* the walking_zoo runtime (the runtime/safety/adapter layer for
+It lives *alongside* the locomotion_ros2 runtime (the runtime/safety/adapter layer for
 walking robots) as the research playground for the controllers that runtime dispatches:
 the interface here is `GaitController` and the "runtime" is the physics harness.
 
@@ -81,7 +81,7 @@ No GPU needed for the numbers; a GL backend (`MUJOCO_GL=egl`) is only for the GI
 
 ```bash
 pip install mujoco numpy scipy pillow imageio matplotlib
-git clone https://github.com/google-deepmind/mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie
+git clone https://github.com/google-deepmind/mujoco_menagerie.git /tmp/locomotion_ros2_mujoco_menagerie
 cd experiments/gait_lab
 
 python3 run_compare.py                      # the honest benchmark table (no GL)
@@ -540,7 +540,7 @@ i.e. leaving pure position control (torque/ZMP) — the very same frontier the p
 -recovery negative result lands on, one level up. The steering substrates, the
 command-conditioned RL, and `eval_steerable.py` are kept so the next (force-aware)
 substrate can be measured against them. This is also what gates the full Nav2 SIL
-autonomy demo (`walking_zoo_bringup gait_lab_sil_nav2.launch.py`): the whole stack
+autonomy demo (`locomotion_ros2_bringup gait_lab_sil_nav2.launch.py`): the whole stack
 plans and the drive chain is verified end-to-end, but a robot that cannot turn
 cannot be steered to an arbitrary goal.
 
@@ -713,7 +713,7 @@ comparison skips any gait whose dependency or trained weights are absent.
 ```bash
 # one-time: a local mujoco_menagerie checkout (the G1 scene)
 git clone https://github.com/google-deepmind/mujoco_menagerie.git \
-    /tmp/walking_zoo_mujoco_menagerie
+    /tmp/locomotion_ros2_mujoco_menagerie
 
 cd experiments/gait_lab
 python3 run_compare.py                       # metrics table
@@ -722,7 +722,7 @@ MUJOCO_GL=egl python3 run_compare.py --gif out/   # + one GIF per algorithm
 ```
 
 Point at a non-default model checkout with `--menagerie /path` or the
-`WALKING_ZOO_MENAGERIE_PATH` environment variable. GIF encoding needs `imageio`
+`LOCOMOTION_ROS2_MENAGERIE_PATH` environment variable. GIF encoding needs `imageio`
 or `pillow` (optional); rendering needs a GL backend (`MUJOCO_GL=egl` is
 headless-friendly).
 
@@ -771,9 +771,9 @@ It depends on MuJoCo and a model checkout that the hardware-free ROS 2 build mus
 not require. Keeping it under `experiments/` lets the runtime stay lean while
 still giving an honest, runnable answer to "can I try gait algorithms here?"
 
-That experiment → product step is now wired: the `walking_zoo_gait_lab_sil`
+That experiment → product step is now wired: the `locomotion_ros2_gait_lab_sil`
 package exposes a gait_lab controller (default the `rl-residual` policy) as a
-software-in-the-loop walking_zoo adapter, so a gait validated here drives a
+software-in-the-loop locomotion_ros2 adapter, so a gait validated here drives a
 MuJoCo G1 behind the real runtime + safety pipeline. MuJoCo stays optional — the
 C++ adapter is a thin ROS bridge with no MuJoCo build dependency; the physics and
 the learned policy run in a companion Python sim node. See that package's README.

@@ -1,6 +1,6 @@
 # Contributing
 
-walking_zoo is built around a small promise: keep walking robot runtime
+locomotion_ros2 is built around a small promise: keep walking robot runtime
 interfaces ROS2-native, safe by default, and independent of any single vendor
 SDK.
 

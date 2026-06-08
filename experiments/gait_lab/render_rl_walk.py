@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a filmstrip of the RL ``rl-residual`` gait walking the full horizon.
 
-This is the gait the ``walking_zoo_gait_lab_sil`` adapter runs in the runtime, so
+This is the gait the ``locomotion_ros2_gait_lab_sil`` adapter runs in the runtime, so
 the strip doubles as the SIL integration's hero image: the only gait_lab gait
 that stays up and walks forward across the whole horizon (every model-based /
 hand-tuned gait is on the ground by ~3 s — see the comparison montage).

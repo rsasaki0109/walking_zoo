@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""End-to-end check for the walking_zoo recovery embedded in a Nav2 BT branch.
+"""End-to-end check for the locomotion_ros2 recovery embedded in a Nav2 BT branch.
 
 This proves the recovery nodes work when loaded the *Nav2 way*: the
-walking_zoo_nav2_recovery_harness builds the recovery branch through the real
+locomotion_ros2_nav2_recovery_harness builds the recovery branch through the real
 nav2_behavior_tree::BehaviorTreeEngine (the same loader the Nav2 bt_navigator
 uses for plugin_lib_names) and ticks the Nav2-loaded IsWalkingReady /
 ClearWalkingFault nodes against the live runtime.
@@ -11,7 +11,7 @@ Brings up the mock runtime, estops it and releases the estop (leaving a residual
 fault: STATE_ESTOPPED, not ready). Phase 1 (no harness) asserts the runtime does
 NOT self-recover. Phase 2 starts the harness and verifies the Nav2-loaded
 recovery branch drives the robot back to a ready STANDING state by actually
-calling /walking_zoo/clear_fault.
+calling /locomotion_ros2/clear_fault.
 """
 
 import os
@@ -40,7 +40,7 @@ def terminate_process_group(process):
 def latest_state(rclpy, node, WalkingState, timeout=5.0):
     received = []
     sub = node.create_subscription(
-        WalkingState, "/walking_zoo/state", lambda msg: received.append(msg), 10)
+        WalkingState, "/locomotion_ros2/state", lambda msg: received.append(msg), 10)
     deadline = time.time() + timeout
     while time.time() < deadline:
         rclpy.spin_once(node, timeout_sec=0.2)
@@ -61,7 +61,7 @@ def is_ready(state, WalkingState):
 
 
 def call_estop(rclpy, node, EmergencyStop, stop):
-    client = node.create_client(EmergencyStop, "/walking_zoo/estop")
+    client = node.create_client(EmergencyStop, "/locomotion_ros2/estop")
     if not client.wait_for_service(timeout_sec=10.0):
         return False
     request = EmergencyStop.Request()
@@ -84,20 +84,20 @@ def main() -> int:
     harness = None
     exit_code = 1
     runtime_log = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="walking_zoo_nav2_bt_e2e_", suffix=".log", delete=False)
+        mode="w+", prefix="locomotion_ros2_nav2_bt_e2e_", suffix=".log", delete=False)
     harness_log = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="walking_zoo_nav2_bt_harness_", suffix=".log", delete=False)
+        mode="w+", prefix="locomotion_ros2_nav2_bt_harness_", suffix=".log", delete=False)
     runtime = subprocess.Popen(
-        ["ros2", "launch", "walking_zoo_bringup", "mock_runtime.launch.py"],
+        ["ros2", "launch", "locomotion_ros2_bringup", "mock_runtime.launch.py"],
         env=env, stdout=runtime_log, stderr=subprocess.STDOUT, preexec_fn=os.setsid)
 
     try:
         import rclpy
-        from walking_zoo_msgs.msg import WalkingState
-        from walking_zoo_msgs.srv import EmergencyStop
+        from locomotion_ros2_msgs.msg import WalkingState
+        from locomotion_ros2_msgs.srv import EmergencyStop
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_nav2_bt_recovery_e2e_check")
+        node = rclpy.create_node("locomotion_ros2_nav2_bt_recovery_e2e_check")
 
         deadline = time.time() + 20.0
         state = None
@@ -130,7 +130,7 @@ def main() -> int:
 
         # Phase 2: run the Nav2-loaded recovery branch harness.
         harness = subprocess.Popen(
-            ["ros2", "run", "walking_zoo_bt", "walking_zoo_nav2_recovery_harness",
+            ["ros2", "run", "locomotion_ros2_bt", "locomotion_ros2_nav2_recovery_harness",
              "--ros-args", "-p", "timeout_sec:=15.0", "-p", "tick_period_sec:=0.3"],
             env=env, stdout=harness_log, stderr=subprocess.STDOUT, preexec_fn=os.setsid)
 

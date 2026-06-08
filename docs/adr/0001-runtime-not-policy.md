@@ -6,7 +6,7 @@ Accepted.
 
 ## Decision
 
-walking_zoo is a ROS2-native walking runtime and adapter hub. It does not
+locomotion_ros2 is a ROS2-native walking runtime and adapter hub. It does not
 implement custom RL training, a simulator, MPC, WBC, or a new gait algorithm in
 v0.1.
 

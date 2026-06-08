@@ -93,7 +93,7 @@ def main() -> int:
     ax.set_xticklabels(["shove\nFORWARD", "LEFT", "BACK", "RIGHT"],
                        color="#c8ccd4", fontsize=10)
 
-    fig.suptitle("walking_zoo · push-robustness frontier", color="#7cc4ff",
+    fig.suptitle("locomotion_ros2 · push-robustness frontier", color="#7cc4ff",
                  x=0.5, y=1.005, fontsize=16, fontweight="bold")
     fig.text(0.5, 0.952, f"max base-velocity shove survived for {horizon}s, by "
              "direction (m/s) — bigger polygon = more recoverable",

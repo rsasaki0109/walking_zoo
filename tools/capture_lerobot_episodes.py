@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Capture multiple LeRobot episodes from live walking_zoo showcase runs.
+"""Capture multiple LeRobot episodes from live locomotion_ros2 showcase runs.
 
 This drives the real mock runtime (the same launch the showcase uses) through a
 sequence of distinct command episodes, records each one with the live
-``walking_zoo_demo_recorder``, and exports all episodes into a single LeRobot
-v2.1 dataset via ``walking_zoo_lerobot_export``. Unlike the synthetic exporter
+``locomotion_ros2_demo_recorder``, and exports all episodes into a single LeRobot
+v2.1 dataset via ``locomotion_ros2_lerobot_export``. Unlike the synthetic exporter
 checks, the traces here come from real ROS topics flowing through the cmd_vel
 bridge, runtime, safety pipeline, and adapter.
 
@@ -30,7 +30,7 @@ from contextlib import suppress
 
 _REPO = Path(__file__).resolve().parent.parent
 _EXPORT_PATH = (
-    _REPO / "src" / "walking_zoo_examples" / "scripts" / "walking_zoo_lerobot_export.py")
+    _REPO / "src" / "locomotion_ros2_examples" / "scripts" / "locomotion_ros2_lerobot_export.py")
 
 # (semantic action, twist linear_x, linear_y, angular_z) per episode. The list
 # cycles if more episodes are requested than entries.
@@ -43,7 +43,7 @@ EPISODE_SCRIPTS = [
 
 
 def load_exporter():
-    spec = importlib.util.spec_from_file_location("walking_zoo_lerobot_export", _EXPORT_PATH)
+    spec = importlib.util.spec_from_file_location("locomotion_ros2_lerobot_export", _EXPORT_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -65,7 +65,7 @@ def terminate_process_group(process):
 def wait_until_ready(rclpy, node, WalkingState, timeout):
     latest = {}
     sub = node.create_subscription(
-        WalkingState, "/walking_zoo/state", lambda m: latest.__setitem__("state", m), 10)
+        WalkingState, "/locomotion_ros2/state", lambda m: latest.__setitem__("state", m), 10)
     deadline = time.time() + timeout
     ready = False
     while time.time() < deadline:
@@ -82,14 +82,14 @@ def wait_until_ready(rclpy, node, WalkingState, timeout):
 def record_episode(env, rclpy, node, Twist, SemanticAction, out_dir, script, duration):
     action, lx, ly, az = script
     recorder = subprocess.Popen(
-        ["ros2", "run", "walking_zoo_examples", "walking_zoo_demo_recorder.py",
+        ["ros2", "run", "locomotion_ros2_examples", "locomotion_ros2_demo_recorder.py",
          "--ros-args",
          "-p", f"output_dir:={out_dir}",
          "-p", "write_period_sec:=0.3"],
         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, preexec_fn=os.setsid)
 
     cmd_pub = node.create_publisher(Twist, "/cmd_vel", 10)
-    action_pub = node.create_publisher(SemanticAction, "/walking_zoo/semantic_action", 10)
+    action_pub = node.create_publisher(SemanticAction, "/locomotion_ros2/semantic_action", 10)
 
     # Let the recorder's subscriptions match before driving.
     warmup = time.time() + 2.0
@@ -155,17 +155,17 @@ def main() -> int:
     rclpy = None
     exit_code = 1
     runtime = subprocess.Popen(
-        ["ros2", "launch", "walking_zoo_bringup", "mock_runtime.launch.py"],
+        ["ros2", "launch", "locomotion_ros2_bringup", "mock_runtime.launch.py"],
         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, preexec_fn=os.setsid)
 
-    work_dir = tempfile.mkdtemp(prefix="walking_zoo_capture_")
+    work_dir = tempfile.mkdtemp(prefix="locomotion_ros2_capture_")
     try:
         import rclpy
         from geometry_msgs.msg import Twist
-        from walking_zoo_msgs.msg import SemanticAction, WalkingState
+        from locomotion_ros2_msgs.msg import SemanticAction, WalkingState
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_lerobot_capture")
+        node = rclpy.create_node("locomotion_ros2_lerobot_capture")
 
         if not wait_until_ready(rclpy, node, WalkingState, timeout=25.0):
             print("runtime never became ready", file=sys.stderr)

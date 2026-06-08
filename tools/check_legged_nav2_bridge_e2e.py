@@ -38,7 +38,7 @@ def collect_latest(rclpy, node, pub, twist, seconds):
 
     latest = {}
     sub = node.create_subscription(
-        TwistStamped, "/walking_zoo/cmd_vel", lambda m: latest.__setitem__("msg", m), 10)
+        TwistStamped, "/locomotion_ros2/cmd_vel", lambda m: latest.__setitem__("msg", m), 10)
     deadline = time.time() + seconds
     while time.time() < deadline:
         pub.publish(twist)
@@ -59,13 +59,13 @@ def main() -> int:
     rclpy = None
     exit_code = 1
     launch_log = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="walking_zoo_nav2_e2e_", suffix=".log", delete=False)
+        mode="w+", prefix="locomotion_ros2_nav2_e2e_", suffix=".log", delete=False)
     launch = subprocess.Popen(
-        ["ros2", "launch", "walking_zoo_bringup", "mock_runtime.launch.py"],
+        ["ros2", "launch", "locomotion_ros2_bringup", "mock_runtime.launch.py"],
         env=env, stdout=launch_log, stderr=subprocess.STDOUT, preexec_fn=os.setsid)
     bridge = subprocess.Popen(
-        ["ros2", "run", "walking_zoo_nav2", "cmd_vel_bridge", "--ros-args",
-         "-p", "input_topic:=/cmd_vel", "-p", "output_topic:=/walking_zoo/cmd_vel",
+        ["ros2", "run", "locomotion_ros2_nav2", "cmd_vel_bridge", "--ros-args",
+         "-p", "input_topic:=/cmd_vel", "-p", "output_topic:=/locomotion_ros2/cmd_vel",
          "-p", "legged_aware:=true", "-p", "require_ready:=true",
          "-p", "legged.max_forward:=0.6", "-p", "legged.turn_speed_coupling:=0.7",
          "-p", "legged.max_yaw_rate:=0.8"],
@@ -74,10 +74,10 @@ def main() -> int:
     try:
         import rclpy
         from geometry_msgs.msg import Twist
-        from walking_zoo_msgs.srv import EmergencyStop
+        from locomotion_ros2_msgs.srv import EmergencyStop
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_nav2_bridge_e2e")
+        node = rclpy.create_node("locomotion_ros2_nav2_bridge_e2e")
         raw_pub = node.create_publisher(Twist, "/cmd_vel", 10)
 
         time.sleep(2.0)  # let runtime activate and bridge connect
@@ -103,7 +103,7 @@ def main() -> int:
             return 1
 
         # E-stop the runtime; the bridge must then hold (publish zero).
-        estop_cli = node.create_client(EmergencyStop, "/walking_zoo/estop")
+        estop_cli = node.create_client(EmergencyStop, "/locomotion_ros2/estop")
         if not estop_cli.wait_for_service(timeout_sec=10.0):
             print("no estop service", file=sys.stderr)
             return 1

@@ -2,7 +2,7 @@
 """Render the README hero GIF for the MuJoCo Unitree G1 gait showcase.
 
 This optional documentation tool uses the existing Unitree G1 MJCF model from
-MuJoCo Menagerie. It does not add a simulator dependency to the walking_zoo
+MuJoCo Menagerie. It does not add a simulator dependency to the locomotion_ros2
 runtime.
 """
 
@@ -18,8 +18,8 @@ try:
 except ImportError as error:
     raise SystemExit(
         "MuJoCo and Pillow are required for the README showcase GIF.\n"
-        "Use: python3 -m venv /tmp/walking_zoo_gif_venv && "
-        "/tmp/walking_zoo_gif_venv/bin/python -m pip install -r "
+        "Use: python3 -m venv /tmp/locomotion_ros2_gif_venv && "
+        "/tmp/locomotion_ros2_gif_venv/bin/python -m pip install -r "
         "tools/readme_gif_requirements.txt"
     ) from error
 
@@ -27,7 +27,7 @@ except ImportError as error:
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "assets" / "readme"
 MENAGERIE = Path(
-    os.environ.get("WALKING_ZOO_MENAGERIE_PATH", "/tmp/walking_zoo_mujoco_menagerie")
+    os.environ.get("LOCOMOTION_ROS2_MENAGERIE_PATH", "/tmp/locomotion_ros2_mujoco_menagerie")
 )
 SIZE = (960, 540)
 
@@ -73,9 +73,9 @@ class G1ShowcaseScene:
         if not scene_path.exists():
             raise SystemExit(
                 "Unitree G1 MJCF assets were not found.\n"
-                "Clone mujoco_menagerie or set WALKING_ZOO_MENAGERIE_PATH:\n"
+                "Clone mujoco_menagerie or set LOCOMOTION_ROS2_MENAGERIE_PATH:\n"
                 "  git clone --depth 1 https://github.com/google-deepmind/"
-                "mujoco_menagerie.git /tmp/walking_zoo_mujoco_menagerie"
+                "mujoco_menagerie.git /tmp/locomotion_ros2_mujoco_menagerie"
             )
         self.model = mujoco.MjModel.from_xml_path(str(scene_path))
         self.model.vis.global_.offwidth = SIZE[0]
@@ -262,9 +262,9 @@ def draw_overlay(img, spec, step_name):
     draw = ImageDraw.Draw(img)
     accent = spec["accent"]
     round_rect(draw, (18, 18, 458, 124), PANEL, accent, radius=16, width=2)
-    draw.text((38, 34), "walking_zoo MuJoCo G1 showcase", font=FONT_TITLE, fill=TEXT)
+    draw.text((38, 34), "locomotion_ros2 MuJoCo G1 showcase", font=FONT_TITLE, fill=TEXT)
     draw.text((40, 74), "one launch command, multiple humanoid walking modes", font=FONT_SUB, fill=MUTED)
-    draw.text((40, 98), "ros2 launch walking_zoo_bringup mujoco_g1_gait_showcase.launch.py", font=FONT_TINY, fill=MUTED)
+    draw.text((40, 98), "ros2 launch locomotion_ros2_bringup mujoco_g1_gait_showcase.launch.py", font=FONT_TINY, fill=MUTED)
 
     round_rect(draw, (640, 122, 902, 340), PANEL_2, accent, radius=16, width=2)
     draw.text((674, 145), "Runtime Target", font=FONT_BODY, fill=accent)

@@ -1,0 +1,8 @@
+<library path="locomotion_ros2_unitree_sdk2">
+  <class
+    name="locomotion_ros2_unitree_sdk2/UnitreeSdk2Adapter"
+    type="locomotion_ros2_unitree_sdk2::UnitreeSdk2Adapter"
+    base_class_type="locomotion_ros2_core::WalkingAdapter">
+    <description>Optional Unitree SDK2 adapter skeleton. Motion is disabled by default.</description>
+  </class>
+</library>

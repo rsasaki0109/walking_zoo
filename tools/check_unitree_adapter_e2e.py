@@ -2,7 +2,7 @@
 """End-to-end check for loading the Unitree SDK2 adapter in the real runtime.
 
 Launches the runtime manager configured to load the
-`walking_zoo_unitree_sdk2/UnitreeSdk2Adapter` plugin, waits for it to autostart
+`locomotion_ros2_unitree_sdk2/UnitreeSdk2Adapter` plugin, waits for it to autostart
 into the active (balance-stand) state, then drives an ExecuteVelocity goal and
 confirms the adapter's locomotion FSM reports WALKING. This exercises pluginlib
 discovery, the adapter lifecycle, and the G1 command translation through the
@@ -43,10 +43,10 @@ def main() -> int:
     exit_code = 1
     runtime = subprocess.Popen(
         [
-            "ros2", "run", "walking_zoo_runtime", "walking_zoo_runtime_manager",
+            "ros2", "run", "locomotion_ros2_runtime", "locomotion_ros2_runtime_manager",
             "--ros-args",
             "-p", "autostart:=true",
-            "-p", "adapter_plugin:=walking_zoo_unitree_sdk2/UnitreeSdk2Adapter",
+            "-p", "adapter_plugin:=locomotion_ros2_unitree_sdk2/UnitreeSdk2Adapter",
             "-p", "robot_model:=g1",
             "-p", "robot_family:=humanoid",
             "-p", "limits.max_linear_x:=0.6",
@@ -60,15 +60,15 @@ def main() -> int:
     try:
         import rclpy
         from rclpy.action import ActionClient
-        from walking_zoo_msgs.action import ExecuteVelocity
-        from walking_zoo_msgs.msg import WalkingState
+        from locomotion_ros2_msgs.action import ExecuteVelocity
+        from locomotion_ros2_msgs.msg import WalkingState
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_unitree_adapter_e2e")
+        node = rclpy.create_node("locomotion_ros2_unitree_adapter_e2e")
 
         latest = {}
         node.create_subscription(
-            WalkingState, "/walking_zoo/state", lambda m: latest.__setitem__("state", m), 10)
+            WalkingState, "/locomotion_ros2/state", lambda m: latest.__setitem__("state", m), 10)
 
         deadline = time.time() + 15.0
         while time.time() < deadline:
@@ -88,7 +88,7 @@ def main() -> int:
         print(f"unitree adapter active: model={state.active_robot_model} "
               f"loco_state={state.locomotion_state}")
 
-        client = ActionClient(node, ExecuteVelocity, "/walking_zoo/execute_velocity")
+        client = ActionClient(node, ExecuteVelocity, "/locomotion_ros2/execute_velocity")
         if not client.wait_for_server(timeout_sec=10.0):
             print("no execute_velocity server", file=sys.stderr)
             return 1

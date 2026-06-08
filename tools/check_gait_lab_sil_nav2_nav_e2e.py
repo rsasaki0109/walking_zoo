@@ -53,7 +53,7 @@ def main() -> int:
     env = os.environ.copy()
     env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
     env.setdefault("ROS_DOMAIN_ID", "65")
-    env.setdefault("WALKING_ZOO_GAIT_LAB_PATH", str(REPO / "experiments" / "gait_lab"))
+    env.setdefault("LOCOMOTION_ROS2_GAIT_LAB_PATH", str(REPO / "experiments" / "gait_lab"))
     env.setdefault("MUJOCO_GL", "egl")
     os.environ["RMW_IMPLEMENTATION"] = env["RMW_IMPLEMENTATION"]
     os.environ["ROS_DOMAIN_ID"] = env["ROS_DOMAIN_ID"]
@@ -64,7 +64,7 @@ def main() -> int:
     if sim_python:
         env["PATH"] = os.path.dirname(sim_python) + os.pathsep + env.get("PATH", "")
     launch = subprocess.Popen(
-        ["ros2", "launch", "walking_zoo_bringup", "gait_lab_sil_nav2.launch.py",
+        ["ros2", "launch", "locomotion_ros2_bringup", "gait_lab_sil_nav2.launch.py",
          f"controller:={args.controller}"],
         env=env, preexec_fn=os.setsid)
 
@@ -76,7 +76,7 @@ def main() -> int:
         from rclpy.action import ActionClient
         from nav_msgs.msg import Odometry
         from nav2_msgs.action import NavigateToPose
-        from walking_zoo_msgs.msg import WalkingState
+        from locomotion_ros2_msgs.msg import WalkingState
 
         rclpy.init(args=None)
         node = rclpy.create_node("gait_lab_sil_nav_e2e")
@@ -84,7 +84,7 @@ def main() -> int:
         node.create_subscription(Odometry, "/odom",
                                  lambda m: latest.__setitem__("odom", m), 10)
         node.create_subscription(
-            WalkingState, "/walking_zoo/state",
+            WalkingState, "/locomotion_ros2/state",
             lambda m: latest.__setitem__("state", m), 10)
 
         # Wait for the SIL robot to be active and Nav2's action server to be up.

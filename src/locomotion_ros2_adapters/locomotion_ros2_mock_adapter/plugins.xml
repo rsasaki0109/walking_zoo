@@ -1,0 +1,8 @@
+<library path="locomotion_ros2_mock_adapter">
+  <class
+    name="locomotion_ros2_mock_adapter/MockWalkingAdapter"
+    type="locomotion_ros2_mock_adapter::MockWalkingAdapter"
+    base_class_type="locomotion_ros2_core::WalkingAdapter">
+    <description>Mock walking robot adapter for demos and tests.</description>
+  </class>
+</library>

@@ -3,7 +3,7 @@
 
 Launches the real footstep_marker_publisher node with a keep-out zone over the
 first foothold and a curb under the mid-stride feet, then subscribes to the
-published /walking_zoo/footstep_plan and asserts the planner actually reacted to
+published /locomotion_ros2/footstep_plan and asserts the planner actually reacted to
 the terrain: a foot nudged clear of the keep-out band and feet raised onto the
 curb with extra swing. Exercises the TerrainModel + FootstepPlanner through the
 live ROS node, not just unit logic.
@@ -52,10 +52,10 @@ def main() -> int:
     rclpy = None
     exit_code = 1
     node_log = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="walking_zoo_terrain_e2e_", suffix=".log", delete=False)
+        mode="w+", prefix="locomotion_ros2_terrain_e2e_", suffix=".log", delete=False)
     launch = subprocess.Popen(
         [
-            "ros2", "run", "walking_zoo_runtime", "footstep_marker_publisher",
+            "ros2", "run", "locomotion_ros2_runtime", "footstep_marker_publisher",
             "--ros-args",
             "-p", "step_count:=6",
             "-p", f"no_step_zone:={KEEP_OUT}",
@@ -69,14 +69,14 @@ def main() -> int:
 
     try:
         import rclpy
-        from walking_zoo_msgs.msg import FootstepPlan
+        from locomotion_ros2_msgs.msg import FootstepPlan
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_terrain_e2e_check")
+        node = rclpy.create_node("locomotion_ros2_terrain_e2e_check")
 
         received = []
         node.create_subscription(
-            FootstepPlan, "/walking_zoo/footstep_plan",
+            FootstepPlan, "/locomotion_ros2/footstep_plan",
             lambda msg: received.append(msg), 10)
 
         deadline = time.time() + 15.0
@@ -88,7 +88,7 @@ def main() -> int:
             return 1
 
         plan = received[-1]
-        if plan.planner_id != "walking_zoo_terrain_planner":
+        if plan.planner_id != "locomotion_ros2_terrain_planner":
             print(f"unexpected planner_id: {plan.planner_id}", file=sys.stderr)
             return 1
 

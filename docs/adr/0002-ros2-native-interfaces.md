@@ -6,7 +6,7 @@ Accepted.
 
 ## Decision
 
-walking_zoo uses ROS2 msg/srv/action, lifecycle nodes, and pluginlib as the
+locomotion_ros2 uses ROS2 msg/srv/action, lifecycle nodes, and pluginlib as the
 primary integration surface.
 
 ## Consequences

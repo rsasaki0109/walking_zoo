@@ -1,6 +1,6 @@
 # Adapter Contract
 
-Robot adapters implement `walking_zoo_core::WalkingAdapter` and are loaded with
+Robot adapters implement `locomotion_ros2_core::WalkingAdapter` and are loaded with
 pluginlib.
 
 Required methods:
@@ -68,7 +68,7 @@ node) bring the robot back after the operator releases the estop.
 ## Checklist
 
 1. Create a new adapter package.
-2. Depend on `walking_zoo_core` and `pluginlib`.
+2. Depend on `locomotion_ros2_core` and `pluginlib`.
 3. Implement `WalkingAdapter`, dispatching hardware calls through a backend.
 4. Export the adapter in `plugins.xml`.
 5. Add a conservative robot profile.

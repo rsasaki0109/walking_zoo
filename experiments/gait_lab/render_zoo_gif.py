@@ -158,7 +158,7 @@ def main() -> int:
         if header is None:
             tagline = ("recurring shove · live fall detection" if args.push > 0
                        else "one command · live fall detection")
-            header = _header(grid.shape[1], fonts, "walking_zoo · gait zoo",
+            header = _header(grid.shape[1], fonts, "locomotion_ros2 · gait zoo",
                              f"{len(tiles)} controllers · {tagline}")
         gif.append(np.vstack([header, grid]))
 

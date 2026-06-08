@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ros2 bag record \
-  /walking_zoo/state \
-  /walking_zoo/adapter_status \
-  /walking_zoo/safety_state \
-  /walking_zoo/cmd_vel
+  /locomotion_ros2/state \
+  /locomotion_ros2/adapter_status \
+  /locomotion_ros2/safety_state \
+  /locomotion_ros2/cmd_vel

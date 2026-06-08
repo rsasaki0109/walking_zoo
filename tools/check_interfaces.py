@@ -30,7 +30,7 @@ REQUIRED = {
 
 
 def main() -> int:
-    root = Path(__file__).resolve().parents[1] / "src" / "walking_zoo_msgs"
+    root = Path(__file__).resolve().parents[1] / "src" / "locomotion_ros2_msgs"
     missing = []
     for folder, names in REQUIRED.items():
         for name in names:
@@ -41,7 +41,7 @@ def main() -> int:
         print("Missing interfaces:")
         print("\n".join(missing))
         return 1
-    print("walking_zoo interfaces present")
+    print("locomotion_ros2 interfaces present")
     return 0
 
 

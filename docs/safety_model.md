@@ -1,6 +1,6 @@
 # Safety Model
 
-walking_zoo is default-deny for real robot motion. The mock adapter works out of
+locomotion_ros2 is default-deny for real robot motion. The mock adapter works out of
 the box, but real adapters must require explicit `allow_motion:=true`.
 
 ## Current Gates

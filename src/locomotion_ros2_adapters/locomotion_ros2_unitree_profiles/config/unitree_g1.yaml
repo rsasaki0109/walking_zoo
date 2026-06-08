@@ -1,0 +1,27 @@
+robot_model: unitree_g1
+robot_family: humanoid
+adapter_plugin: locomotion_ros2_unitree_sdk2/UnitreeSdk2Adapter
+capabilities:
+  velocity_command: true
+  body_pose_command: true
+  footstep_plan: planned
+  whole_body_goal: planned
+  sit_stand: true
+  estop: true
+  lateral_step: true
+  turn_in_place: true
+limits:
+  max_linear_x: 0.4
+  max_linear_y: 0.2
+  max_angular_z: 0.6
+  max_body_roll: 0.2
+  max_body_pitch: 0.2
+  command_timeout_sec: 0.25
+frames:
+  base_frame: base_link
+  odom_frame: odom
+  map_frame: map
+safety:
+  allow_motion_default: false
+  requires_explicit_allow_motion: true
+  fall_detection_source: imu

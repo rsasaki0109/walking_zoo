@@ -29,7 +29,7 @@ from contextlib import suppress
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SIM_SCRIPT = REPO / "src" / "walking_zoo_examples" / "scripts" / "gait_lab_sil_sim.py"
+SIM_SCRIPT = REPO / "src" / "locomotion_ros2_examples" / "scripts" / "gait_lab_sil_sim.py"
 
 
 def terminate(process):
@@ -64,7 +64,7 @@ def main() -> int:
     env = os.environ.copy()
     env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
     env.setdefault("ROS_DOMAIN_ID", "64")
-    env.setdefault("WALKING_ZOO_GAIT_LAB_PATH", str(REPO / "experiments" / "gait_lab"))
+    env.setdefault("LOCOMOTION_ROS2_GAIT_LAB_PATH", str(REPO / "experiments" / "gait_lab"))
     env.setdefault("MUJOCO_GL", "egl")
     os.environ["RMW_IMPLEMENTATION"] = env["RMW_IMPLEMENTATION"]
     os.environ["ROS_DOMAIN_ID"] = env["ROS_DOMAIN_ID"]
@@ -76,9 +76,9 @@ def main() -> int:
 
     procs = []
     procs.append(subprocess.Popen(
-        ["ros2", "run", "walking_zoo_runtime", "walking_zoo_runtime_manager",
+        ["ros2", "run", "locomotion_ros2_runtime", "locomotion_ros2_runtime_manager",
          "--ros-args", "-p", "autostart:=true",
-         "-p", "adapter_plugin:=walking_zoo_gait_lab_sil/GaitLabSilAdapter",
+         "-p", "adapter_plugin:=locomotion_ros2_gait_lab_sil/GaitLabSilAdapter",
          "-p", "robot_model:=g1", "-p", "robot_family:=humanoid",
          "-p", "limits.max_linear_x:=0.4", "-p", "limits.max_angular_z:=0.5"],
         env=env, preexec_fn=os.setsid))
@@ -89,7 +89,7 @@ def main() -> int:
          "-p", "frame_stride:=2"],
         env=env, preexec_fn=os.setsid))
     procs.append(subprocess.Popen(
-        ["ros2", "run", "walking_zoo_nav2", "cmd_vel_bridge"],
+        ["ros2", "run", "locomotion_ros2_nav2", "cmd_vel_bridge"],
         env=env, preexec_fn=os.setsid))
 
     node = None
@@ -98,13 +98,13 @@ def main() -> int:
     try:
         import rclpy
         from geometry_msgs.msg import Twist
-        from walking_zoo_msgs.msg import WalkingState
+        from locomotion_ros2_msgs.msg import WalkingState
 
         rclpy.init(args=None)
         node = rclpy.create_node("sil_live_capture")
         latest = {}
         node.create_subscription(
-            WalkingState, "/walking_zoo/state",
+            WalkingState, "/locomotion_ros2/state",
             lambda m: latest.__setitem__("state", m), 10)
         cmd_pub = node.create_publisher(Twist, "/cmd_vel", 10)
 

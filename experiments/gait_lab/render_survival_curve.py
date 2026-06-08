@@ -98,7 +98,7 @@ def main() -> int:
     for s in ax.spines.values():
         s.set_color("#2a2e38")
 
-    fig.suptitle("walking_zoo · push recovery — delaying a fall vs recovering",
+    fig.suptitle("locomotion_ros2 · push recovery — delaying a fall vs recovering",
                  color="#7cc4ff", fontsize=15, fontweight="bold", x=0.5, y=0.99)
     fig.text(0.5, 0.918, "time-to-fall the binary frontier flattens to r=0: force "
              "authority (QP) delays the fall; only stepping reaches the ceiling",

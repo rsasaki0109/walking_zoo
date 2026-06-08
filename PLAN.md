@@ -1,6 +1,6 @@
-# walking_zoo Development Plan
+# locomotion_ros2 Development Plan
 
-walking_zoo is a ROS2-native Walking Runtime & Adapter Hub for humanoid and
+locomotion_ros2 is a ROS2-native Walking Runtime & Adapter Hub for humanoid and
 legged robots. The project should read as "Nav2 for walking robots": not a
 policy zoo, not a simulator, and not a custom gait research stack, but a
 production-shaped runtime layer that makes walking robots controllable through
@@ -17,7 +17,7 @@ gaits, clear safety boundaries, and copy-paste demos that work without hardware.
 
 Any walking robot should be controllable through a common ROS2 walking runtime.
 
-walking_zoo should become the runtime layer between:
+locomotion_ros2 should become the runtime layer between:
 
 - Nav2 and walking robots.
 - Teleoperation tools and walking robots.
@@ -27,7 +27,7 @@ walking_zoo should become the runtime layer between:
 
 ### Positioning
 
-walking_zoo is:
+locomotion_ros2 is:
 
 - A ROS2-native walking runtime.
 - An adapter hub for humanoid and legged robot SDKs.
@@ -37,7 +37,7 @@ walking_zoo is:
 - A place to normalize walking commands, states, profiles, diagnostics, and
   robot capability contracts.
 
-walking_zoo is not:
+locomotion_ros2 is not:
 
 - An RL training repository.
 - A custom simulator.
@@ -50,14 +50,14 @@ walking_zoo is not:
 
 The repository already has the important v0.1 foundation:
 
-- `walking_zoo_msgs` defines walking-specific ROS2 messages, services, and
+- `locomotion_ros2_msgs` defines walking-specific ROS2 messages, services, and
   actions.
-- `walking_zoo_core` defines the adapter contract.
-- `walking_zoo_safety` provides velocity limiting, watchdog, and e-stop gates.
-- `walking_zoo_runtime` provides the lifecycle runtime manager.
-- `walking_zoo_mock_adapter` gives an always-buildable adapter.
-- `walking_zoo_nav2` bridges Nav2-style `/cmd_vel` into `/walking_zoo/cmd_vel`.
-- `walking_zoo_bringup` provides one-command demos.
+- `locomotion_ros2_core` defines the adapter contract.
+- `locomotion_ros2_safety` provides velocity limiting, watchdog, and e-stop gates.
+- `locomotion_ros2_runtime` provides the lifecycle runtime manager.
+- `locomotion_ros2_mock_adapter` gives an always-buildable adapter.
+- `locomotion_ros2_nav2` bridges Nav2-style `/cmd_vel` into `/locomotion_ros2/cmd_vel`.
+- `locomotion_ros2_bringup` provides one-command demos.
 - README assets include MuJoCo Unitree G1 and PyBullet Laikago simulation GIFs.
 - The MuJoCo G1 runtime showcase records JSON and Markdown trace evidence.
 
@@ -104,13 +104,13 @@ Done means:
 - The GIF does not look like walk playback at higher speed.
 - The robot remains visually balanced.
 - The generated README GIFs pass asset validation.
-- The runtime showcase trace still proves `/cmd_vel`, `/walking_zoo/cmd_vel`,
+- The runtime showcase trace still proves `/cmd_vel`, `/locomotion_ros2/cmd_vel`,
   state publishing, and e-stop behavior.
 
 ### 2. Build A Rich Gait Gallery
 
 The gait gallery is the most GitHub-visible feature. It should become a visual
-index of the walking command surface that walking_zoo normalizes.
+index of the walking command surface that locomotion_ros2 normalizes.
 
 Initial gallery entries:
 
@@ -154,10 +154,10 @@ Add or improve:
 - Asset validation scripts for GIF dimensions, frame count, and size.
 - Trace validation that checks:
   - `/cmd_vel` input.
-  - `/walking_zoo/cmd_vel` bridge output.
-  - `/walking_zoo/state` transitions.
-  - `/walking_zoo/adapter_status`.
-  - `/walking_zoo/safety_state`.
+  - `/locomotion_ros2/cmd_vel` bridge output.
+  - `/locomotion_ros2/state` transitions.
+  - `/locomotion_ros2/adapter_status`.
+  - `/locomotion_ros2/safety_state`.
   - e-stop activation.
 
 Done means:
@@ -177,7 +177,7 @@ The runtime should keep improving in parallel:
 - Better command source tagging.
 - Command arbitration tests for teleop/Nav2/VLA priority.
 - More complete action cancellation behavior.
-- More useful `/walking_zoo/state` transitions.
+- More useful `/locomotion_ros2/state` transitions.
 - Diagnostic messages that are readable in `ros2 topic echo`.
 
 Done means:
@@ -254,7 +254,7 @@ Make Unitree support credible while keeping the default build vendor-free.
 
 Scope:
 
-- Keep `WALKING_ZOO_WITH_UNITREE_SDK2` default `OFF`.
+- Keep `LOCOMOTION_ROS2_WITH_UNITREE_SDK2` default `OFF`.
 - Improve Unitree SDK2 stub diagnostics.
 - Add explicit safety checklist for real robot testing.
 - Validate Go2, G1, and H1 robot profile fields.
@@ -265,8 +265,8 @@ Scope:
 Exit criteria:
 
 - The repository still builds without Unitree SDK2.
-- Unitree-specific logic does not leak into `walking_zoo_core` or
-  `walking_zoo_msgs`.
+- Unitree-specific logic does not leak into `locomotion_ros2_core` or
+  `locomotion_ros2_msgs`.
 - Real robot motion remains disabled unless explicitly enabled.
 
 ### v0.4: Footstep And Legged-Aware Navigation
@@ -293,7 +293,7 @@ Exit criteria:
 
 Goal:
 
-Make walking_zoo a safe target for semantic robot commands.
+Make locomotion_ros2 a safe target for semantic robot commands.
 
 Scope:
 
@@ -305,7 +305,7 @@ Scope:
 
 Exit criteria:
 
-- README can honestly say walking_zoo is VLA-ready at the runtime boundary.
+- README can honestly say locomotion_ros2 is VLA-ready at the runtime boundary.
 - Semantic commands are traceable, cancellable, and safety-gated.
 
 ## README And Star Strategy
@@ -327,7 +327,7 @@ The README should sell the project in this order:
 
 High-value README assets:
 
-- Hero GIF: Unitree G1 moving through walking_zoo runtime showcase.
+- Hero GIF: Unitree G1 moving through locomotion_ros2 runtime showcase.
 - Runtime GIF: topic-driven G1 demo with overlay.
 - Gait gallery GIF: walk, run, sidestep, turn, stop, e-stop.
 - Safety GIF: e-stop blocks motion.
@@ -351,12 +351,12 @@ Expected stack:
 ```text
 showcase driver
   -> /cmd_vel
-  -> walking_zoo_nav2 bridge
-  -> /walking_zoo/cmd_vel
+  -> locomotion_ros2_nav2 bridge
+  -> /locomotion_ros2/cmd_vel
   -> WalkingRuntimeManager
   -> SafetyPipeline
   -> MockWalkingAdapter
-  -> /walking_zoo/state
+  -> /locomotion_ros2/state
   -> MuJoCo G1 visualizer
   -> latest.png / live.gif
   -> trace recorder
@@ -381,7 +381,7 @@ This keeps README assets reproducible and independent of real hardware.
 
 ## Safety Plan
 
-walking_zoo should be boringly strict about motion safety:
+locomotion_ros2 should be boringly strict about motion safety:
 
 - Real robot motion disabled by default.
 - `allow_motion:=true` required for any real robot adapter.
@@ -438,7 +438,7 @@ Medium issues:
 - Add body pose command visualization in MuJoCo G1.
 - Add trace validator checks for full state ordering.
 - [x] Add Nav2 BT stub docs and sample recovery tree (superseded by the live
-  `walking_zoo_bt_recovery_node` and `bt_xml/walking_zoo_recovery_live.xml`).
+  `locomotion_ros2_bt_recovery_node` and `bt_xml/locomotion_ros2_recovery_live.xml`).
 - Add runtime diagnostics publisher coverage.
 
 Hard issues (completed in the deep-integration pass):
@@ -449,9 +449,9 @@ Hard issues (completed in the deep-integration pass):
   feasibility gate, plus a terrain-aware `FootstepPlanner` (keep-out avoidance,
   curb step-up).
 - [x] BehaviorTree.CPP integration without making the default build fragile — a
-  live `walking_zoo_bt_recovery_node` that calls `/walking_zoo/clear_fault`.
+  live `locomotion_ros2_bt_recovery_node` that calls `/locomotion_ros2/clear_fault`.
 - [x] Runtime log export design for LeRobot-style datasets — single- and
-  multi-episode exporter (`walking_zoo_lerobot_export.py`).
+  multi-episode exporter (`locomotion_ros2_lerobot_export.py`).
 - [x] Legged-aware Nav2 integration beyond `cmd_vel` — `LeggedVelocityShaper`
   plus a readiness-gated bridge.
 
@@ -465,15 +465,15 @@ deepening single features:
 
 - [x] A second real adapter to give the "adapter hub" real breadth and validate
   the dispatch-backend pattern across robot classes. **Done:**
-  `walking_zoo_unitree_go2` adds a Unitree Go2 quadruped sport-mode adapter
+  `locomotion_ros2_unitree_go2` adds a Unitree Go2 quadruped sport-mode adapter
   (`UnitreeGo2Adapter`) reusing the `Go2SportBackend` SIL/SDK2 dispatch pattern,
   with a genuinely quadruped FSM (lie-down rest, recovery-stand, sit on quick
   stop, four-foot `SUPPORT_QUADRUPED`) and a real `find_package(unitree_sdk2
   REQUIRED)` link path. Covered by gtest and
   `tools/check_unitree_go2_adapter_e2e.py`.
-- [x] Embed the `walking_zoo_bt` recovery nodes inside an actual Nav2 BT
+- [x] Embed the `locomotion_ros2_bt` recovery nodes inside an actual Nav2 BT
   navigator recovery branch (not just the standalone recovery node). **Done:**
-  `walking_zoo_nav2_bt_nodes` is a Nav2-loadable BT plugin library exporting
+  `locomotion_ros2_nav2_bt_nodes` is a Nav2-loadable BT plugin library exporting
   `IsWalkingReady` (topic condition) and `ClearWalkingFault` (built on
   `nav2_behavior_tree::BtServiceNode`), wired into
   `bt_xml/navigate_to_pose_w_walking_recovery.xml` as the first action in the
@@ -499,7 +499,7 @@ deepening single features:
   several distinct semantic-action episodes through the real ROS pipeline
   (cmd_vel bridge → runtime → safety → adapter → recorder), aggregating them into
   one LeRobot v2.1 dataset. `tools/check_lerobot_hf_load.py` and a
-  skip-if-unavailable `walking_zoo_examples` pytest confirm the parquet episodes
+  skip-if-unavailable `locomotion_ros2_examples` pytest confirm the parquet episodes
   and `meta/*.jsonl` tables load via HuggingFace `datasets.load_dataset` with row
   counts, columns, and feature widths matching `meta/info.json`.
 

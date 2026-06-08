@@ -43,12 +43,12 @@ def main() -> int:
     exit_code = 1
     launch_log = tempfile.NamedTemporaryFile(
         mode="w+",
-        prefix="walking_zoo_mock_runtime_",
+        prefix="locomotion_ros2_mock_runtime_",
         suffix=".log",
         delete=False,
     )
     launch = subprocess.Popen(
-        ["ros2", "launch", "walking_zoo_bringup", "mock_runtime.launch.py"],
+        ["ros2", "launch", "locomotion_ros2_bringup", "mock_runtime.launch.py"],
         env=env,
         stdout=launch_log,
         stderr=subprocess.STDOUT,
@@ -58,21 +58,21 @@ def main() -> int:
     try:
         import rclpy
         from geometry_msgs.msg import Twist
-        from walking_zoo_msgs.msg import WalkingState
-        from walking_zoo_msgs.srv import EmergencyStop
+        from locomotion_ros2_msgs.msg import WalkingState
+        from locomotion_ros2_msgs.srv import EmergencyStop
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_mock_runtime_e2e_check")
+        node = rclpy.create_node("locomotion_ros2_mock_runtime_e2e_check")
         states = []
 
         node.create_subscription(
             WalkingState,
-            "/walking_zoo/state",
+            "/locomotion_ros2/state",
             lambda msg: states.append(msg),
             10,
         )
         cmd_pub = node.create_publisher(Twist, "/cmd_vel", 10)
-        estop_client = node.create_client(EmergencyStop, "/walking_zoo/estop")
+        estop_client = node.create_client(EmergencyStop, "/locomotion_ros2/estop")
 
         def spin_once(active_node):
             rclpy.spin_once(active_node, timeout_sec=0.1)
@@ -91,7 +91,7 @@ def main() -> int:
             15.0,
             spin_once,
         ):
-            print("/walking_zoo/state did not report adapter_connected", file=sys.stderr)
+            print("/locomotion_ros2/state did not report adapter_connected", file=sys.stderr)
             return 1
 
         command = Twist()
@@ -109,7 +109,7 @@ def main() -> int:
             return 1
 
         if not estop_client.wait_for_service(timeout_sec=5.0):
-            print("/walking_zoo/estop service did not appear", file=sys.stderr)
+            print("/locomotion_ros2/estop service did not appear", file=sys.stderr)
             return 1
 
         request = EmergencyStop.Request()

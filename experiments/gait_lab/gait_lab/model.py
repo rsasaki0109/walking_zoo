@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 DEFAULT_MENAGERIE = os.environ.get(
-    "WALKING_ZOO_MENAGERIE_PATH", "/tmp/walking_zoo_mujoco_menagerie"
+    "LOCOMOTION_ROS2_MENAGERIE_PATH", "/tmp/locomotion_ros2_mujoco_menagerie"
 )
 
 # Leg actuators a gait controller usually drives. Names match the menagerie G1.
@@ -98,7 +98,7 @@ class G1Model:
         scene = path / "unitree_g1" / "scene.xml"
         if not scene.exists():
             raise FileNotFoundError(
-                f"G1 scene not found at {scene}. Set WALKING_ZOO_MENAGERIE_PATH to a "
+                f"G1 scene not found at {scene}. Set LOCOMOTION_ROS2_MENAGERIE_PATH to a "
                 "google-deepmind/mujoco_menagerie checkout, e.g.\n"
                 "  git clone https://github.com/google-deepmind/mujoco_menagerie.git "
                 f"{DEFAULT_MENAGERIE}"

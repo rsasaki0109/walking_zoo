@@ -1,0 +1,8 @@
+<library path="locomotion_ros2_unitree_go2">
+  <class
+    name="locomotion_ros2_unitree_go2/UnitreeGo2Adapter"
+    type="locomotion_ros2_unitree_go2::UnitreeGo2Adapter"
+    base_class_type="locomotion_ros2_core::WalkingAdapter">
+    <description>Unitree Go2 quadruped sport-mode adapter. Motion is disabled by default.</description>
+  </class>
+</library>

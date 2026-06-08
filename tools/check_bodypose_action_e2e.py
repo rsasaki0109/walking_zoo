@@ -31,7 +31,7 @@ def terminate_process_group(process):
 
 
 def make_pose(roll, pitch, duration=0.6):
-    from walking_zoo_msgs.msg import BodyPoseCommand
+    from locomotion_ros2_msgs.msg import BodyPoseCommand
 
     cmd = BodyPoseCommand()
     cmd.roll = float(roll)
@@ -42,7 +42,7 @@ def make_pose(roll, pitch, duration=0.6):
 
 
 def send_pose(rclpy, node, ActionClient, ExecuteBodyPose, command):
-    client = ActionClient(node, ExecuteBodyPose, "/walking_zoo/execute_body_pose")
+    client = ActionClient(node, ExecuteBodyPose, "/locomotion_ros2/execute_body_pose")
     if not client.wait_for_server(timeout_sec=10.0):
         return None, 0
 
@@ -81,12 +81,12 @@ def main() -> int:
     exit_code = 1
     launch_log = tempfile.NamedTemporaryFile(
         mode="w+",
-        prefix="walking_zoo_bodypose_e2e_",
+        prefix="locomotion_ros2_bodypose_e2e_",
         suffix=".log",
         delete=False,
     )
     launch = subprocess.Popen(
-        ["ros2", "launch", "walking_zoo_bringup", "mock_runtime.launch.py"],
+        ["ros2", "launch", "locomotion_ros2_bringup", "mock_runtime.launch.py"],
         env=env,
         stdout=launch_log,
         stderr=subprocess.STDOUT,
@@ -96,10 +96,10 @@ def main() -> int:
     try:
         import rclpy
         from rclpy.action import ActionClient
-        from walking_zoo_msgs.action import ExecuteBodyPose
+        from locomotion_ros2_msgs.action import ExecuteBodyPose
 
         rclpy.init(args=None)
-        node = rclpy.create_node("walking_zoo_bodypose_e2e_check")
+        node = rclpy.create_node("locomotion_ros2_bodypose_e2e_check")
 
         safe = make_pose(0.1, 0.1)
         result, feedbacks = send_pose(rclpy, node, ActionClient, ExecuteBodyPose, safe)

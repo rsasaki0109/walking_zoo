@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the walking_zoo -> LeRobot dataset exporter end to end.
+"""Validate the locomotion_ros2 -> LeRobot dataset exporter end to end.
 
 Runs the exporter on a synthetic runtime trace and asserts the produced dataset
 has the LeRobot layout, a consistent frame count, and a loadable episode file.
@@ -14,11 +14,11 @@ import tempfile
 
 _REPO = Path(__file__).resolve().parent.parent
 _MODULE_PATH = (
-    _REPO / "src" / "walking_zoo_examples" / "scripts" / "walking_zoo_lerobot_export.py")
+    _REPO / "src" / "locomotion_ros2_examples" / "scripts" / "locomotion_ros2_lerobot_export.py")
 
 
 def load_exporter():
-    spec = importlib.util.spec_from_file_location("walking_zoo_lerobot_export", _MODULE_PATH)
+    spec = importlib.util.spec_from_file_location("locomotion_ros2_lerobot_export", _MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -26,22 +26,22 @@ def load_exporter():
 
 def synthetic_trace():
     return {
-        "schema": "walking_zoo.demo_trace.v1",
-        "generated_by": "walking_zoo_demo_recorder",
+        "schema": "locomotion_ros2.demo_trace.v1",
+        "generated_by": "locomotion_ros2_demo_recorder",
         "duration_sec": 3.0,
         "latest": {"walking_state": {"robot": "g1"}},
         "events": [
-            {"t_sec": 0.0, "topic": "/walking_zoo/state", "summary": "",
+            {"t_sec": 0.0, "topic": "/locomotion_ros2/state", "summary": "",
              "data": {"state": "STANDING", "mode": 2, "estop_active": False}},
             {"t_sec": 0.5, "topic": "/cmd_vel", "summary": "",
              "data": {"linear_x": 0.3, "linear_y": 0.0, "angular_z": 0.2}},
-            {"t_sec": 0.5, "topic": "/walking_zoo/cmd_vel", "summary": "",
+            {"t_sec": 0.5, "topic": "/locomotion_ros2/cmd_vel", "summary": "",
              "data": {"linear_x": 0.18, "linear_y": 0.0, "angular_z": 0.2}},
-            {"t_sec": 0.6, "topic": "/walking_zoo/state", "summary": "",
+            {"t_sec": 0.6, "topic": "/locomotion_ros2/state", "summary": "",
              "data": {"state": "WALKING", "mode": 3, "estop_active": False}},
-            {"t_sec": 2.0, "topic": "/walking_zoo/semantic_action", "summary": "",
+            {"t_sec": 2.0, "topic": "/locomotion_ros2/semantic_action", "summary": "",
              "data": {"action": "walk_forward"}},
-            {"t_sec": 2.5, "topic": "/walking_zoo/state", "summary": "",
+            {"t_sec": 2.5, "topic": "/locomotion_ros2/state", "summary": "",
              "data": {"state": "ESTOPPED", "mode": 1, "estop_active": True}},
         ],
     }
@@ -52,7 +52,7 @@ def main() -> int:
     fps = 10.0
     expected_frames = int(round(3.0 * fps)) + 1
 
-    with tempfile.TemporaryDirectory(prefix="walking_zoo_lerobot_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="locomotion_ros2_lerobot_") as tmp:
         out = Path(tmp) / "dataset"
         summary = exporter.write_dataset(synthetic_trace(), out, fps=fps)
 

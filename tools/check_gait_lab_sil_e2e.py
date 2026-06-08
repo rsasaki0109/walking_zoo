@@ -2,7 +2,7 @@
 """End-to-end check for the gait_lab SIL adapter in the real runtime.
 
 Brings up the runtime manager configured to load
-`walking_zoo_gait_lab_sil/GaitLabSilAdapter` together with the companion MuJoCo
+`locomotion_ros2_gait_lab_sil/GaitLabSilAdapter` together with the companion MuJoCo
 sim node (`gait_lab_sil_sim.py`, running the reinforcement-learned `rl-residual`
 gait). It then drives an ExecuteVelocity goal through the runtime + safety
 pipeline and confirms the simulated robot walks (WalkingState reports WALKING,
@@ -15,8 +15,8 @@ under the learned policy, and the simulated state flowing back into the runtime.
 Requires a Python with both rclpy and mujoco (gait_lab's deps). Run it with such
 an interpreter, ROS + the workspace sourced; the sim subprocess reuses
 sys.executable by default (override with GAIT_LAB_SIL_SIM_PYTHON). Point at the
-gait_lab checkout with WALKING_ZOO_GAIT_LAB_PATH and a menagerie G1 with
-WALKING_ZOO_MENAGERIE_PATH.
+gait_lab checkout with LOCOMOTION_ROS2_GAIT_LAB_PATH and a menagerie G1 with
+LOCOMOTION_ROS2_MENAGERIE_PATH.
 """
 
 import os
@@ -28,7 +28,7 @@ import time
 from contextlib import suppress
 
 REPO = Path(__file__).resolve().parents[1]
-SIM_SCRIPT = REPO / "src" / "walking_zoo_examples" / "scripts" / "gait_lab_sil_sim.py"
+SIM_SCRIPT = REPO / "src" / "locomotion_ros2_examples" / "scripts" / "gait_lab_sil_sim.py"
 
 
 def terminate_process_group(process):
@@ -48,7 +48,7 @@ def main() -> int:
     env = os.environ.copy()
     env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
     env.setdefault("ROS_DOMAIN_ID", "57")
-    env.setdefault("WALKING_ZOO_GAIT_LAB_PATH", str(REPO / "experiments" / "gait_lab"))
+    env.setdefault("LOCOMOTION_ROS2_GAIT_LAB_PATH", str(REPO / "experiments" / "gait_lab"))
     env.setdefault("MUJOCO_GL", "egl")
     os.environ["RMW_IMPLEMENTATION"] = env["RMW_IMPLEMENTATION"]
     os.environ["ROS_DOMAIN_ID"] = env["ROS_DOMAIN_ID"]
@@ -57,10 +57,10 @@ def main() -> int:
 
     runtime = subprocess.Popen(
         [
-            "ros2", "run", "walking_zoo_runtime", "walking_zoo_runtime_manager",
+            "ros2", "run", "locomotion_ros2_runtime", "locomotion_ros2_runtime_manager",
             "--ros-args",
             "-p", "autostart:=true",
-            "-p", "adapter_plugin:=walking_zoo_gait_lab_sil/GaitLabSilAdapter",
+            "-p", "adapter_plugin:=locomotion_ros2_gait_lab_sil/GaitLabSilAdapter",
             "-p", "robot_model:=g1",
             "-p", "robot_family:=humanoid",
             "-p", "limits.max_linear_x:=0.4",
@@ -83,14 +83,14 @@ def main() -> int:
     try:
         import rclpy
         from rclpy.action import ActionClient
-        from walking_zoo_msgs.action import ExecuteVelocity
-        from walking_zoo_msgs.msg import WalkingState
+        from locomotion_ros2_msgs.action import ExecuteVelocity
+        from locomotion_ros2_msgs.msg import WalkingState
 
         rclpy.init(args=None)
         node = rclpy.create_node("gait_lab_sil_e2e")
         latest = {}
         node.create_subscription(
-            WalkingState, "/walking_zoo/state",
+            WalkingState, "/locomotion_ros2/state",
             lambda m: latest.__setitem__("state", m), 10)
 
         # Wait for the adapter to be active AND connected to the MuJoCo sim
@@ -112,7 +112,7 @@ def main() -> int:
             return 1
         print(f"SIL adapter active and connected to sim: model={s.active_robot_model}")
 
-        client = ActionClient(node, ExecuteVelocity, "/walking_zoo/execute_velocity")
+        client = ActionClient(node, ExecuteVelocity, "/locomotion_ros2/execute_velocity")
         if not client.wait_for_server(timeout_sec=10.0):
             print("no execute_velocity server", file=sys.stderr)
             return 1

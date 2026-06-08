@@ -136,7 +136,7 @@ def main() -> int:
             cells.append(_label_tile(frame, title, gloss, st, rgb, fonts))
         row = np.hstack(cells)
         if header is None:
-            header = _header(row.shape[1], fonts, "walking_zoo · push-recovery showdown",
+            header = _header(row.shape[1], fonts, "locomotion_ros2 · push-recovery showdown",
                              f"forward {P:g} m/s shove · who survives?")
         gif.append(np.vstack([header, row]))
 
