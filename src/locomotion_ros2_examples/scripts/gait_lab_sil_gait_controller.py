@@ -72,6 +72,7 @@ class GaitLabSilGaitController(Node):
         self.declare_parameter(
             "embedded_rl_feedforward_topic",
             "/gait_lab_sil_rl_residual/feedforward")
+        self.declare_parameter("steer_yaw_ramp_rate", 0.15)
 
         controller_name = self.get_parameter("controller").value
         self.substeps = int(self.get_parameter("substeps").value)
@@ -97,6 +98,10 @@ class GaitLabSilGaitController(Node):
         self.controller = controllers[controller_name]
         self.controller_name = controller_name
         self.stand = self.model.stand_targets.copy()
+        self.steer_shaping = controller_name.startswith("rl-steerable")
+        self.steer_yaw_ramp_rate = float(
+            self.get_parameter("steer_yaw_ramp_rate").value)
+        self._shaped_yaw = 0.0
 
         self.active = False
         self.estop = False
@@ -181,6 +186,7 @@ class GaitLabSilGaitController(Node):
         elif signal in ("stop_normal", "stop_quick"):
             self.cmd_speed = self.cmd_lateral = self.cmd_yaw = 0.0
             self.moving = False
+            self._shaped_yaw = 0.0
         self.get_logger().info(f"gait_lab SIL gait control: {signal}")
 
     def _reset_robot(self):
@@ -221,6 +227,18 @@ class GaitLabSilGaitController(Node):
     def _commanded_to_move(self) -> bool:
         return self.moving
 
+    def _effective_command(self, dt: float | None = None):
+        raw_vx = float(self.cmd_speed)
+        raw_yaw = float(self.cmd_yaw)
+        if not self.steer_shaping or not self.moving:
+            self._shaped_yaw = 0.0
+            return self._Command(forward_speed=raw_vx, yaw_rate=raw_yaw)
+        step_dt = self.model.timestep if dt is None else dt
+        max_delta = self.steer_yaw_ramp_rate * step_dt
+        delta = max(-max_delta, min(max_delta, raw_yaw - self._shaped_yaw))
+        self._shaped_yaw += delta
+        return self._Command(forward_speed=raw_vx, yaw_rate=self._shaped_yaw)
+
     def _tick(self):
         if not self._state_synced:
             return
@@ -230,6 +248,7 @@ class GaitLabSilGaitController(Node):
             self._rehome_posture()
             self.controller.reset(self.model)
             self.gait_t = 0.0
+            self._shaped_yaw = 0.0
         self.walking_prev = walking
 
         if self._pending_push is not None and walking:
@@ -238,7 +257,6 @@ class GaitLabSilGaitController(Node):
             self.model.data.qvel[1] += ky
             self._pending_push = None
 
-        cmd = self._Command(forward_speed=float(self.cmd_speed), yaw_rate=float(self.cmd_yaw))
         if self.use_embedded_rl_policy:
             # Physics runs in gait_lab_sil_sim; advance the policy decimation counter
             # once per MuJoCo substep (as update() does) but never mj_step locally.
@@ -247,6 +265,7 @@ class GaitLabSilGaitController(Node):
                 policy_obs = None
                 refresh = False
                 for _ in range(self.substeps):
+                    cmd = self._effective_command()
                     obs = self.model.observe(self.gait_t)
                     ctrl, step_obs, refresh = self.controller.feedforward_and_observation(
                         obs, cmd)
@@ -263,6 +282,7 @@ class GaitLabSilGaitController(Node):
 
         for _ in range(self.substeps):
             if walking:
+                cmd = self._effective_command()
                 obs = self.model.observe(self.gait_t)
                 ctrl = self.controller.update(obs, cmd)
                 self._publish_joint_command(ctrl)

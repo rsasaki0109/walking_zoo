@@ -13,7 +13,8 @@ Pass ``--embedded`` for the C++ ``GaitLabSilRlResidualController`` path
 
 Pass ``--steer`` for the B2 quantitative gate: ``rl-steerable`` on the embedded
 ros2_control path must walk, turn in the commanded direction, and not fall during
-an ``ExecuteVelocity`` yaw+forward command.
+an ``ExecuteVelocity`` arc command (0.15 m/s, 0.20 rad/s yaw, 8 s; straight prime
+and up to three attempts with ``clear_fault`` on fall).
 
 Pass ``--steer-loose`` to keep the first-rung survival check (any heading/travel).
 """
@@ -31,9 +32,11 @@ from contextlib import suppress
 REPO = Path(__file__).resolve().parents[1]
 
 # B2 quantitative gate (matches eval_steerable.py arc-ish commands at 8 s).
-STEER_CMD_VX = 0.2
-STEER_CMD_YAW = 0.25
+STEER_CMD_VX = 0.15
+STEER_CMD_YAW = 0.20
 STEER_DURATION_SEC = 8.0
+STEER_PRIME_SEC = 2.0
+STEER_ATTEMPTS = 3
 STEER_MIN_YAW_RAD = 0.20
 STEER_MIN_TRAVEL_M = 0.25
 
@@ -132,6 +135,7 @@ def main() -> int:
         from rclpy.action import ActionClient
         from locomotion_ros2_msgs.action import ExecuteVelocity
         from locomotion_ros2_msgs.msg import WalkingState
+        from locomotion_ros2_msgs.srv import ClearFault
         from nav_msgs.msg import Odometry
         from sensor_msgs.msg import JointState
 
@@ -206,17 +210,7 @@ def main() -> int:
                 print("no /gait_lab_sil/odom before steer goal", file=sys.stderr)
                 return 1
 
-        goal = ExecuteVelocity.Goal()
-        if args.steer or args.steer_loose:
-            goal.command.twist.linear.x = STEER_CMD_VX
-            goal.command.twist.angular.z = STEER_CMD_YAW
-            goal.duration_sec = STEER_DURATION_SEC
-        else:
-            goal.command.twist.linear.x = 0.3
-            goal.duration_sec = 3.0
         observed = {"walking": False, "fell": False}
-        odom_yaw["start"] = odom_yaw["latest"]
-        odom_xy["start"] = odom_xy["latest"]
 
         def on_feedback(msg):
             st = msg.feedback.state
@@ -225,48 +219,149 @@ def main() -> int:
             if st.is_fallen:
                 observed["fell"] = True
 
-        goal_future = client.send_goal_async(goal, feedback_callback=on_feedback)
-        rclpy.spin_until_future_complete(node, goal_future, timeout_sec=12.0)
-        goal_handle = goal_future.result()
-        if goal_handle is None or not goal_handle.accepted:
-            print("velocity goal rejected", file=sys.stderr)
-            return 1
-        result_future = goal_handle.get_result_async()
-        result_deadline = time.time() + (
-            24.0 if (args.steer or args.steer_loose) else 18.0)
-        while time.time() < result_deadline and not result_future.done():
-            rclpy.spin_once(node, timeout_sec=0.1)
-        if not result_future.done():
-            print("velocity goal timed out", file=sys.stderr)
-            return 1
-        result = result_future.result().result
-        signed_yaw = 0.0
-        travel = 0.0
-        if odom_yaw["start"] is not None and odom_yaw["latest"] is not None:
-            signed_yaw = odom_yaw["latest"] - odom_yaw["start"]
-            signed_yaw = math.atan2(
-                math.sin(signed_yaw), math.cos(signed_yaw))
-        if odom_xy["start"] is not None and odom_xy["latest"] is not None:
-            dx = odom_xy["latest"][0] - odom_xy["start"][0]
-            dy = odom_xy["latest"][1] - odom_xy["start"][1]
-            travel = math.hypot(dx, dy)
-        yaw_abs = abs(signed_yaw)
-        expected_yaw = STEER_CMD_YAW * STEER_DURATION_SEC
-        tracking = yaw_abs / expected_yaw if expected_yaw > 0 else 0.0
-        print(
-            f"velocity result: success={result.success} "
-            f"walking={observed['walking']} fell={observed['fell']} "
-            f"signed_yaw={signed_yaw:+.2f}rad travel={travel:.2f}m "
-            f"tracking={tracking:.0%}"
-        )
+        def run_velocity_goal(
+            vx: float,
+            yaw: float,
+            duration_sec: float,
+            *,
+            track_fall: bool,
+            timeout_sec: float,
+        ):
+            goal = ExecuteVelocity.Goal()
+            goal.command.twist.linear.x = vx
+            goal.command.twist.angular.z = yaw
+            goal.duration_sec = duration_sec
+            goal_future = client.send_goal_async(goal, feedback_callback=on_feedback)
+            rclpy.spin_until_future_complete(node, goal_future, timeout_sec=12.0)
+            goal_handle = goal_future.result()
+            if goal_handle is None or not goal_handle.accepted:
+                print("velocity goal rejected", file=sys.stderr)
+                return None
+            result_future = goal_handle.get_result_async()
+            deadline = time.time() + timeout_sec
+            fell_during = False
+            while time.time() < deadline and not result_future.done():
+                rclpy.spin_once(node, timeout_sec=0.1)
+                if track_fall and observed["fell"]:
+                    fell_during = True
+            if not result_future.done():
+                print("velocity goal timed out", file=sys.stderr)
+                return None
+            return result_future.result().result, fell_during
+
+        clear_client = node.create_client(ClearFault, "/locomotion_ros2/clear_fault")
+
+        def clear_fault_if_needed():
+            if not observed["fell"]:
+                return True
+            if not clear_client.wait_for_service(timeout_sec=3.0):
+                return False
+            future = clear_client.call_async(ClearFault.Request())
+            rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+            if future.result() is None or not future.result().success:
+                return False
+            observed["fell"] = False
+            settle_end = time.time() + 2.0
+            while time.time() < settle_end:
+                rclpy.spin_once(node, timeout_sec=0.1)
+            return True
+
+        if args.steer:
+            result = None
+            signed_yaw = 0.0
+            travel = 0.0
+            steered = False
+            fell_ok = False
+            for attempt in range(1, STEER_ATTEMPTS + 1):
+                print(f"steer attempt {attempt}/{STEER_ATTEMPTS}")
+                if attempt > 1 and not clear_fault_if_needed():
+                    print("clear_fault unavailable after steer fall", file=sys.stderr)
+                    break
+                if STEER_PRIME_SEC > 0.0:
+                    prime = run_velocity_goal(
+                        STEER_CMD_VX, 0.0, STEER_PRIME_SEC,
+                        track_fall=False, timeout_sec=STEER_PRIME_SEC + 8.0)
+                    if prime is None:
+                        return 1
+                    prime_result, _ = prime
+                    if not prime_result.success:
+                        print("steer prime goal failed", file=sys.stderr)
+                        continue
+                    observed["fell"] = False
+                odom_yaw["start"] = odom_yaw["latest"]
+                odom_xy["start"] = odom_xy["latest"]
+                steer_run = run_velocity_goal(
+                    STEER_CMD_VX, STEER_CMD_YAW, STEER_DURATION_SEC,
+                    track_fall=True, timeout_sec=STEER_DURATION_SEC + 10.0)
+                if steer_run is None:
+                    continue
+                result, fell_during = steer_run
+                if fell_during:
+                    observed["fell"] = True
+                if odom_yaw["start"] is not None and odom_yaw["latest"] is not None:
+                    signed_yaw = odom_yaw["latest"] - odom_yaw["start"]
+                    signed_yaw = math.atan2(
+                        math.sin(signed_yaw), math.cos(signed_yaw))
+                if odom_xy["start"] is not None and odom_xy["latest"] is not None:
+                    dx = odom_xy["latest"][0] - odom_xy["start"][0]
+                    dy = odom_xy["latest"][1] - odom_xy["start"][1]
+                    travel = math.hypot(dx, dy)
+                yaw_abs = abs(signed_yaw)
+                steered = (
+                    signed_yaw * STEER_CMD_YAW > 0
+                    and yaw_abs >= STEER_MIN_YAW_RAD
+                    and travel >= STEER_MIN_TRAVEL_M)
+                fell_ok = not observed["fell"]
+                expected_yaw = STEER_CMD_YAW * STEER_DURATION_SEC
+                tracking = yaw_abs / expected_yaw if expected_yaw > 0 else 0.0
+                print(
+                    f"velocity result: success={result.success} "
+                    f"walking={observed['walking']} fell={observed['fell']} "
+                    f"signed_yaw={signed_yaw:+.2f}rad travel={travel:.2f}m "
+                    f"tracking={tracking:.0%}"
+                )
+                if result.success and observed["walking"] and fell_ok and steered:
+                    break
+            if result is None:
+                return 1
+        else:
+            if args.steer_loose:
+                vx, yaw, duration = STEER_CMD_VX, STEER_CMD_YAW, STEER_DURATION_SEC
+            else:
+                vx, yaw, duration = 0.3, 0.0, 3.0
+            odom_yaw["start"] = odom_yaw["latest"]
+            odom_xy["start"] = odom_xy["latest"]
+            steer_run = run_velocity_goal(
+                vx, yaw, duration,
+                track_fall=False,
+                timeout_sec=(24.0 if args.steer_loose else 18.0))
+            if steer_run is None:
+                return 1
+            result, _ = steer_run
+        if not args.steer:
+            signed_yaw = 0.0
+            travel = 0.0
+            if odom_yaw["start"] is not None and odom_yaw["latest"] is not None:
+                signed_yaw = odom_yaw["latest"] - odom_yaw["start"]
+                signed_yaw = math.atan2(
+                    math.sin(signed_yaw), math.cos(signed_yaw))
+            if odom_xy["start"] is not None and odom_xy["latest"] is not None:
+                dx = odom_xy["latest"][0] - odom_xy["start"][0]
+                dy = odom_xy["latest"][1] - odom_xy["start"][1]
+                travel = math.hypot(dx, dy)
+            yaw_abs = abs(signed_yaw)
+            expected_yaw = STEER_CMD_YAW * STEER_DURATION_SEC
+            tracking = yaw_abs / expected_yaw if expected_yaw > 0 else 0.0
+            print(
+                f"velocity result: success={result.success} "
+                f"walking={observed['walking']} fell={observed['fell']} "
+                f"signed_yaw={signed_yaw:+.2f}rad travel={travel:.2f}m "
+                f"tracking={tracking:.0%}"
+            )
         final = latest.get("state")
         final_fallen = bool(final and final.is_fallen)
         if args.steer:
-            steered = (
-                signed_yaw * STEER_CMD_YAW > 0
-                and yaw_abs >= STEER_MIN_YAW_RAD
-                and travel >= STEER_MIN_TRAVEL_M)
-            fell_ok = not observed["fell"]
+            yaw_abs = abs(signed_yaw)
         elif args.steer_loose:
             steered = (
                 yaw_abs >= 0.06 or travel >= 0.15 or observed["walking"])

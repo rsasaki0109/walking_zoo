@@ -666,6 +666,9 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B2 quantitative rung** — `--steer` gates signed yaw (≥0.20 rad),
   travel (≥0.25 m), and no fall during the 8 s ``ExecuteVelocity`` command on
   embedded ``rl-steerable`` (`tracking` ratio logged).
+- [x] **B2 flake reduction** — per-substep yaw ramp (`steer_yaw_ramp_rate`) on
+  `rl-steerable*` in the split gait controller; `--steer` primes straight walking,
+  retries with `clear_fault`, and uses gentler arc commands (0.15 m/s, 0.20 rad/s).
 - [ ] **B2** — reactive steering that holds the full horizon (depends on B1).
 - [x] **B3 first rung** — ros2_control joint-state bridge for gait_lab SIL: topic
   hardware interface, split sim (physics) + gait controller (policy),

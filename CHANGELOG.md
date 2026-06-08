@@ -624,6 +624,10 @@
   `feedforward_and_observation` once per MuJoCo substep so C++ RL runs at 50 Hz,
   not 5 Hz). Tightened Nav2 yaw/forward caps for `rl-steerable` spiral control;
   `--embedded` Nav2 E2E reaches 2 m at 0.8 m tolerance.
+- **B2 flake reduction.** Split gait controller ramps commanded yaw per MuJoCo
+  substep for `rl-steerable*` (mirrors harness stability); `--steer` E2E primes
+  straight walking, retries up to three times with `/locomotion_ros2/clear_fault`,
+  and uses gentler arc commands (0.15 m/s, 0.20 rad/s yaw).
 - **B4 spiral reduction.** Added `legged.yaw_deadband` to the Nav2 cmd_vel bridge
   shaper (gtest-covered), capped lateral velocity on the SIL Nav2 launch, registered
   `RLSteerableFootstepWalk` for optional `--controller`, and log `max_lateral` in
