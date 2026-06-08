@@ -611,8 +611,8 @@
   nav config, delayed Nav2 bringup, SIL `require_ready:=false` on the legged bridge),
   continuous odom/TF on the split sim path, and `RLSteerableWalk` in `CONTROLLERS()`.
   `tools/check_gait_lab_sil_nav2_nav_e2e.py` sends `NavigateToPose` after cmd_vel
-  prime and lifecycle settle; monolithic `rl-steerable` reaches the goal (embedded
-  path wired, still flaky).
+  prime and lifecycle settle; monolithic `rl-steerable` reaches the goal. Embedded
+  path fixed by publishing obs/ff from the sim snapshot only (no local `mj_step`).
 - **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
   `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
   `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is

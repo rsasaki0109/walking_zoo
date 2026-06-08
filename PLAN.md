@@ -680,8 +680,8 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B4 first rung** — full Nav2 `NavigateToPose` drives monolithic
   `rl-steerable` SIL to a map goal (`tools/check_gait_lab_sil_nav2_nav_e2e.py`;
   cmd_vel prime + delayed Nav2 bringup + `rl-steerable` registry).
-- [ ] **B4 embedded** — same E2E on the ros2_control embedded C++ RL path
-  (`--embedded`; TF/50 Hz nav config landed, walk-to-goal still flaky).
+- [x] **B4 embedded first rung** — `check_gait_lab_sil_nav2_nav_e2e.py --embedded`
+  (no local `mj_step` in gait controller; 50 Hz nav ros2_control config).
 
 ## Definition Of Done For The Next Push
 
