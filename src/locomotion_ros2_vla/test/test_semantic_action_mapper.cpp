@@ -43,6 +43,26 @@ TEST(SemanticActionMapper, RunForwardIsFasterThanWalkForward)
   EXPECT_GT(run.velocity.twist.linear.x, walk.velocity.twist.linear.x);
 }
 
+TEST(SemanticActionMapper, SlowCarefulWalkIsSlowerThanWalkForward)
+{
+  locomotion_ros2_vla::SemanticActionMapper mapper;
+  const auto walk = mapper.map(make_action("walk_forward"));
+  const auto slow = mapper.map(make_action("slow_careful_walk"));
+
+  EXPECT_TRUE(slow.recognized);
+  EXPECT_GT(walk.velocity.twist.linear.x, slow.velocity.twist.linear.x);
+}
+
+TEST(SemanticActionMapper, SlowWalkAliasMatchesSlowCarefulWalk)
+{
+  locomotion_ros2_vla::SemanticActionMapper mapper;
+  const auto slow = mapper.map(make_action("slow_careful_walk"));
+  const auto alias = mapper.map(make_action("slow_walk"));
+
+  EXPECT_TRUE(alias.recognized);
+  EXPECT_DOUBLE_EQ(alias.velocity.twist.linear.x, slow.velocity.twist.linear.x);
+}
+
 TEST(SemanticActionMapper, WalkForwardAliasMatchesMoveForward)
 {
   locomotion_ros2_vla::SemanticActionMapper mapper;

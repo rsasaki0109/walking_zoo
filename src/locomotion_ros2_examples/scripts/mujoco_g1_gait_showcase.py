@@ -52,6 +52,7 @@ class MujocoG1GaitShowcase(Node):
     def build_sequence(self):
         actions = [
             "walk_forward",
+            "slow_careful_walk",
             "run_forward",
             "walk_backward",
             "sidestep_left",
@@ -59,6 +60,8 @@ class MujocoG1GaitShowcase(Node):
             "turn_left",
             "turn_right",
             "stop",
+            "fall_detected",
+            "recovery_blocked",
         ]
         if self.include_estop and not self.loop:
             actions.append("estop")
@@ -82,11 +85,13 @@ class MujocoG1GaitShowcase(Node):
             self.call_estop()
 
     def publish_cmd_vel(self, action):
-        if action == "estop":
+        if action in ("estop", "fall_detected"):
             return
         msg = Twist()
         if action == "walk_forward":
             msg.linear.x = 0.22
+        elif action == "slow_careful_walk":
+            msg.linear.x = 0.10
         elif action == "run_forward":
             msg.linear.x = 0.45
         elif action == "walk_backward":
@@ -99,6 +104,8 @@ class MujocoG1GaitShowcase(Node):
             msg.angular.z = 0.55
         elif action == "turn_right":
             msg.angular.z = -0.55
+        elif action == "recovery_blocked":
+            msg.linear.x = 0.22
         self.cmd_vel_publisher.publish(msg)
 
     def call_estop(self):

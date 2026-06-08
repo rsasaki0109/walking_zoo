@@ -394,9 +394,64 @@ class MujocoUnitreeG1Scene:
         self._set_joint(qpos, "left_elbow_joint", elbow_base + elbow_amp * max(0.0, -sin_phase))
         self._set_joint(qpos, "right_elbow_joint", elbow_base + elbow_amp * max(0.0, sin_phase))
 
+    def _fallen_pose(self, qpos):
+        qpos[2] = 0.34
+        qpos[3:7] = self._body_quat(0.10, 1.05, 0.0)
+        for side in ("left", "right"):
+            self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.70)
+            self._set_joint(qpos, f"{side}_knee_joint", 1.20)
+            self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.40)
+        self._set_joint(qpos, "left_shoulder_pitch_joint", -0.60)
+        self._set_joint(qpos, "right_shoulder_pitch_joint", -0.60)
+        self._set_joint(qpos, "left_elbow_joint", 0.80)
+        self._set_joint(qpos, "right_elbow_joint", 0.80)
+
+    def _recovery_blocked_pose(self, qpos):
+        qpos[2] = 0.40
+        qpos[3:7] = self._body_quat(0.06, 0.75, 0.0)
+        self._set_joint(qpos, "left_hip_pitch_joint", -0.45)
+        self._set_joint(qpos, "right_hip_pitch_joint", -0.55)
+        self._set_joint(qpos, "left_knee_joint", 1.05)
+        self._set_joint(qpos, "right_knee_joint", 0.72)
+        self._set_joint(qpos, "left_ankle_pitch_joint", -0.28)
+        self._set_joint(qpos, "right_ankle_pitch_joint", -0.18)
+        self._set_joint(qpos, "left_shoulder_pitch_joint", -0.20)
+        self._set_joint(qpos, "right_shoulder_pitch_joint", -0.85)
+        self._set_joint(qpos, "left_elbow_joint", 0.55)
+        self._set_joint(qpos, "right_elbow_joint", 0.95)
+
+    def _careful_forward_gait(self, qpos, sin_phase, cos_phase):
+        for side, value in (("left", sin_phase), ("right", -sin_phase)):
+            swing = max(0.0, value)
+            self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.20 * value)
+            self._set_joint(qpos, f"{side}_knee_joint", 0.14 + 0.32 * swing)
+            self._set_joint(
+                qpos,
+                f"{side}_ankle_pitch_joint",
+                -0.10 - 0.08 * swing + 0.06 * value,
+            )
+        self._set_joint(qpos, "left_hip_roll_joint", 0.03 * cos_phase)
+        self._set_joint(qpos, "right_hip_roll_joint", -0.03 * cos_phase)
+        self._set_joint(qpos, "waist_pitch_joint", 0.04)
+        self._set_joint(qpos, "waist_yaw_joint", 0.03 * sin_phase)
+        self._set_joint(qpos, "left_shoulder_pitch_joint", 0.14 - 0.14 * sin_phase)
+        self._set_joint(qpos, "right_shoulder_pitch_joint", 0.14 + 0.14 * sin_phase)
+        self._set_joint(qpos, "left_shoulder_roll_joint", 0.14)
+        self._set_joint(qpos, "right_shoulder_roll_joint", -0.14)
+        self._set_joint(qpos, "left_elbow_joint", 0.62)
+        self._set_joint(qpos, "right_elbow_joint", 0.62)
+
     def _g1_gait_pose(self, frame_index, gait):
         qpos = self.stand_qpos.copy()
-        period = 15.0 if gait == "run" else (30.0 if gait == "walk" else 24.0)
+        period = (
+            15.0
+            if gait == "run"
+            else (
+                42.0
+                if gait == "slow_careful_walk"
+                else (30.0 if gait == "walk" else 24.0)
+            )
+        )
         phase = 2.0 * math.pi * (frame_index / period)
         sin_phase = math.sin(phase)
         cos_phase = math.cos(phase)
@@ -413,6 +468,11 @@ class MujocoUnitreeG1Scene:
             qpos[2] = 0.81 + 0.012 * max(0.0, cos_phase)
             qpos[3:7] = self._yaw_quat(0.0)
             self._set_forward_gait(qpos, sin_phase, cos_phase, 0.30, 0.18, 0.38, -0.13, 0.12, 0.36)
+        elif gait == "slow_careful_walk":
+            qpos[0] = 0.012 * frame_index
+            qpos[2] = 0.808 + 0.008 * max(0.0, cos_phase)
+            qpos[3:7] = self._body_quat(0.0, 0.05, 0.0)
+            self._careful_forward_gait(qpos, sin_phase, cos_phase)
         elif gait == "run":
             qpos[0] = 0.054 * frame_index
             qpos[2] = 0.814 + 0.018 * (0.5 + 0.5 * math.cos(2.0 * phase))
@@ -470,6 +530,10 @@ class MujocoUnitreeG1Scene:
             self._set_joint(qpos, "right_shoulder_pitch_joint", 0.30 * sin_phase)
             self._set_joint(qpos, "left_elbow_joint", 0.52)
             self._set_joint(qpos, "right_elbow_joint", 0.52)
+        elif gait == "fallen":
+            self._fallen_pose(qpos)
+        elif gait == "recovery_blocked":
+            self._recovery_blocked_pose(qpos)
         elif gait in ("body_crouch", "body_pitch", "body_roll"):
             # Static MODE_BODY_POSE holds: feet stay planted while the torso height
             # or orientation changes, with a faint sway so the pose still reads as
@@ -561,11 +625,14 @@ def mujoco_unitree_g1_gait_gallery(scene=None):
         scene = MujocoUnitreeG1Scene()
     gait_specs = [
         ("walk", "Forward walk", "/cmd_vel x=0.22", GREEN),
+        ("slow_careful_walk", "Slow walk", "semantic/slow_careful_walk", GREEN),
         ("run", "Forward run", "semantic/run", YELLOW),
         ("walk_backward", "Reverse walk", "/cmd_vel x=-0.18", GREEN),
         ("sidestep", "Sidestep", "/cmd_vel y=0.22", BLUE),
         ("turn", "Turn-in-place", "/cmd_vel z=0.55", PURPLE),
         ("stand", "Stand / stop", "zero cmd", MUTED),
+        ("fallen", "Fall detected", "semantic/fall_detected", RED),
+        ("recovery_blocked", "Recovery blocked", "cmd blocked", YELLOW),
     ]
     try:
         _render_pose_gallery(scene, gait_specs, "mujoco_unitree_g1_gait_gallery.gif")

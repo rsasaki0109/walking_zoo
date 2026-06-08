@@ -14,7 +14,7 @@ ASSETS = ROOT / "docs" / "assets" / "readme"
 
 # (filename, expected (width, height), min frames, min bytes)
 GALLERIES = [
-    ("mujoco_unitree_g1_gait_gallery.gif", (960, 810), 24, 200_000),
+    ("mujoco_unitree_g1_gait_gallery.gif", (960, 1350), 24, 200_000),
     ("mujoco_unitree_g1_body_pose_gallery.gif", (960, 540), 24, 200_000),
 ]
 

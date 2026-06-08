@@ -21,6 +21,15 @@ SemanticMapping SemanticActionMapper::map(
     mapping.status_text = "mapped move_forward to conservative velocity";
     return mapping;
   }
+  if (
+    action.action == "slow_careful_walk" || action.action == "slow_walk" ||
+    action.action == "careful_walk" || action.action == "slow_walk_forward")
+  {
+    mapping.recognized = true;
+    mapping.velocity.twist.linear.x = 0.10;
+    mapping.status_text = "mapped slow_careful_walk to cautious forward velocity";
+    return mapping;
+  }
   if (action.action == "run_forward") {
     mapping.recognized = true;
     mapping.velocity.twist.linear.x = 0.35;

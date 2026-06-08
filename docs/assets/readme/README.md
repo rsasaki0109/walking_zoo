@@ -20,7 +20,7 @@ Simulator-rendered robot GIFs:
 - `mujoco_unitree_g1_showcase.gif`: Unitree G1 one-command gait showcase for the README hero.
 - `mujoco_unitree_g1_showcase_preview.png`: Still preview image for quick asset inspection.
 - `mujoco_unitree_g1_runtime.gif`: Unitree G1 rendered with MuJoCo.
-- `mujoco_unitree_g1_gait_gallery.gif`: Unitree G1 forward walk, run, sidestep, and turn-in-place.
+- `mujoco_unitree_g1_gait_gallery.gif`: Unitree G1 walk, slow walk, run, sidestep, turn, stop, fall detected, and recovery blocked.
 - `pybullet_laikago_runtime.gif`: Laikago velocity runtime path.
 - `pybullet_laikago_estop.gif`: Laikago e-stop behavior.
 

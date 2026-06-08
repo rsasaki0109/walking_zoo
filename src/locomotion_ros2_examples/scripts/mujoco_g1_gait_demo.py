@@ -183,9 +183,68 @@ class UnitreeG1Renderer:
         self._set_joint(qpos, "left_elbow_joint", 0.55)
         self._set_joint(qpos, "right_elbow_joint", 0.55)
 
+    def _careful_forward_gait(self, qpos, sin_phase, cos_phase):
+        # Short strides with arms held forward so the motion reads as cautious
+        # stepping rather than a slowed-down normal walk.
+        for side, value in (("left", sin_phase), ("right", -sin_phase)):
+            swing = max(0.0, value)
+            self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.20 * value)
+            self._set_joint(qpos, f"{side}_knee_joint", 0.14 + 0.32 * swing)
+            self._set_joint(
+                qpos,
+                f"{side}_ankle_pitch_joint",
+                -0.10 - 0.08 * swing + 0.06 * value,
+            )
+        self._set_joint(qpos, "left_hip_roll_joint", 0.03 * cos_phase)
+        self._set_joint(qpos, "right_hip_roll_joint", -0.03 * cos_phase)
+        self._set_joint(qpos, "waist_pitch_joint", 0.04)
+        self._set_joint(qpos, "waist_yaw_joint", 0.03 * sin_phase)
+        self._set_joint(qpos, "left_shoulder_pitch_joint", 0.14 - 0.14 * sin_phase)
+        self._set_joint(qpos, "right_shoulder_pitch_joint", 0.14 + 0.14 * sin_phase)
+        self._set_joint(qpos, "left_shoulder_roll_joint", 0.14)
+        self._set_joint(qpos, "right_shoulder_roll_joint", -0.14)
+        self._set_joint(qpos, "left_elbow_joint", 0.62)
+        self._set_joint(qpos, "right_elbow_joint", 0.62)
+
+    def _fallen_pose(self, qpos):
+        qpos[2] = 0.34
+        qpos[3:7] = self._body_quat(0.10, 1.05, 0.0)
+        for side in ("left", "right"):
+            self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.70)
+            self._set_joint(qpos, f"{side}_knee_joint", 1.20)
+            self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.40)
+        self._set_joint(qpos, "left_shoulder_pitch_joint", -0.60)
+        self._set_joint(qpos, "right_shoulder_pitch_joint", -0.60)
+        self._set_joint(qpos, "left_elbow_joint", 0.80)
+        self._set_joint(qpos, "right_elbow_joint", 0.80)
+
+    def _recovery_blocked_pose(self, qpos):
+        # Frozen mid-recovery: a walk command arrived but the safety gate keeps
+        # the robot on the ground.
+        qpos[2] = 0.40
+        qpos[3:7] = self._body_quat(0.06, 0.75, 0.0)
+        self._set_joint(qpos, "left_hip_pitch_joint", -0.45)
+        self._set_joint(qpos, "right_hip_pitch_joint", -0.55)
+        self._set_joint(qpos, "left_knee_joint", 1.05)
+        self._set_joint(qpos, "right_knee_joint", 0.72)
+        self._set_joint(qpos, "left_ankle_pitch_joint", -0.28)
+        self._set_joint(qpos, "right_ankle_pitch_joint", -0.18)
+        self._set_joint(qpos, "left_shoulder_pitch_joint", -0.20)
+        self._set_joint(qpos, "right_shoulder_pitch_joint", -0.85)
+        self._set_joint(qpos, "left_elbow_joint", 0.55)
+        self._set_joint(qpos, "right_elbow_joint", 0.95)
+
     def pose(self, frame_index, gait):
         qpos = self.stand_qpos.copy()
-        period = 15.0 if gait == "run" else (30.0 if gait == "walk" else 24.0)
+        period = (
+            15.0
+            if gait == "run"
+            else (
+                42.0
+                if gait == "slow_careful_walk"
+                else (30.0 if gait == "walk" else 24.0)
+            )
+        )
         phase = 2.0 * math.pi * (frame_index / period)
         sin_phase = math.sin(phase)
         cos_phase = math.cos(phase)
@@ -201,25 +260,22 @@ class UnitreeG1Renderer:
             self._set_joint(qpos, "right_ankle_pitch_joint", -0.18)
             return qpos
         if gait == "fallen":
-            # Placeholder fallen state: low pelvis with a large forward pitch so
-            # the fall-detected runtime state is visually obvious. Recovery stays
-            # blocked by the safety gate until cleared.
-            qpos[2] = 0.34
-            qpos[3:7] = self._body_quat(0.10, 1.05, 0.0)
-            for side in ("left", "right"):
-                self._set_joint(qpos, f"{side}_hip_pitch_joint", -0.70)
-                self._set_joint(qpos, f"{side}_knee_joint", 1.20)
-                self._set_joint(qpos, f"{side}_ankle_pitch_joint", -0.40)
-            self._set_joint(qpos, "left_shoulder_pitch_joint", -0.60)
-            self._set_joint(qpos, "right_shoulder_pitch_joint", -0.60)
-            self._set_joint(qpos, "left_elbow_joint", 0.80)
-            self._set_joint(qpos, "right_elbow_joint", 0.80)
+            self._fallen_pose(qpos)
+            return qpos
+        if gait == "recovery_blocked":
+            self._recovery_blocked_pose(qpos)
             return qpos
         if gait == "walk":
             qpos[0] = 0.022 * frame_index
             qpos[2] = 0.81 + 0.012 * max(0.0, cos_phase)
             qpos[3:7] = self._yaw_quat(0.0)
             self._forward_gait(qpos, sin_phase, cos_phase, fast=False)
+            return qpos
+        if gait == "slow_careful_walk":
+            qpos[0] = 0.012 * frame_index
+            qpos[2] = 0.808 + 0.008 * max(0.0, cos_phase)
+            qpos[3:7] = self._body_quat(0.0, 0.05, 0.0)
+            self._careful_forward_gait(qpos, sin_phase, cos_phase)
             return qpos
         if gait == "run":
             qpos[0] = 0.054 * frame_index
@@ -320,7 +376,14 @@ class UnitreeG1Renderer:
     ):
         draw = self.ImageDraw.Draw(img)
         panel = (18, 18, 425, 118)
-        accent = (245, 94, 94) if gait == "estopped" else (176, 132, 255)
+        if gait == "estopped":
+            accent = (245, 94, 94)
+        elif gait == "fallen":
+            accent = (245, 94, 94)
+        elif gait == "recovery_blocked":
+            accent = (245, 150, 70)
+        else:
+            accent = (176, 132, 255)
         draw.rounded_rectangle(panel, radius=16, fill=(8, 14, 22), outline=accent, width=2)
         draw.text((38, 33), "locomotion_ros2 MuJoCo G1 live demo", font=self.font(23, True), fill=(232, 238, 245))
         draw.text((40, 69), f"gait={gait}  source={source}", font=self.font(15), fill=(144, 160, 176))
@@ -328,6 +391,12 @@ class UnitreeG1Renderer:
 
         state_panel = (642, 112, 902, 342)
         draw.rounded_rectangle(state_panel, radius=16, fill=(26, 40, 56), outline=accent, width=2)
+        if gait == "fallen":
+            runtime_state = "FALL_DETECTED"
+            safety_state = "FAULT"
+        elif gait == "recovery_blocked":
+            runtime_state = "FAULT"
+            safety_state = "BLOCKED"
         rows = [
             ("runtime", runtime_state or "unknown"),
             ("adapter", adapter_state or "unknown"),
@@ -438,8 +507,10 @@ class MujocoG1GaitDemo(Node):
             self.cmd_gait = "walk_backward"
         elif abs(linear_x) > 0.35:
             self.cmd_gait = "run"
-        else:
+        elif linear_x > 0.12:
             self.cmd_gait = "walk"
+        else:
+            self.cmd_gait = "slow_careful_walk"
 
     def on_semantic(self, msg):
         action = msg.action.lower().replace("-", "_").strip()
@@ -448,6 +519,10 @@ class MujocoG1GaitDemo(Node):
             "walk_forward": "walk",
             "move_forward": "walk",
             "forward": "walk",
+            "slow_careful_walk": "slow_careful_walk",
+            "slow_walk": "slow_careful_walk",
+            "careful_walk": "slow_careful_walk",
+            "slow_walk_forward": "slow_careful_walk",
             "run": "run",
             "run_forward": "run",
             "walk_backward": "walk_backward",
@@ -483,6 +558,9 @@ class MujocoG1GaitDemo(Node):
             "fall": "fallen",
             "fallen": "fallen",
             "fall_detected": "fallen",
+            "recovery_blocked": "recovery_blocked",
+            "attempt_recovery": "recovery_blocked",
+            "recover": "recovery_blocked",
         }
         if action in mapping:
             self.semantic_gait = mapping[action]
@@ -531,7 +609,7 @@ class MujocoG1GaitDemo(Node):
 
     def on_timer(self):
         gait = self.current_gait()
-        if gait not in ("stand", "estopped", "fallen"):
+        if gait not in ("stand", "estopped", "fallen", "recovery_blocked"):
             self.frame_index += 1
         img = self.renderer.render(self.frame_index, gait)
         img = self.renderer.draw_overlay(

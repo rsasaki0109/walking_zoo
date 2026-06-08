@@ -51,6 +51,11 @@ shows the real runtime path:
 /locomotion_ros2/cmd_vel          twist x=0.22 y=0.00 z=0.00
 /locomotion_ros2/state            walking state -> WALKING
 
+/locomotion_ros2/semantic_action  semantic -> slow_careful_walk
+/cmd_vel                      twist x=0.10 y=0.00 z=0.00
+/locomotion_ros2/cmd_vel          twist x=0.10 y=0.00 z=0.00
+/locomotion_ros2/state            walking state -> WALKING
+
 /locomotion_ros2/semantic_action  semantic -> walk_backward
 /cmd_vel                      twist x=-0.18 y=0.00 z=0.00
 /locomotion_ros2/cmd_vel          twist x=-0.18 y=0.00 z=0.00
@@ -60,6 +65,13 @@ shows the real runtime path:
 /cmd_vel                      twist x=0.00 y=0.00 z=0.55
 /locomotion_ros2/cmd_vel          twist x=0.00 y=0.00 z=0.55
 /locomotion_ros2/state            walking state -> TURNING
+
+/locomotion_ros2/semantic_action  semantic -> fall_detected
+/locomotion_ros2/state            walking state -> FALL_DETECTED
+
+/locomotion_ros2/semantic_action  semantic -> recovery_blocked
+/cmd_vel                      twist x=0.22 y=0.00 z=0.00
+/locomotion_ros2/state            walking state -> FAULT (motion blocked)
 
 /locomotion_ros2/semantic_action  semantic -> estop
 /locomotion_ros2/state            walking state -> ESTOPPED
@@ -77,6 +89,7 @@ while `/cmd_vel` and the visual gait carry the direction detail.
 | Semantic action | `/cmd_vel` | `/locomotion_ros2/cmd_vel` (bridge) | Visual gait | Runtime state |
 | --- | --- | --- | --- | --- |
 | `walk_forward` | x=0.22 | x=0.22 | forward walk | WALKING |
+| `slow_careful_walk` | x=0.10 | x=0.10 | slow careful walk | WALKING |
 | `run_forward` | x=0.45 | x=0.45 | forward run | WALKING |
 | `walk_backward` | x=-0.18 | x=-0.18 | reverse walk | WALKING |
 | `sidestep_left` | y=0.22 | y=0.22 | sidestep left | WALKING |
@@ -84,6 +97,8 @@ while `/cmd_vel` and the visual gait carry the direction detail.
 | `turn_left` | z=0.55 | z=0.55 | turn-in-place left | TURNING |
 | `turn_right` | z=-0.55 | z=-0.55 | turn-in-place right | TURNING |
 | `stop` | zero | zero | stand | STANDING |
+| `fall_detected` | (none) | (none) | fallen pose | FALL_DETECTED |
+| `recovery_blocked` | x=0.22 | (blocked) | frozen recovery | FAULT / BLOCKED |
 | `estop` | (blocked) | (blocked) | estopped pose | ESTOPPED |
 
 Each row is reproducible: the showcase publishes the semantic action and the

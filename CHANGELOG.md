@@ -579,6 +579,15 @@
   roughly doubled) until even a step lands on ground that keeps falling away (~8°). Tested
   by `test_terrain_critical_slope_is_torque_limited_and_stepping_extends_it` and
   `test_slope_biases_the_capturability_frontier_uphill`; suite at 52 gait_lab tests.
+- **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
+  `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
+  `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is
+  blocked by the safety gate. Both appear in the showcase sequence, gait gallery,
+  and demo-evidence traceability table.
+- **Added `slow_careful_walk` to the MuJoCo Unitree G1 demo surface.** Short-stride
+  cautious forward stepping with arms held forward, semantic-action and `/cmd_vel`
+  mapping (`x=0.10`), showcase sequence slot, VLA mapper aliases, gait gallery tile,
+  and demo-evidence traceability row.
 - **Refined the MuJoCo Unitree G1 `run_forward` gait for a clearer walk/run split.**
   Faster cadence (period 15 vs 30), higher forward speed, stronger knee lift and
   toe-off, a more natural forward lean with a subtler vertical bounce, and reduced

@@ -20,6 +20,7 @@ VLA systems should not directly command joints, vendor SDKs, or robot motion.
 | Action (aliases) | Mapped command |
 | --- | --- |
 | `move_forward` (`walk_forward`) | linear.x = 0.20 |
+| `slow_careful_walk` (`slow_walk`, `careful_walk`) | linear.x = 0.10 |
 | `run_forward` | linear.x = 0.35 |
 | `move_backward` (`walk_backward`) | linear.x = -0.15 |
 | `sidestep_left` | linear.y = 0.20 |
