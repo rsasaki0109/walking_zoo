@@ -371,6 +371,115 @@ class OptimizedCapturePoint(CapturePointWalk):
         super().__init__(OPTIMIZED_CAPTURE_POINT_PARAMS)
 
 
+class CaptureStepRecovery(GaitController):
+    """Push recovery that works: hold a stand, and take a capture STEP when shoved.
+
+    This is the controller form of the lab's one genuinely-working push-recovery
+    move (``capture_step.py``), and the *actionable conclusion* of the contact-QP
+    WBC (``wbc_qp.py``). The QP holds a quiet stand with real friction-cone ground
+    forces but goes **infeasible** the instant the capture point leaves the support
+    polygon — it certifies "no in-place force recovers this; you must STEP." This is
+    the controller that steps.
+
+    It holds the standing keyframe until the **capture point**
+    ``xi = com + com_vel / omega`` (Pratt's capturability — the point you must step
+    to to come to rest) leaves the support, then swings the foot on the falling side
+    to the (reach-clamped) capture point via leg IK while the stance foot holds, and
+    settles over the new support. Repeated triggers give N-step capturability. It is
+    realised with the *same position-controlled IK* the footstep walkers use — the
+    win is the decision to step, not a new actuator — so it drops in behind the
+    ``GaitController`` interface and runs through the SIL runtime where
+    ``capture_step.run_capture_step`` was only a standalone script.
+
+    Honest scope: it does **not** walk forward (it ignores ``forward_speed``); it is
+    a *recovery* controller, the reactive-footstep substrate a real steerable/force-
+    aware gait would build on. Through the runtime + push pipeline it is the one gait
+    that recovers a shove the in-place stands and the open-loop walkers fall to —
+    while a strong-enough shove still topples it (capturability is finite: past
+    ``v* = d*omega`` set by the support margin, even one step cannot catch the fall).
+    """
+
+    name = "capture-step"
+    trigger = 0.18        # capture-point excursion (m) past which a step fires
+    step_time = 0.34      # swing duration (s)
+    max_reach = 0.45      # foothold clamp from the stance foot (m)
+    step_lift = 0.05      # swing-foot apex above ground (m)
+    refractory_time = 0.30  # settle time before another step may fire (s)
+    ankle_kp = 0.20
+    ankle_kd = 0.05
+
+    def reset(self, model: G1Model) -> None:
+        super().reset(model)
+        self.ground = float(model.foot_pos("left")[2])
+        self.planted = {f: model.foot_pos(f).copy() for f in ("left", "right")}
+        self.stepping = False
+        self.has_stepped = False
+        self.t_step0 = 0.0
+        self.refractory = 0.0
+        self.swing = self.stance = None
+        self.swing_from = self.swing_to = None
+
+    def update(self, obs: Observation, cmd: Command) -> np.ndarray:
+        model = self.model
+        com = obs.com_xy
+        # observe()'s com_vel_xy reads the unpopulated subtree_linvel and is silently
+        # zero on this model; com_velocity_xy() computes the real J_com @ qvel.
+        com_vel = model.com_velocity_xy()
+        omega = np.sqrt(_GRAVITY / max(obs.com_z, 0.3))
+        xi = com + com_vel / omega                 # capture point
+
+        ctrl = self.stand.copy()
+        roll, pitch, _ = obs.torso_rpy
+        roll_rate, pitch_rate = obs.torso_ang_vel[0], obs.torso_ang_vel[1]
+        ankle_pitch_fix = self.ankle_kp * pitch + self.ankle_kd * pitch_rate
+        ankle_roll_fix = self.ankle_kp * roll + self.ankle_kd * roll_rate
+
+        if (not self.stepping and obs.t >= self.refractory
+                and np.linalg.norm(xi - com) > self.trigger):
+            # Trigger a (re)step: swing the falling-side foot toward the capture
+            # point. Keep re-triggering until xi is back inside the support.
+            fall_dir = xi - com
+            self.swing = "left" if fall_dir[1] >= 0 else "right"
+            self.stance = "right" if self.swing == "left" else "left"
+            self.swing_from = self.planted[self.swing].copy()
+            stance_xy = self.planted[self.stance][:2]
+            tgt = xi.copy()
+            v = tgt - stance_xy
+            r = float(np.linalg.norm(v))
+            if r > self.max_reach:
+                tgt = stance_xy + v / r * self.max_reach
+            self.swing_to = np.array([tgt[0], tgt[1], self.ground])
+            self.stepping = True
+            self.t_step0 = obs.t
+
+        if self.stepping:
+            ph = float(np.clip((obs.t - self.t_step0) / self.step_time, 0.0, 1.0))
+            sx = (1.0 - ph) * self.swing_from[:2] + ph * self.swing_to[:2]
+            sz = self.ground + self.step_lift * np.sin(np.pi * ph)
+            feet = {self.stance: self.planted[self.stance],
+                    self.swing: np.array([sx[0], sx[1], sz])}
+            if ph >= 1.0:
+                self.planted[self.swing] = self.swing_to.copy()  # commit foothold
+                self.stepping = False
+                self.has_stepped = True
+                self.refractory = obs.t + self.refractory_time
+        else:
+            feet = {f: self.planted[f] for f in ("left", "right")}
+
+        # Before the first step, hold the (stable) nominal stand. Once stepping has
+        # begun, hold the planted/swinging feet via IK so the pose stays continuous
+        # with the new footholds instead of snapping back to the stand.
+        if self.stepping or self.has_stepped:
+            for foot, target in feet.items():
+                angles = model.solve_leg_ik(foot, target)
+                for joint, value in zip(LEG_JOINTS[foot], angles):
+                    ctrl[model.actuator(joint)] = value
+        for side in ("left", "right"):
+            ctrl[model.actuator(f"{side}_ankle_pitch_joint")] += ankle_pitch_fix
+            ctrl[model.actuator(f"{side}_ankle_roll_joint")] += ankle_roll_fix
+        return ctrl
+
+
 class DCMWalk(GaitController):
     """Continuous **DCM** (divergent-component-of-motion) step adjustment — the
     modern textbook reactive walker (Englsberger et al. 2015; Khadiv et al. 2016),
@@ -1129,6 +1238,7 @@ def CONTROLLERS() -> list[GaitController]:
         BalancedCPG(),
         CapturePointWalk(),
         OptimizedCapturePoint(),
+        CaptureStepRecovery(),
         DCMWalk(),
         ZMPPreviewWalk(),
         LearnedFeedbackWalk(),

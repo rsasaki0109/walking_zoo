@@ -7,10 +7,10 @@ locomotion_ros2 is two halves that meet in the middle:
 
 - **The locomotion** — [`gait_lab`](experiments/gait_lab) benchmarks walking
   controllers honestly on real MuJoCo physics, where *bad gaits actually fall
-  over*. Nine controllers (open-loop CPG, capture-point, DCM step adjustment,
-  ZMP preview, a PPO residual, a contact-QP whole-body controller, …) behind one
-  interface, scored on the same Unitree G1 with the same metrics — negatives
-  reported.
+  over*. Ten controllers (open-loop CPG, capture-point, a reactive capture-step
+  push recovery, DCM step adjustment, ZMP preview, a PPO residual, a contact-QP
+  whole-body controller, …) behind one interface, scored on the same Unitree G1
+  with the same metrics — negatives reported.
 - **The runtime** — a ROS2-native layer that takes a chosen gait and admits,
   limits, dispatches, and observes it safely across robot-specific SDKs. Think
   **Nav2 for walking robots**: Nav2 decides *where* a robot should go;
@@ -133,38 +133,56 @@ controller         forward   survival    minH  status
 stand-hold         -0.000m     5.00s    0.79m  [stand]
 open-loop-cpg      -0.009m     1.30s    0.08m  [FELL]
 balanced-cpg       +0.469m     3.30s    0.08m  [FELL]
-capture-point      +1.036m     1.30s    0.09m  [FELL]
-dcm-walk           +1.093m     1.40s    0.08m  [FELL]
-zmp-preview        +0.690m     2.70s    0.08m  [FELL]
-rl-residual        +0.166m     5.00s    0.77m  [ok]
+capture-point      +1.036m     1.90s    0.09m  [FELL]
+capture-step       +0.000m     5.00s    0.79m  [stand]
+dcm-walk           +1.094m     1.70s    0.08m  [FELL]
+zmp-preview        +0.690m     3.40s    0.08m  [FELL]
+rl-residual        +0.156m     5.00s    0.77m  [ok]
 ```
 
 The footstep walkers walk farthest then topple in ~1–3 s; only `rl-residual`
 survives the full horizon *and* walks — the same verdict as the bare
 `gait_lab` harness, now produced through `/cmd_vel` → runtime → safety →
-adapter → MuJoCo G1. The run writes `compare.json` and `compare.md` evidence.
+adapter → MuJoCo G1. (`capture-step` is a push-*recovery* controller — it holds a
+stand rather than walking, so it stands here; its value shows up under a shove,
+below.) The run writes `compare.json` and `compare.md` evidence.
 
 The same tool benchmarks **push recovery** through the runtime — a mid-walk
 base-velocity shove injected through the SIL sim's `gait_lab_sil/push` interface:
 
 ```bash
-python3 tools/check_gait_lab_sil_compare.py --controllers stand-hold rl-residual \
-    --push-speed 0.2 --push-dir forward    # gentle shove
+python3 tools/check_gait_lab_sil_compare.py \
+    --controllers stand-hold capture-step dcm-walk rl-residual \
+    --push-speed 0.4 --push-dir forward
 ```
 
 ```
-# 0.2 m/s forward shove @ 1.0s        # 0.4 m/s forward shove @ 1.0s
-stand-hold   5.00s  [recovered]       stand-hold   3.30s  [FELL]
-rl-residual  3.00s  [FELL]            rl-residual  2.70s  [FELL]
+# 0.4 m/s forward shove @ 1.0s
+controller     forward   survival    minH  status
+stand-hold     -0.898m     3.29s    0.04m  [FELL]
+capture-step   +0.005m     5.00s    0.79m  [recovered]
+dcm-walk       +1.384m     2.10s    0.07m  [FELL]
+rl-residual    -0.487m     2.70s    0.08m  [FELL]
 ```
 
-This reproduces the lab's push finding on the product path: regulating a stand
-rides out a *gentle* shove, but a stronger one topples it — the wall under a
-shove is the support polygon, and the one move that recovers it is a *step*. No
-position-controlled gait wired here steps reactively, which is exactly the
-force-aware frontier `gait_lab` maps (a contact-QP whole-body controller that
-regulates a moving CoM/ZMP while stepping). The `gait_lab_sil/push` interface is
-the reusable substrate that frontier work will benchmark against.
+Under that shove `capture-step` is the **only** controller left standing
+(`minH 0.79 m` — upright the full horizon); the held stand, the reactive footstep
+walker, and the learned residual all topple. The recovery is the **decision to
+step**: `capture-step` holds the standing keyframe until the capture point
+`ξ = com + com_vel/ω` leaves the support polygon, then swings the falling-side
+foot to it via the same position IK the footstep walkers use — N-step
+capturability, realised through the runtime.
+
+This is the actionable conclusion of the lab's force-aware frontier. The
+contact-QP whole-body controller (`experiments/gait_lab/wbc_qp.py`) holds a quiet
+stand with real friction-cone ground forces but goes **infeasible** the instant
+the capture point leaves the support — it *certifies* "no in-place force recovers
+this; you must step." `capture-step` is the controller that steps, promoted from a
+standalone script to a registered `GaitController` so it runs behind the interface
+and through the runtime. A strong-enough shove still topples it (capturability is
+finite), and it does not yet *walk* while recovering — closing that gap is the
+remaining force-aware work (a WBC that regulates a moving CoM/ZMP while stepping),
+which the reusable `gait_lab_sil/push` interface benchmarks against.
 
 ## Architecture
 

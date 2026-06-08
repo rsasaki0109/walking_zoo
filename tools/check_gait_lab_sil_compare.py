@@ -50,6 +50,7 @@ DEFAULT_CONTROLLERS = [
     "open-loop-cpg",
     "balanced-cpg",
     "capture-point",
+    "capture-step",
     "dcm-walk",
     "zmp-preview",
     "rl-residual",

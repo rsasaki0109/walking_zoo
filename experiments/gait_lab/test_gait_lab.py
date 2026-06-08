@@ -20,6 +20,7 @@ from gait_lab import (  # noqa: E402
     SteerableCPG,
     CapturePointWalk,
     OptimizedCapturePoint,
+    CaptureStepRecovery,
     DCMWalk,
     ZMPPreviewWalk,
     LearnedFeedbackWalk,
@@ -779,6 +780,54 @@ def test_capture_step_recovers_a_forward_push(model):
     # Deterministic.
     again = run_capture_step(model, speed, theta, horizon, fall_h=0.5)
     assert step == pytest.approx(again)
+
+
+def test_capture_step_controller_promotes_the_standalone_faithfully(model):
+    # The capture step, promoted from a standalone script to a first-class
+    # GaitController so it runs behind the interface (and thus through the SIL
+    # runtime). It is the actionable conclusion of the contact-QP WBC's "you must
+    # step" certificate. This pins two things: it is registered in the zoo, and the
+    # promotion is *behaviour-preserving* -- the controller reproduces the validated
+    # standalone run_capture_step exactly, and recovers a shove the static stand
+    # topples to (here via the capture-aware ankle feedback; the step itself fires
+    # for larger excursions, below).
+    import numpy as np
+    from capture_step import run_capture_step, run_stand
+
+    assert "capture-step" in [c.name for c in CONTROLLERS()]   # registered
+
+    def rollout_with_push(controller, speed, theta, horizon=4.0, fall_h=0.5):
+        model.reset()
+        controller.reset(model)
+        d = model.data
+        d.qvel[0] += speed * np.cos(theta)        # shove at t=0
+        d.qvel[1] += speed * np.sin(theta)
+        for i in range(int(round(horizon / model.timestep))):
+            obs = model.observe(i * model.timestep)
+            d.ctrl[:] = controller.update(obs, cmd=Command())
+            model.step()
+            if float(d.qpos[2]) < fall_h:
+                return i * model.timestep
+        return horizon
+
+    horizon = 4.0
+    # (1) Behaviour-preserving: the GaitController reproduces the standalone exactly.
+    for speed, theta in ((0.4, 0.0), (0.6, 0.0), (0.6, np.pi / 4)):
+        ctrl_surv = rollout_with_push(CaptureStepRecovery(), speed, theta, horizon)
+        standalone = run_capture_step(model, speed, theta, horizon, fall_h=0.5)
+        assert ctrl_surv == pytest.approx(standalone)
+
+    # (2) Recovers a 0.4 m/s forward shove the static stand topples to.
+    capture = rollout_with_push(CaptureStepRecovery(), 0.4, 0.0, horizon)
+    stand = run_stand(model, 0.4, 0.0, horizon, fall_h=0.5)
+    assert stand < horizon - 0.5          # the static stand topples...
+    assert capture > stand + 1.0          # ...the capture-step controller does not
+
+    # (3) The step machinery actually fires under a large enough excursion (a hard
+    # shove drives the capture point past the support, exactly the QP's "must step").
+    hard = CaptureStepRecovery()
+    rollout_with_push(hard, 0.8, 0.0, horizon)
+    assert hard.has_stepped
 
 
 def test_push_is_deterministic_and_disturbing(model):
