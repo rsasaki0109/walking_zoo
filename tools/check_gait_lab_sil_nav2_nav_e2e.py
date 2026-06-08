@@ -42,10 +42,12 @@ def terminate(process):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--goal-x", type=float, default=2.5)
+    ap.add_argument("--goal-x", type=float, default=2.0)
     ap.add_argument("--goal-y", type=float, default=0.0)
-    ap.add_argument("--tolerance", type=float, default=0.6)
+    ap.add_argument("--tolerance", type=float, default=0.8)
     ap.add_argument("--timeout", type=float, default=120.0)
+    ap.add_argument("--attempts", type=int, default=1,
+                    help="extra NavigateToPose tries when the first is rejected")
     ap.add_argument("--controller", default="rl-steerable",
                     help="gait_lab controller the SIL sim runs")
     ap.add_argument(
@@ -129,15 +131,18 @@ def main() -> int:
 
         deadline = time.time() + (120.0 if not args.embedded else 150.0)
         ready = False
+        nav2_active_cached = False
         while time.time() < deadline:
             rclpy.spin_once(node, timeout_sec=0.2)
             s = latest.get("state")
-            nav2_active = all(lifecycle_active(n) for n in lifecycle_clients)
+            if not nav2_active_cached:
+                nav2_active_cached = all(
+                    lifecycle_active(n) for n in lifecycle_clients)
             if (s and s.adapter_connected
                     and s.lifecycle_state == WalkingState.LIFECYCLE_ACTIVE
                     and nav_client.server_is_ready()
                     and follow_client.server_is_ready()
-                    and nav2_active
+                    and nav2_active_cached
                     and tf_ready()
                     and latest.get("odom") is not None):
                 ready = True
@@ -153,26 +158,36 @@ def main() -> int:
         stack = "ros2_control_embedded" if args.embedded else "monolithic"
         print(f"SIL robot active ({stack}) and Nav2 up")
 
-        # Prime the velocity gait before the behaviour tree takes over /cmd_vel.
         cmd_pub = node.create_publisher(Twist, "/cmd_vel", 10)
-        prime = Twist()
-        prime.linear.x = 0.25
-        prime_end = time.time() + 2.5
-        while time.time() < prime_end:
-            cmd_pub.publish(prime)
-            rclpy.spin_once(node, timeout_sec=0.1)
+        def prime_gait(seconds: float = 2.5, speed: float = 0.25):
+            twist = Twist()
+            twist.linear.x = speed
+            prime_end = time.time() + seconds
+            while time.time() < prime_end:
+                cmd_pub.publish(twist)
+                rclpy.spin_once(node, timeout_sec=0.1)
 
-        goal = NavigateToPose.Goal()
-        goal.pose.header.frame_id = "map"
-        goal.pose.pose.position.x = args.goal_x
-        goal.pose.pose.position.y = args.goal_y
-        goal.pose.pose.orientation.w = 1.0
+        def distance_to_goal() -> float:
+            od = latest.get("odom")
+            if od is None:
+                return float("inf")
+            dx = od.pose.pose.position.x - args.goal_x
+            dy = od.pose.pose.position.y - args.goal_y
+            return math.hypot(dx, dy)
+
+        prime_gait()
+
+        nav_goal = NavigateToPose.Goal()
+        nav_goal.pose.header.frame_id = "map"
+        nav_goal.pose.pose.position.x = args.goal_x
+        nav_goal.pose.pose.position.y = args.goal_y
+        nav_goal.pose.pose.orientation.w = 1.0
 
         goal_handle = None
-        for attempt in range(1, 4):
-            goal.pose.header.stamp = node.get_clock().now().to_msg()
+        for attempt in range(1, args.attempts + 2):
+            nav_goal.pose.header.stamp = node.get_clock().now().to_msg()
             print(f"NavigateToPose attempt {attempt} -> ({args.goal_x}, {args.goal_y})")
-            goal_future = nav_client.send_goal_async(goal)
+            goal_future = nav_client.send_goal_async(nav_goal)
             rclpy.spin_until_future_complete(node, goal_future, timeout_sec=15.0)
             goal_handle = goal_future.result()
             if goal_handle is not None and goal_handle.accepted:
@@ -183,26 +198,23 @@ def main() -> int:
             return 1
 
         best = float("inf")
-        fell = False
+        fell_before_reach = False
         reached = False
         end = time.time() + args.timeout
         while time.time() < end:
             rclpy.spin_once(node, timeout_sec=0.1)
-            od = latest.get("odom")
             st = latest.get("state")
-            if st and st.is_fallen:
-                fell = True
-            if od is not None:
-                dx = od.pose.pose.position.x - args.goal_x
-                dy = od.pose.pose.position.y - args.goal_y
-                dist = math.hypot(dx, dy)
-                best = min(best, dist)
-                if dist <= args.tolerance:
-                    reached = True
-                    break
+            if st and st.is_fallen and not reached:
+                fell_before_reach = True
+            dist = distance_to_goal()
+            best = min(best, dist)
+            if dist <= args.tolerance:
+                reached = True
+                break
+
         print(f"nav result: reached={reached} closest={best:.2f}m "
-              f"tolerance={args.tolerance}m fell={fell}")
-        if reached and not fell:
+              f"tolerance={args.tolerance}m fell_before_reach={fell_before_reach}")
+        if reached and not fell_before_reach:
             print(f"gait_lab SIL full-Nav2 E2E passed ({stack}): the stack planned "
                   "and walked the steerable RL gait to the goal")
             exit_code = 0

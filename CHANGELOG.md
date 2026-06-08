@@ -613,6 +613,9 @@
   `tools/check_gait_lab_sil_nav2_nav_e2e.py` sends `NavigateToPose` after cmd_vel
   prime and lifecycle settle; monolithic `rl-steerable` reaches the goal. Embedded
   path fixed by publishing obs/ff from the sim snapshot only (no local `mj_step`).
+- **B4 hardening.** Nav2 E2E gates on `fell_before_reach` (ignores late falls after
+  the goal), keeps monitoring odometry after BT `Goal failed`, cmd_vel prime, and
+  relaxed progress checker; defaults `goal-x=2.0`, `tolerance=0.8`.
 - **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
   `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
   `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is

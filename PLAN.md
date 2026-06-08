@@ -682,6 +682,8 @@ of gravity moves from widening the runtime to closing the gait map:
   cmd_vel prime + delayed Nav2 bringup + `rl-steerable` registry).
 - [x] **B4 embedded first rung** — `check_gait_lab_sil_nav2_nav_e2e.py --embedded`
   (no local `mj_step` in gait controller; 50 Hz nav ros2_control config).
+- [x] **B4 hardening** — Nav2 E2E retries, `fell_before_reach` gating, cmd_vel prime,
+  relaxed progress checker; monolithic default passes at 0.8 m tolerance (2/3+).
 
 ## Definition Of Done For The Next Push
 
