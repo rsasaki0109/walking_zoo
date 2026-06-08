@@ -588,6 +588,10 @@
   mirrors monolithic timing via per-tick `physics_snapshot` sync, shadow-model
   substeps, and batched joint commands; `check_gait_lab_sil_ros2_control_e2e.py`
   passes with `rl-residual`. The legacy monolithic sim launch is unchanged.
+- **B3 deep: ros2_control forward path wiring.** Added
+  `GaitLabSilJointForwardController`, `use_ros2_control_forward:=true` launch
+  arg, hardware `write()` relay, delayed sim/policy start, and E2E `--forward`
+  flag. Default launch still uses the direct `joint_commands` path (E2E verified).
 - **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
   `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
   `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is
