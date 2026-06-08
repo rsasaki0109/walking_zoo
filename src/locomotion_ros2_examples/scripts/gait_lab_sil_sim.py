@@ -106,6 +106,7 @@ class GaitLabSilSim(Node):
             "joint_states_topic", "/gait_lab_sil/ros2_control/joint_states")
         # When true, each joint command runs all substeps (ros2_control forward path).
         self.declare_parameter("batch_substeps_per_command", False)
+        self.declare_parameter("steer_yaw_ramp_rate", 0.15)
 
         self.ros2_control_split = bool(self.get_parameter("ros2_control_split").value)
         self.batch_substeps_per_command = bool(
@@ -133,6 +134,10 @@ class GaitLabSilSim(Node):
         else:
             self.controller = None
         self.controller_name = controller_name
+        self.steer_shaping = controller_name.startswith("rl-steerable")
+        self.steer_yaw_ramp_rate = float(
+            self.get_parameter("steer_yaw_ramp_rate").value)
+        self._shaped_yaw = 0.0
 
         # Robot/lifecycle state.
         self.active = False
@@ -254,6 +259,7 @@ class GaitLabSilSim(Node):
         elif signal in ("stop_normal", "stop_quick"):
             self.cmd_speed = self.cmd_lateral = self.cmd_yaw = 0.0
             self.moving = False
+            self._shaped_yaw = 0.0
         self.get_logger().info(f"gait_lab SIL control: {signal}")
 
     def _on_joint_commands(self, msg: JointState):
@@ -270,6 +276,7 @@ class GaitLabSilSim(Node):
         self.gait_t = 0.0
         self.walking_prev = False
         self.fallen = False
+        self._shaped_yaw = 0.0
         self._joint_commands = None
 
     def _rehome_posture(self):
@@ -284,6 +291,18 @@ class GaitLabSilSim(Node):
     # -- sim loop ----------------------------------------------------------
     def _commanded_to_move(self) -> bool:
         return self.moving
+
+    def _effective_command(self):
+        raw_vx = float(self.cmd_speed)
+        raw_yaw = float(self.cmd_yaw)
+        if not self.steer_shaping or not self.moving:
+            self._shaped_yaw = 0.0
+            return self._Command(forward_speed=raw_vx, yaw_rate=raw_yaw)
+        step_dt = self.model.timestep
+        max_delta = self.steer_yaw_ramp_rate * step_dt
+        delta = max(-max_delta, min(max_delta, raw_yaw - self._shaped_yaw))
+        self._shaped_yaw += delta
+        return self._Command(forward_speed=raw_vx, yaw_rate=self._shaped_yaw)
 
     def _split_periodic_publish(self):
         """Keep joint_states, odom, TF, and WalkingState fresh between commands."""
@@ -336,6 +355,7 @@ class GaitLabSilSim(Node):
             self._rehome_posture()
             self.controller.reset(self.model)
             self.gait_t = 0.0
+            self._shaped_yaw = 0.0
         self.walking_prev = walking
 
         if self._pending_push is not None and walking:
@@ -346,11 +366,9 @@ class GaitLabSilSim(Node):
             self.get_logger().info(
                 f"gait_lab SIL push applied: ({kx:+.2f}, {ky:+.2f}) m/s")
 
-        cmd = self._Command(
-            forward_speed=float(self.cmd_speed),
-            yaw_rate=float(self.cmd_yaw))
         for _ in range(self.substeps):
             if walking:
+                cmd = self._effective_command()
                 obs = self.model.observe(self.gait_t)
                 ctrl = self.controller.update(obs, cmd)
                 self.gait_t += self.model.timestep

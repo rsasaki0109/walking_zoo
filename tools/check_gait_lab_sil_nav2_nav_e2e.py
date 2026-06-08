@@ -26,6 +26,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
+NAV_RUN_ATTEMPTS = 2
+PRIME_SEC = 2.5
+PRIME_SPEED = 0.20
+
 
 def terminate(process):
     if process is None or process.poll() is not None:
@@ -88,6 +92,7 @@ def main() -> int:
         from nav_msgs.msg import Odometry
         from nav2_msgs.action import FollowPath, NavigateToPose
         from locomotion_ros2_msgs.msg import WalkingState
+        from locomotion_ros2_msgs.srv import ClearFault
         from tf2_ros import Buffer, TransformListener
 
         rclpy.init(args=None)
@@ -159,7 +164,9 @@ def main() -> int:
         print(f"SIL robot active ({stack}) and Nav2 up")
 
         cmd_pub = node.create_publisher(Twist, "/cmd_vel", 10)
-        def prime_gait(seconds: float = 2.0, speed: float = 0.22):
+        clear_client = node.create_client(ClearFault, "/locomotion_ros2/clear_fault")
+
+        def prime_gait(seconds: float = PRIME_SEC, speed: float = PRIME_SPEED):
             twist = Twist()
             twist.linear.x = speed
             prime_end = time.time() + seconds
@@ -175,51 +182,84 @@ def main() -> int:
             dy = od.pose.pose.position.y - args.goal_y
             return math.hypot(dx, dy)
 
-        prime_gait()
+        def clear_fault_if_fallen() -> bool:
+            st = latest.get("state")
+            if st is None or not st.is_fallen:
+                return True
+            if not clear_client.wait_for_service(timeout_sec=3.0):
+                return False
+            future = clear_client.call_async(ClearFault.Request())
+            rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+            if future.result() is None or not future.result().success:
+                return False
+            settle_end = time.time() + 2.0
+            while time.time() < settle_end:
+                rclpy.spin_once(node, timeout_sec=0.1)
+            return True
 
-        nav_goal = NavigateToPose.Goal()
-        nav_goal.pose.header.frame_id = "map"
-        nav_goal.pose.pose.position.x = args.goal_x
-        nav_goal.pose.pose.position.y = args.goal_y
-        nav_goal.pose.pose.orientation.w = 1.0
+        def send_nav_goal() -> bool:
+            nav_goal = NavigateToPose.Goal()
+            nav_goal.pose.header.frame_id = "map"
+            nav_goal.pose.pose.position.x = args.goal_x
+            nav_goal.pose.pose.position.y = args.goal_y
+            nav_goal.pose.pose.orientation.w = 1.0
+            goal_handle = None
+            for attempt in range(1, args.attempts + 2):
+                nav_goal.pose.header.stamp = node.get_clock().now().to_msg()
+                print(
+                    f"NavigateToPose attempt {attempt} -> "
+                    f"({args.goal_x}, {args.goal_y})")
+                goal_future = nav_client.send_goal_async(nav_goal)
+                rclpy.spin_until_future_complete(node, goal_future, timeout_sec=15.0)
+                goal_handle = goal_future.result()
+                if goal_handle is not None and goal_handle.accepted:
+                    return True
+                time.sleep(1.0)
+            return False
 
-        goal_handle = None
-        for attempt in range(1, args.attempts + 2):
-            nav_goal.pose.header.stamp = node.get_clock().now().to_msg()
-            print(f"NavigateToPose attempt {attempt} -> ({args.goal_x}, {args.goal_y})")
-            goal_future = nav_client.send_goal_async(nav_goal)
-            rclpy.spin_until_future_complete(node, goal_future, timeout_sec=15.0)
-            goal_handle = goal_future.result()
-            if goal_handle is not None and goal_handle.accepted:
-                break
-            time.sleep(1.0)
-        if goal_handle is None or not goal_handle.accepted:
-            print("NavigateToPose goal rejected", file=sys.stderr)
-            return 1
+        def run_navigation() -> tuple[bool, bool, float, float]:
+            best = float("inf")
+            max_lateral = 0.0
+            fell_before_reach = False
+            reached = False
+            nav_timeout = args.timeout * (1.25 if args.embedded else 1.0)
+            end = time.time() + nav_timeout
+            while time.time() < end:
+                rclpy.spin_once(node, timeout_sec=0.1)
+                st = latest.get("state")
+                if st and st.is_fallen and not reached:
+                    fell_before_reach = True
+                od = latest.get("odom")
+                if od is not None:
+                    max_lateral = max(max_lateral, abs(od.pose.pose.position.y))
+                dist = distance_to_goal()
+                best = min(best, dist)
+                if dist <= args.tolerance:
+                    reached = True
+                    break
+            return reached, fell_before_reach, best, max_lateral
 
+        reached = False
+        fell_before_reach = False
         best = float("inf")
         max_lateral = 0.0
-        fell_before_reach = False
-        reached = False
-        nav_timeout = args.timeout * (1.25 if args.embedded else 1.0)
-        end = time.time() + nav_timeout
-        while time.time() < end:
-            rclpy.spin_once(node, timeout_sec=0.1)
-            st = latest.get("state")
-            if st and st.is_fallen and not reached:
-                fell_before_reach = True
-            od = latest.get("odom")
-            if od is not None:
-                max_lateral = max(max_lateral, abs(od.pose.pose.position.y))
-            dist = distance_to_goal()
-            best = min(best, dist)
-            if dist <= args.tolerance:
-                reached = True
+        for run in range(1, NAV_RUN_ATTEMPTS + 1):
+            print(f"nav run {run}/{NAV_RUN_ATTEMPTS}")
+            if run > 1 and not clear_fault_if_fallen():
+                print("clear_fault unavailable after nav fall", file=sys.stderr)
+                break
+            prime_gait()
+            if not send_nav_goal():
+                print("NavigateToPose goal rejected", file=sys.stderr)
+                continue
+            reached, fell_before_reach, best, max_lateral = run_navigation()
+            print(
+                f"nav result: reached={reached} closest={best:.2f}m "
+                f"max_lateral={max_lateral:.2f}m tolerance={args.tolerance}m "
+                f"fell_before_reach={fell_before_reach}")
+            if reached and not fell_before_reach:
                 break
 
-        print(f"nav result: reached={reached} closest={best:.2f}m "
-              f"max_lateral={max_lateral:.2f}m tolerance={args.tolerance}m "
-              f"fell_before_reach={fell_before_reach}")
         if reached and not fell_before_reach:
             print(f"gait_lab SIL full-Nav2 E2E passed ({stack}): the stack planned "
                   "and walked the steerable RL gait to the goal")

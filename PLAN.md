@@ -695,6 +695,8 @@ of gravity moves from widening the runtime to closing the gait map:
   at 0.8 m (occasional `rl-steerable` spiral/fall flake).
 - [x] **B4 spiral reduction** — legged bridge `yaw_deadband` + lateral cap curb
   Nav2 spiral drift; `rl-steerable-footstep` registered for optional `--controller`.
+- [x] **B4 Nav2 flake reduction** — monolithic sim yaw ramp + bridge
+  `max_yaw_accel`; Nav2 E2E retries navigation with `clear_fault` + cmd_vel prime.
 
 ## Definition Of Done For The Next Push
 

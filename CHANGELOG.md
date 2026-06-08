@@ -628,6 +628,9 @@
   substep for `rl-steerable*` (mirrors harness stability); `--steer` E2E primes
   straight walking, retries up to three times with `/locomotion_ros2/clear_fault`,
   and uses gentler arc commands (0.15 m/s, 0.20 rad/s yaw).
+- **B4 Nav2 flake reduction.** Monolithic `gait_lab_sil_sim` ramps `rl-steerable*`
+  yaw per MuJoCo substep; SIL Nav2 launch caps bridge `max_yaw_accel` at 0.20 rad/s².
+  Full Nav2 E2E retries navigation twice with `clear_fault` and a straight cmd_vel prime.
 - **B4 spiral reduction.** Added `legged.yaw_deadband` to the Nav2 cmd_vel bridge
   shaper (gtest-covered), capped lateral velocity on the SIL Nav2 launch, registered
   `RLSteerableFootstepWalk` for optional `--controller`, and log `max_lateral` in

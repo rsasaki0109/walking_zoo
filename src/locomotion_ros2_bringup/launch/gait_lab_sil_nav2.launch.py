@@ -123,6 +123,7 @@ def generate_launch_description():
             "legged.yaw_deadband": 0.10,
             "legged.lateral_deadband": 0.05,
             "legged.turn_speed_coupling": 1.8,
+            "legged.max_yaw_accel": 0.20,
         }],
     )
 
@@ -132,7 +133,11 @@ def generate_launch_description():
         name="gait_lab_sil_sim",
         output="screen",
         additional_env=sim_env,
-        parameters=[{"controller": controller, "publish_odom": True}],
+        parameters=[{
+            "controller": controller,
+            "publish_odom": True,
+            "steer_yaw_ramp_rate": 0.15,
+        }],
         remappings=[("gait_lab_sil/odom", "/odom")],
         condition=UnlessCondition(use_ros2_control_embedded),
     )
