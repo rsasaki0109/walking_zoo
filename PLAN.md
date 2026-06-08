@@ -673,6 +673,9 @@ of gravity moves from widening the runtime to closing the gait map:
   tick + obs/ff pair per MuJoCo step (was 10 virtual ticks → 1 command). C++
   infers residual when feedforward arrives after observation. Forward embedded E2E
   passes; steer flake remains the `rl-steerable` gait limit, not MLP divergence.
+- [x] **B3 MLP parity gate** — `tools/check_gait_lab_rl_policy_parity.py` and
+  gtest pin Python ``_policy`` vs C++ ``GaitLabRlPolicy::infer`` (≤3e-6 on trained
+  ``rl_policy*.npz``, fixed + rollout observations).
 - [ ] **B2** — reactive steering that holds the full horizon (depends on B1).
 - [x] **B3 first rung** — ros2_control joint-state bridge for gait_lab SIL: topic
   hardware interface, split sim (physics) + gait controller (policy),

@@ -93,7 +93,8 @@ ros2 launch locomotion_ros2_bringup gait_lab_sil_ros2_control_runtime.launch.py 
   comparison.
 
 Verified by `tools/check_gait_lab_sil_ros2_control_e2e.py` (`--forward`,
-`--embedded`, `--steer`, `--steer-direct`; needs MuJoCo).
+`--embedded`, `--steer`, `--steer-direct`; needs MuJoCo) and
+`tools/check_gait_lab_rl_policy_parity.py` (Python vs C++ MLP inference).
 
 ### Driving it from Nav2
 

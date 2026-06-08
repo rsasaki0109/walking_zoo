@@ -624,6 +624,10 @@
   `feedforward_and_observation` once per MuJoCo substep so C++ RL runs at 50 Hz,
   not 5 Hz). Tightened Nav2 yaw/forward caps for `rl-steerable` spiral control;
   `--embedded` Nav2 E2E reaches 2 m at 0.8 m tolerance.
+- **B3 MLP parity gate.** Added ``gait_lab_rl_policy_infer`` CLI and
+  ``tools/check_gait_lab_rl_policy_parity.py`` to certify Python ``_policy`` and
+  C++ ``GaitLabRlPolicy::infer`` agree on fixed and rollout observations (worst
+  |py-cpp| ≤3e-6 on shipped ``rl_policy*.npz``); gtest golden vector included.
 - **B3 embedded parity fix.** Diagnosed embedded steer falls: the split path batched
   ten CPG ticks into one feedforward command per snapshot. Embedded launch now uses
   `substeps:=1` lockstep; the C++ RL controller pairs observation + feedforward and

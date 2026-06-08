@@ -78,6 +78,9 @@ target_link_libraries(${PROJECT_NAME}_ros2_control_controllers
 pluginlib_export_plugin_description_file(
   controller_interface plugins_ros2_control_controllers.xml)
 
+add_executable(gait_lab_rl_policy_infer src/gait_lab_rl_policy_infer_main.cpp)
+target_link_libraries(gait_lab_rl_policy_infer ${PROJECT_NAME}_ros2_control_controllers)
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(
   FILES plugins.xml plugins_ros2_control.xml plugins_ros2_control_controllers.xml README.md
@@ -85,10 +88,11 @@ install(
 install(DIRECTORY assets DESTINATION share/${PROJECT_NAME})
 install(
   TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_ros2_control ${PROJECT_NAME}_ros2_control_controllers
+  gait_lab_rl_policy_infer
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
