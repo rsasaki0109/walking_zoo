@@ -32,7 +32,7 @@ import math
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TransformStamped, TwistStamped
+from geometry_msgs.msg import TransformStamped, TwistStamped, Vector3
 from nav_msgs.msg import Odometry
 from std_msgs.msg import String
 from tf2_ros import TransformBroadcaster
@@ -120,6 +120,10 @@ class GaitLabSilSim(Node):
         # the learned policy's phase from reality and topples the robot.
         self.gait_t = 0.0
         self.walking_prev = False
+        # A pending external shove (world-frame base velocity kick, m/s), applied
+        # once on the next walking tick — for push-recovery benchmarking through
+        # the runtime. None = no shove pending.
+        self._pending_push = None
         self.stand = self.model.stand_targets.copy()
         self.model.reset()
 
@@ -135,6 +139,9 @@ class GaitLabSilSim(Node):
         latched = QoSProfile(depth=1)
         latched.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self.create_subscription(String, "gait_lab_sil/control", self._on_control, latched)
+        # External shove for push-recovery benchmarking: a world-frame base
+        # velocity kick (m/s) applied on the next walking tick.
+        self.create_subscription(Vector3, "gait_lab_sil/push", self._on_push, 10)
         self.state_pub = self.create_publisher(WalkingState, "gait_lab_sil/robot_state", 10)
 
         self.publish_odom = bool(self.get_parameter("publish_odom").value)
@@ -157,6 +164,13 @@ class GaitLabSilSim(Node):
         self.cmd_yaw = msg.twist.angular.z
         mag = abs(self.cmd_speed) + abs(self.cmd_lateral) + abs(self.cmd_yaw)
         self.moving = mag > self.move_threshold
+
+    def _on_push(self, msg: Vector3):
+        # Latch the shove; applied on the next walking tick (after any rising-edge
+        # rehome, so it is not immediately zeroed).
+        self._pending_push = (float(msg.x), float(msg.y))
+        self.get_logger().info(
+            f"gait_lab SIL push queued: ({msg.x:+.2f}, {msg.y:+.2f}) m/s base kick")
 
     def _on_control(self, msg: String):
         signal = msg.data
@@ -212,6 +226,17 @@ class GaitLabSilSim(Node):
             self.controller.reset(self.model)
             self.gait_t = 0.0
         self.walking_prev = walking
+
+        # Apply a queued external shove to the base velocity (after the rising-edge
+        # rehome above, which would otherwise zero it). Only while walking, so the
+        # disturbance lands on an active gait, not a held stand.
+        if self._pending_push is not None and walking:
+            kx, ky = self._pending_push
+            self.model.data.qvel[0] += kx
+            self.model.data.qvel[1] += ky
+            self._pending_push = None
+            self.get_logger().info(
+                f"gait_lab SIL push applied: ({kx:+.2f}, {ky:+.2f}) m/s")
 
         # Forward both the sagittal speed and the yaw rate: a steerable controller
         # (rl-steerable) acts on yaw_rate so Nav2 can turn the robot; the straight

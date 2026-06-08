@@ -144,6 +144,28 @@ survives the full horizon *and* walks — the same verdict as the bare
 `gait_lab` harness, now produced through `/cmd_vel` → runtime → safety →
 adapter → MuJoCo G1. The run writes `compare.json` and `compare.md` evidence.
 
+The same tool benchmarks **push recovery** through the runtime — a mid-walk
+base-velocity shove injected through the SIL sim's `gait_lab_sil/push` interface:
+
+```bash
+python3 tools/check_gait_lab_sil_compare.py --controllers stand-hold rl-residual \
+    --push-speed 0.2 --push-dir forward    # gentle shove
+```
+
+```
+# 0.2 m/s forward shove @ 1.0s        # 0.4 m/s forward shove @ 1.0s
+stand-hold   5.00s  [recovered]       stand-hold   3.30s  [FELL]
+rl-residual  3.00s  [FELL]            rl-residual  2.70s  [FELL]
+```
+
+This reproduces the lab's push finding on the product path: regulating a stand
+rides out a *gentle* shove, but a stronger one topples it — the wall under a
+shove is the support polygon, and the one move that recovers it is a *step*. No
+position-controlled gait wired here steps reactively, which is exactly the
+force-aware frontier `gait_lab` maps (a contact-QP whole-body controller that
+regulates a moving CoM/ZMP while stepping). The `gait_lab_sil/push` interface is
+the reusable substrate that frontier work will benchmark against.
+
 ## Architecture
 
 ```mermaid
