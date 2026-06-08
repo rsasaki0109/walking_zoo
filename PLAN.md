@@ -684,6 +684,9 @@ of gravity moves from widening the runtime to closing the gait map:
   (no local `mj_step` in gait controller; 50 Hz nav ros2_control config).
 - [x] **B4 hardening** — Nav2 E2E retries, `fell_before_reach` gating, cmd_vel prime,
   relaxed progress checker; monolithic default passes at 0.8 m tolerance (2/3+).
+- [x] **B4 embedded 0.8 m** — gait controller advances embedded RL decimation per
+  substep (50 Hz policy, not 5 Hz); Nav2 yaw/forward caps; `--embedded` E2E passes
+  at 0.8 m (occasional `rl-steerable` spiral/fall flake).
 
 ## Definition Of Done For The Next Push
 

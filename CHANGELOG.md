@@ -616,6 +616,10 @@
 - **B4 hardening.** Nav2 E2E gates on `fell_before_reach` (ignores late falls after
   the goal), keeps monitoring odometry after BT `Goal failed`, cmd_vel prime, and
   relaxed progress checker; defaults `goal-x=2.0`, `tolerance=0.8`.
+- **B4 embedded 0.8 m.** Fixed embedded gait-controller policy decimation (advance
+  `feedforward_and_observation` once per MuJoCo substep so C++ RL runs at 50 Hz,
+  not 5 Hz). Tightened Nav2 yaw/forward caps for `rl-steerable` spiral control;
+  `--embedded` Nav2 E2E reaches 2 m at 0.8 m tolerance.
 - **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
   `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
   `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is
