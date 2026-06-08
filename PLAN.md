@@ -54,7 +54,43 @@ locomotion_ros2 is not:
 
 ## Current Project State
 
-The repository already has the important v0.1 foundation:
+The project has two mature halves: the locomotion subject (`gait_lab`) and the
+ROS2 runtime that deploys a chosen gait. Both are real and tested today.
+
+### The locomotion: `gait_lab`
+
+`experiments/gait_lab` is an honest, physics-driven testbed on a real MuJoCo
+Unitree G1 (`mujoco_menagerie`), where every gait is driven through `mj_step` and
+**bad gaits actually fall over**. The findings are reported with their negatives —
+that honesty is the point of the lab.
+
+- **Ten controllers behind one `GaitController` interface**, scored on the same
+  robot with the same metrics: `stand-hold`, `open-loop-cpg`, `balanced-cpg`,
+  `capture-point` (+ a CEM-`optimized-cp`), `capture-step` (reactive push
+  recovery), `dcm-walk`, `zmp-preview` (Kajita preview control), `learned-feedback`
+  (CEM linear policy), and `rl-residual` (a PPO MLP). Steerable variants
+  (`steerable-cpg/-zmp/-footstep`, `rl-steerable*`) ride on top for turning.
+- **The central measured result:** the kinematic footstep walkers walk *farthest*
+  (`capture-point`/`dcm-walk` ~1 m) but topple in ~1–3 s; the learned residual
+  walks the full horizon but not as far — the farthest-vs-most-stable tradeoff, on
+  honest physics, is the headline the lab exists to surface.
+- **A force-aware frontier, mapped not hand-waved.** A full contact-QP whole-body
+  controller (`wbc_qp.py`, proper TSID with friction-cone GRF and the complete
+  torque-limited form) holds a quiet stand but goes **infeasible** the instant the
+  capture point leaves the support polygon — it *certifies* "you must step." The
+  capture step (`capture-step`) is the controller that steps, and the one move that
+  recovers a shove the in-place stands fall to. The honest null: on this
+  position-built model the WBC does not beat position control under push or while
+  walking — the binding limit is the support polygon, not torque.
+- **Theory that predicts the measurements:** capturability `1/ω = √(z/g)`, the
+  free-pendulum `2/ω` topple floor, the support-margin anisotropy of the push
+  frontier (`v* = d·ω`), and the lab's ~1 s collapse time. Plus a push-survival
+  frontier, terrain/slope critical-angle study, and adaptive step-timing.
+- **RL training is real:** `train_rl.py` (PPO) exports a dependency-free numpy
+  policy; robustly trained (worst-of-perturbed-starts) to avoid the chaotic-overfit
+  trap the README documents.
+
+### The runtime, and the bridge between them
 
 - `locomotion_ros2_msgs` defines walking-specific ROS2 messages, services, and
   actions.
@@ -64,11 +100,117 @@ The repository already has the important v0.1 foundation:
 - `locomotion_ros2_mock_adapter` gives an always-buildable adapter.
 - `locomotion_ros2_nav2` bridges Nav2-style `/cmd_vel` into `/locomotion_ros2/cmd_vel`.
 - `locomotion_ros2_bringup` provides one-command demos.
-- README assets include MuJoCo Unitree G1 and PyBullet Laikago simulation GIFs.
-- The MuJoCo G1 runtime showcase records JSON and Markdown trace evidence.
+- **`locomotion_ros2_gait_lab_sil`** is the bridge that makes the two halves one
+  path: a thin C++ adapter plus the `gait_lab_sil_sim.py` companion node runs the
+  real MuJoCo G1 through any `gait_lab` controller, behind the real runtime +
+  safety pipeline. `gait_lab_sil_runtime.launch.py` takes a `controller:=` arg.
+- **`tools/check_gait_lab_sil_compare.py`** reproduces the lab's honest benchmark
+  *through the product runtime* — every gait driven by `/cmd_vel` → runtime →
+  safety → adapter → MuJoCo, scored from `/locomotion_ros2/state` + base odometry.
+  It also benchmarks **push recovery** via the `gait_lab_sil/push` interface: under
+  a 0.4 m/s forward shove, `capture-step` is the only controller left standing
+  while the held stand and the walkers topple.
+- README assets include MuJoCo Unitree G1 and PyBullet Laikago simulation GIFs;
+  the MuJoCo G1 runtime showcase records JSON and Markdown trace evidence.
 
-The next phase is not about adding many unrelated packages. The next phase is
-about making the demo and runtime story much more convincing.
+The next phase is not about adding many unrelated packages. It is about closing
+the locomotion frontier (below) and making the runtime story more convincing.
+
+## The Locomotion Frontier
+
+This is the heart of the project now that the rename made locomotion the subject.
+The lab has drawn an honest map of biped balance on this G1; the frontier is the
+edge of that map. Each item below states what is *measured and done*, what is
+*open*, and the honest risk — because the lab's value is that it does not pretend.
+
+### What the map already says (settled, with negatives reported)
+
+- **Standing balance is a support-polygon problem, not a torque problem.** A quiet
+  stand needs only ~45% of the torque budget; the complete torque-limited TSID
+  changes nothing about the wall. Under a shove the contact-QP WBC goes infeasible
+  exactly when the capture point leaves the support — it *is* the certificate that
+  no in-place force recovers the fall.
+- **The one move that recovers a shove is a step.** `capture-step` (now a
+  registered `GaitController`, promoted from `capture_step.py`) holds a stand and
+  steps the falling-side foot to the capture point. Through the runtime it recovers
+  a 0.4 m/s forward shove that topples stand-hold, dcm-walk, and the RL residual.
+- **Position-controlled kinematic walkers cannot break the balance ceiling.**
+  Across CPG-residual, capture-point, ZMP-preview, DCM, and the reactive-steerable
+  synthesis, none reaches the full horizon while also steering. Footstep placement
+  *steers* but tops out near a ~2 s ceiling; the CPG substrate cannot steer at all.
+- **Learning buys distance, not a broken ceiling.** The CEM linear policy and the
+  PPO residual both walk farther than hand-tuning but inherit the same structural
+  limit on a position-built model.
+
+### What is open (the actual frontier)
+
+The recurring sentence in the lab's own docstrings names the genuine path: *a
+contact-constrained torque WBC that regulates the moving CoM/ZMP while walking* —
+i.e. force-aware control that **walks AND recovers**, not one or the other. The
+items below are ordered by dependency and by honesty-of-payoff.
+
+#### B1 — Force-aware whole-body control that walks and recovers
+
+- **Done (first rung):** `capture-step` registered and shown recovering through the
+  runtime. This is the actionable conclusion of the WBC's "you must step."
+- **Open:** a WBC that keeps torque authority *through* the step — the swing foot
+  tracked as a task in the same QP while the stance leg balances with friction-cone
+  GRF, the foothold chosen reactively (DCM/capture rule) — so the robot regulates a
+  moving CoM/ZMP instead of handing off to position-IK stepping. `run_qp_walk`
+  already does the standing-plan version and fails to track fast single-support;
+  the open question is whether that is *tuning* (a per-phase weight schedule that
+  releases the posture task's grip on the swing leg) or *structural* (the
+  position-built model). 
+- **Honest risk:** high. This is multi-session research and may produce another
+  honest null (the lab is full of those by design). It must not be overclaimed.
+  Success = a force-aware controller that walks a command *and* survives a shove a
+  position walker falls to; an honest null = a measured boundary and the reason.
+
+#### B2 — Reactive steering on a balance-aware base
+
+- **Open:** steering that holds the full horizon. `steerable-zmp` curves a
+  preview-tracked plan but is open-loop (plan fixed at construction);
+  `rl-steerable-footstep` tracks approximately. A reactive re-planning steerable
+  walker on the ZMP-preview/WBC base is the natural target, and the one Nav2 needs.
+- **Depends on:** B1 for the balance authority a tight steering loop needs.
+- **Honest risk:** medium. Steering is structurally about foot placement, which the
+  lab can already express; the risk is the same balance ceiling, hence the B1 dep.
+
+#### B3 — `ros2_control`-ify the SIL sim
+
+- **Open:** today the SIL companion node owns its own MuJoCo loop. Re-expressing it
+  as a `ros2_control` `SystemInterface` (a MuJoCo hardware component + controllers)
+  would deepen the "ros2" in the name and make the gait controllers swappable the
+  ROS way, not just by a Python param.
+- **Honest risk:** low. This is plumbing — verifiable, CI-able, no research gamble —
+  but it is breadth, not a frontier result. Good when a solid, shippable win is
+  wanted between research pushes.
+
+#### B4 — Drive the SIL robot from a Nav2 goal
+
+- **Open:** close the loop from a Nav2 `NavigateToPose` goal → `/cmd_vel` → runtime
+  → a *steering* gait that tracks it → the robot walks an arc to the goal in sim.
+- **Depends on:** B2 (a steering gait that holds the horizon) and thus B1.
+- **Honest risk:** medium, mostly inherited from B2.
+
+### Reusable substrate already in place
+
+- `gait_lab_sil/push` (world-frame base-velocity kick) — the push-recovery
+  benchmark interface every force-aware experiment will score against.
+- `tools/check_gait_lab_sil_compare.py` with `--push-*` flags — runtime-path
+  survival/forward/min-height scoring, fresh `ROS_DOMAIN_ID` per controller.
+- The `GaitController` interface + `CONTROLLERS()` registry — any new gait (a WBC
+  walker, a reactive steerer) drops in here and is instantly runnable through both
+  the bare harness and the SIL runtime.
+
+### How to keep it honest
+
+- Report negatives. A measured boundary with its physical reason is a result.
+- Verify through the runtime, not just the bare harness — the product path is the
+  claim.
+- Never promote a controller to "recovers/walks" without the SIL compare number.
+- Keep the WBC's own infeasibility as a first-class signal: it tells you when to
+  step, and when a claim is physically impossible on this model.
 
 ## Immediate Theme
 
@@ -508,6 +650,22 @@ deepening single features:
   skip-if-unavailable `locomotion_ros2_examples` pytest confirm the parquet episodes
   and `meta/*.jsonl` tables load via HuggingFace `datasets.load_dataset` with row
   counts, columns, and feature widths matching `meta/info.json`.
+
+With the runtime breadth closed, the **primary direction is now the Locomotion
+Frontier** above — the rename made locomotion the subject, so the project's center
+of gravity moves from widening the runtime to closing the gait map:
+
+- [x] **B1 first rung** — promote the capture step to a registered push-recovery
+  `GaitController` and show it recovering through the runtime (0.4 m/s forward
+  shove: `capture-step` survives, the held stand and the walkers fall). Byte-
+  identical to the validated standalone; in `CONTROLLERS()` and the SIL compare set.
+- [ ] **B1 deep** — a WBC that walks *and* recovers (torque authority through the
+  step). High-risk research; an honest null is an acceptable, publishable outcome.
+- [ ] **B2** — reactive steering that holds the full horizon (depends on B1).
+- [ ] **B3** — `ros2_control`-ify the SIL sim (low-risk breadth between research
+  pushes).
+- [ ] **B4** — drive the SIL robot from a Nav2 goal through a steering gait
+  (depends on B2).
 
 ## Definition Of Done For The Next Push
 
