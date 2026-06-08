@@ -1,0 +1,3 @@
+# Placeholder so the (currently mesh-free, primitive-geometry) description
+# package keeps a tracked meshes/ dir; install(DIRECTORY ... meshes ...) needs it
+# to exist on a clean checkout (CI). Drop robot mesh files here.
