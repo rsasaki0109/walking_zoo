@@ -1117,6 +1117,20 @@ class RLResidualWalk(GaitController):
                 h = np.tanh(h)
         return h
 
+    def feedforward_and_observation(self, obs: Observation, cmd: Command | None = None):
+        """CPG feedforward and policy observation for embedded (C++) RL inference."""
+        from .rl_env import observe_policy
+
+        cmd = cmd or Command()
+        ctrl = self.cpg.update(obs, cmd)
+        refresh = (self._k % self._decim) == 0
+        x = observe_policy(
+            self.model, obs, self._leg_qadr, self._leg_dofadr,
+            self._stand_leg, self._freq, obs.t,
+        ) if refresh else None
+        self._k += 1
+        return ctrl, x, refresh
+
     def update(self, obs: Observation, cmd: Command) -> np.ndarray:
         from .rl_env import observe_policy
 
@@ -1184,6 +1198,19 @@ class RLSteerableWalk(RLResidualWalk):
         )
         self._stand_leg = model.stand_qpos[self._leg_qadr].copy()
         self._freq = self.cpg.frequency
+
+    def feedforward_and_observation(self, obs: Observation, cmd: Command | None = None):
+        from .rl_env import observe_policy
+
+        cmd = cmd or Command()
+        ctrl = self.cpg.update(obs, cmd)
+        refresh = (self._k % self._decim) == 0
+        x = observe_policy(
+            self.model, obs, self._leg_qadr, self._leg_dofadr,
+            self._stand_leg, self._freq, obs.t, cmd=cmd,
+        ) if refresh else None
+        self._k += 1
+        return ctrl, x, refresh
 
     def update(self, obs: Observation, cmd: Command) -> np.ndarray:
         from .rl_env import observe_policy

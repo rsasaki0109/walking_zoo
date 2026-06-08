@@ -661,6 +661,8 @@ of gravity moves from widening the runtime to closing the gait map:
   identical to the validated standalone; in `CONTROLLERS()` and the SIL compare set.
 - [ ] **B1 deep** — a WBC that walks *and* recovers (torque authority through the
   step). High-risk research; an honest null is an acceptable, publishable outcome.
+- [x] **B2 first rung** — `rl-steerable` on the ros2_control-split SIL path
+  (`check_gait_lab_sil_ros2_control_e2e.py --steer`, embedded RL relay).
 - [ ] **B2** — reactive steering that holds the full horizon (depends on B1).
 - [x] **B3 first rung** — ros2_control joint-state bridge for gait_lab SIL: topic
   hardware interface, split sim (physics) + gait controller (policy),
@@ -671,8 +673,10 @@ of gravity moves from widening the runtime to closing the gait map:
   50/500 Hz configs (`relay_commands`, forward URDF), latched `physics_snapshot`,
   hardware `write()` relay every cycle, and E2E `--forward` (direct + forward
   walking verified).
-- [ ] **B3 deep** — move policy inference into the controller plugin (C++ or
-  embedded), not only a forwarder node.
+- [x] **B3 deep first rung** — `GaitLabSilRlResidualController` loads ``rl_policy*.npz``
+  and runs MLP inference in C++ (`use_embedded_rl_policy:=true`; Python node
+  publishes CPG feedforward + observation only).
+- [ ] **B3 deep** — move full CPG + observation builder into the controller plugin.
 - [ ] **B4** — drive the SIL robot from a Nav2 goal through a steering gait
   (depends on B2).
 

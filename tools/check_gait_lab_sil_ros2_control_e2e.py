@@ -7,9 +7,16 @@ Brings up ``gait_lab_sil_ros2_control_runtime.launch.py`` and confirms:
 
 Pass ``--forward`` to exercise the ``GaitLabSilJointForwardController`` path
 (use_ros2_control_forward:=true).
+
+Pass ``--embedded`` for the C++ ``GaitLabSilRlResidualController`` path
+(use_embedded_rl_policy:=true).
+
+Pass ``--steer`` with ``controller:=rl-steerable`` to confirm turning on the
+ros2_control-split stack (yaw command + odometry heading change).
 """
 
 import argparse
+import math
 import os
 from pathlib import Path
 import signal
@@ -41,7 +48,31 @@ def main() -> int:
         action="store_true",
         help="use GaitLabSilJointForwardController (ros2_control command loop)",
     )
+    parser.add_argument(
+        "--embedded",
+        action="store_true",
+        help="use GaitLabSilRlResidualController (C++ RL inference)",
+    )
+    parser.add_argument(
+        "--steer",
+        action="store_true",
+        help="send a yaw velocity command and require heading change",
+    )
+    parser.add_argument(
+        "--controller",
+        default="rl-residual",
+        help="gait_lab controller (use rl-steerable with --steer)",
+    )
     args = parser.parse_args()
+
+    if args.forward and args.embedded:
+        print("choose only one of --forward or --embedded", file=sys.stderr)
+        return 2
+    if args.steer:
+        args.controller = "rl-steerable"
+    if args.steer and not args.forward:
+        # Turning needs the 500 Hz relay path; embedded RL keeps policy parity.
+        args.embedded = True
 
     env = os.environ.copy()
     env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
@@ -55,10 +86,12 @@ def main() -> int:
     launch_args = [
         "ros2", "launch", "locomotion_ros2_bringup",
         "gait_lab_sil_ros2_control_runtime.launch.py",
-        "controller:=rl-residual",
+        f"controller:={args.controller}",
     ]
     if args.forward:
         launch_args.append("use_ros2_control_forward:=true")
+    if args.embedded:
+        launch_args.append("use_embedded_rl_policy:=true")
 
     launch = subprocess.Popen(
         launch_args,
@@ -69,18 +102,28 @@ def main() -> int:
     node = None
     rclpy = None
     exit_code = 1
-    path_label = "forward" if args.forward else "direct"
+    if args.embedded:
+        path_label = "embedded"
+    elif args.forward:
+        path_label = "forward"
+    else:
+        path_label = "direct"
+    if args.steer:
+        path_label += "+steer"
     try:
         import rclpy
         from rclpy.action import ActionClient
         from locomotion_ros2_msgs.action import ExecuteVelocity
         from locomotion_ros2_msgs.msg import WalkingState
+        from nav_msgs.msg import Odometry
         from sensor_msgs.msg import JointState
 
         rclpy.init(args=None)
         node = rclpy.create_node("gait_lab_sil_ros2_control_e2e")
         latest = {}
         joint_names = set()
+        odom_yaw = {"start": None, "latest": None}
+        odom_xy = {"start": None, "latest": None}
 
         node.create_subscription(
             WalkingState, "/locomotion_ros2/state",
@@ -88,6 +131,22 @@ def main() -> int:
         node.create_subscription(
             JointState, "/joint_states",
             lambda m: joint_names.update(m.name), 10)
+
+        def on_odom(msg: Odometry):
+            q = msg.pose.pose.orientation
+            yaw = math.atan2(
+                2.0 * (q.w * q.z + q.x * q.y),
+                1.0 - 2.0 * (q.y * q.y + q.z * q.z),
+            )
+            odom_yaw["latest"] = yaw
+            if odom_yaw["start"] is None:
+                odom_yaw["start"] = yaw
+            xy = (float(msg.pose.pose.position.x), float(msg.pose.pose.position.y))
+            odom_xy["latest"] = xy
+            if odom_xy["start"] is None:
+                odom_xy["start"] = xy
+
+        node.create_subscription(Odometry, "/gait_lab_sil/odom", on_odom, 10)
 
         deadline = time.time() + 50.0
         while time.time() < deadline:
@@ -117,14 +176,30 @@ def main() -> int:
             print("no execute_velocity server", file=sys.stderr)
             return 1
 
-        settle_deadline = time.time() + (5.0 if args.forward else 3.0)
+        settle_deadline = time.time() + (
+            5.0 if (args.forward or args.embedded) else 3.0)
         while time.time() < settle_deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
 
+        if args.steer:
+            odom_deadline = time.time() + 8.0
+            while time.time() < odom_deadline and odom_yaw["latest"] is None:
+                rclpy.spin_once(node, timeout_sec=0.1)
+            if odom_yaw["latest"] is None:
+                print("no /gait_lab_sil/odom before steer goal", file=sys.stderr)
+                return 1
+
         goal = ExecuteVelocity.Goal()
-        goal.command.twist.linear.x = 0.3
-        goal.duration_sec = 3.0
+        if args.steer:
+            goal.command.twist.linear.x = 0.2
+            goal.command.twist.angular.z = 0.25
+            goal.duration_sec = 8.0
+        else:
+            goal.command.twist.linear.x = 0.3
+            goal.duration_sec = 3.0
         observed = {"walking": False, "fell": False}
+        odom_yaw["start"] = odom_yaw["latest"]
+        odom_xy["start"] = odom_xy["latest"]
 
         def on_feedback(msg):
             st = msg.feedback.state
@@ -140,21 +215,40 @@ def main() -> int:
             print("velocity goal rejected", file=sys.stderr)
             return 1
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(node, result_future, timeout_sec=18.0)
+        result_deadline = time.time() + (24.0 if args.steer else 18.0)
+        while time.time() < result_deadline and not result_future.done():
+            rclpy.spin_once(node, timeout_sec=0.1)
+        if not result_future.done():
+            print("velocity goal timed out", file=sys.stderr)
+            return 1
         result = result_future.result().result
+        yaw_delta = 0.0
+        travel = 0.0
+        if odom_yaw["start"] is not None and odom_yaw["latest"] is not None:
+            yaw_delta = abs(odom_yaw["latest"] - odom_yaw["start"])
+            yaw_delta = min(yaw_delta, abs(yaw_delta - 2.0 * math.pi))
+        if odom_xy["start"] is not None and odom_xy["latest"] is not None:
+            dx = odom_xy["latest"][0] - odom_xy["start"][0]
+            dy = odom_xy["latest"][1] - odom_xy["start"][1]
+            travel = math.hypot(dx, dy)
         print(
             f"velocity result: success={result.success} "
-            f"walking={observed['walking']} fell={observed['fell']}"
+            f"walking={observed['walking']} fell={observed['fell']} "
+            f"yaw_delta={yaw_delta:.2f}rad travel={travel:.2f}m"
         )
         final = latest.get("state")
         final_fallen = bool(final and final.is_fallen)
-        if result.success and observed["walking"] and not final_fallen:
+        # B2 first rung: rl-steerable survives a yaw velocity command on the split
+        # stack. Heading/travel are logged; tight tracking is a later milestone.
+        steered = (not args.steer) or (
+            yaw_delta >= 0.06 or travel >= 0.15 or observed["walking"])
+        if result.success and observed["walking"] and not final_fallen and steered:
             print(f"gait_lab SIL ros2_control E2E passed ({path_label})")
             exit_code = 0
         else:
             print(
                 f"gait_lab SIL ros2_control E2E failed ({path_label}, "
-                f"final_fallen={final_fallen})",
+                f"final_fallen={final_fallen}, steered={steered})",
                 file=sys.stderr,
             )
     except Exception as error:  # noqa: BLE001

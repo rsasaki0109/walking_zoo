@@ -82,9 +82,14 @@ ros2 launch locomotion_ros2_bringup gait_lab_sil_ros2_control_runtime.launch.py 
 * **B3 deep** — optional `GaitLabSilJointForwardController` plugin; enable with
   `use_ros2_control_forward:=true` on the ros2_control launch (default remains
   the direct `joint_commands` policy path).
+* **B3 deep (embedded RL)** — `GaitLabSilRlResidualController` runs npz MLP
+  inference in C++; enable with `use_embedded_rl_policy:=true` (Python node
+  publishes CPG feedforward + observations only).
+* **B2 (steerable)** — `controller:=rl-steerable` on the split stack; E2E
+  `--steer` uses the embedded relay path.
 
-Verified by `tools/check_gait_lab_sil_ros2_control_e2e.py` (and `--forward`;
-needs MuJoCo).
+Verified by `tools/check_gait_lab_sil_ros2_control_e2e.py` (`--forward`,
+`--embedded`, `--steer`; needs MuJoCo).
 
 ### Driving it from Nav2
 

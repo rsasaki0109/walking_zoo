@@ -7,4 +7,12 @@
       Queued forwarder from gait_lab policy joint targets into ros2_control position commands.
     </description>
   </class>
+  <class
+    name="locomotion_ros2_gait_lab_sil/GaitLabSilRlResidualController"
+    type="locomotion_ros2_gait_lab_sil::GaitLabSilRlResidualController"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Embedded gait_lab RL residual inference from observation + CPG feedforward topics.
+    </description>
+  </class>
 </library>

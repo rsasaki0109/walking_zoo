@@ -599,6 +599,13 @@
   even when stand targets match the reported state. Both
   `check_gait_lab_sil_ros2_control_e2e.py` and `--forward` pass with
   `rl-residual`.
+- **B2 first rung: rl-steerable on ros2_control SIL.** Extended
+  `check_gait_lab_sil_ros2_control_e2e.py` with `--steer` (yaw velocity goal on
+  the embedded 500 Hz relay path with `rl-steerable`).
+- **B3 deep first rung: embedded C++ RL policy.** Added `GaitLabRlPolicy` (npz
+  loader + MLP), `GaitLabSilRlResidualController`, `use_embedded_rl_policy:=true`
+  launch mode, and gtest coverage. Python gait node publishes CPG feedforward and
+  policy observations; inference runs in the ros2_control plugin.
 - **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
   `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
   `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is

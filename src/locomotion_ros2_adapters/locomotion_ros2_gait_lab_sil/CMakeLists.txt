@@ -56,6 +56,8 @@ pluginlib_export_plugin_description_file(hardware_interface plugins_ros2_control
 
 add_library(${PROJECT_NAME}_ros2_control_controllers SHARED
   src/gait_lab_sil_joint_forward_controller.cpp
+  src/gait_lab_sil_rl_residual_controller.cpp
+  src/gait_lab_rl_policy.cpp
 )
 target_compile_features(${PROJECT_NAME}_ros2_control_controllers PUBLIC cxx_std_17)
 target_include_directories(${PROJECT_NAME}_ros2_control_controllers PUBLIC
@@ -100,6 +102,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_gait_lab_sil_model test/test_gait_lab_sil_model.cpp)
   if(TARGET test_gait_lab_sil_model)
     target_link_libraries(test_gait_lab_sil_model ${PROJECT_NAME})
+  endif()
+  ament_add_gtest(test_gait_lab_rl_policy test/test_gait_lab_rl_policy.cpp)
+  if(TARGET test_gait_lab_rl_policy)
+    target_link_libraries(test_gait_lab_rl_policy ${PROJECT_NAME}_ros2_control_controllers)
   endif()
 endif()
 

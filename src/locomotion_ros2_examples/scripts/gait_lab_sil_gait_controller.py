@@ -63,16 +63,27 @@ class GaitLabSilGaitController(Node):
         self.declare_parameter("joint_commands_topic", "/gait_lab_sil/ros2_control/joint_commands")
         self.declare_parameter("joint_states_topic", "/gait_lab_sil/ros2_control/joint_states")
         self.declare_parameter("use_ros2_control_forward", False)
+        self.declare_parameter("use_embedded_rl_policy", False)
         self.declare_parameter(
             "ros2_control_forward_topic", "/gait_lab_sil_gait_forward/commands")
+        self.declare_parameter(
+            "embedded_rl_observation_topic",
+            "/gait_lab_sil_rl_residual/observation")
+        self.declare_parameter(
+            "embedded_rl_feedforward_topic",
+            "/gait_lab_sil_rl_residual/feedforward")
 
         controller_name = self.get_parameter("controller").value
         self.substeps = int(self.get_parameter("substeps").value)
         self.move_threshold = float(self.get_parameter("move_threshold").value)
         self.use_ros2_control_forward = bool(
             self.get_parameter("use_ros2_control_forward").value)
+        self.use_embedded_rl_policy = bool(
+            self.get_parameter("use_embedded_rl_policy").value)
         commands_topic = self.get_parameter("joint_commands_topic").value
         forward_topic = self.get_parameter("ros2_control_forward_topic").value
+        embedded_obs_topic = self.get_parameter("embedded_rl_observation_topic").value
+        embedded_ff_topic = self.get_parameter("embedded_rl_feedforward_topic").value
 
         sys.path.insert(0, _locate_gait_lab())
         from gait_lab import CONTROLLERS, Command, G1Model  # noqa: E402
@@ -113,14 +124,29 @@ class GaitLabSilGaitController(Node):
             self._on_physics_snapshot, snapshot_qos)
         self.joint_cmd_pub = None
         self.forward_cmd_pub = None
-        if self.use_ros2_control_forward:
+        self.embedded_obs_pub = None
+        self.embedded_ff_pub = None
+        if self.use_embedded_rl_policy:
+            if not hasattr(self.controller, "feedforward_and_observation"):
+                raise RuntimeError(
+                    f"controller {controller_name!r} does not support embedded RL policy")
+            self.embedded_obs_pub = self.create_publisher(
+                Float64MultiArray, embedded_obs_topic, 10)
+            self.embedded_ff_pub = self.create_publisher(
+                Float64MultiArray, embedded_ff_topic, 10)
+        elif self.use_ros2_control_forward:
             self.forward_cmd_pub = self.create_publisher(
                 Float64MultiArray, forward_topic, 10)
         else:
             self.joint_cmd_pub = self.create_publisher(JointState, commands_topic, 10)
 
         hz = float(self.get_parameter("control_hz").value)
-        path = "ros2_control forward" if self.use_ros2_control_forward else "direct joint_commands"
+        if self.use_embedded_rl_policy:
+            path = "embedded C++ RL residual"
+        elif self.use_ros2_control_forward:
+            path = "ros2_control forward"
+        else:
+            path = "direct joint_commands"
         self.get_logger().info(
             f"gait_lab SIL gait controller up: policy={controller_name} "
             f"({path}, physics_snapshot-driven, ~{hz:.0f} Hz)")
@@ -216,16 +242,48 @@ class GaitLabSilGaitController(Node):
         for _ in range(self.substeps):
             if walking:
                 obs = self.model.observe(self.gait_t)
-                ctrl = self.controller.update(obs, cmd)
+                if self.use_embedded_rl_policy:
+                    ctrl, policy_obs, refresh = self.controller.feedforward_and_observation(
+                        obs, cmd)
+                    if refresh:
+                        self._publish_embedded_rl(ctrl, policy_obs)
+                    else:
+                        self._publish_embedded_ff(ctrl)
+                else:
+                    ctrl = self.controller.update(obs, cmd)
+                    self._publish_joint_command(ctrl)
                 self.gait_t += self.model.timestep
             else:
                 ctrl = self.stand
-            self._publish_joint_command(ctrl)
+                if self.use_embedded_rl_policy:
+                    self._publish_embedded_rl_stand()
+                else:
+                    self._publish_joint_command(ctrl)
             self.model.data.ctrl[:] = ctrl
             self.model.step()
 
         if float(self.model.data.qpos[2]) < 0.5:
             self.fallen = True
+
+    def _publish_embedded_rl(self, ctrl, policy_obs):
+        ff = [float(ctrl[self.model.actuator(name)]) for name in LEG_ACTUATORS]
+        obs_msg = Float64MultiArray()
+        obs_msg.data = [float(v) for v in policy_obs]
+        ff_msg = Float64MultiArray()
+        ff_msg.data = ff
+        self.embedded_obs_pub.publish(obs_msg)
+        self.embedded_ff_pub.publish(ff_msg)
+
+    def _publish_embedded_ff(self, ctrl):
+        ff_msg = Float64MultiArray()
+        ff_msg.data = [float(ctrl[self.model.actuator(name)]) for name in LEG_ACTUATORS]
+        self.embedded_ff_pub.publish(ff_msg)
+
+    def _publish_embedded_rl_stand(self):
+        ff = [float(self.stand[self.model.actuator(name)]) for name in LEG_ACTUATORS]
+        ff_msg = Float64MultiArray()
+        ff_msg.data = ff
+        self.embedded_ff_pub.publish(ff_msg)
 
     def _publish_joint_command(self, ctrl):
         positions = [float(ctrl[self.model.actuator(name)]) for name in LEG_ACTUATORS]
