@@ -21,14 +21,24 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 
+def _load_text(path: str) -> str:
+    with open(path, encoding="utf-8") as handle:
+        return handle.read()
+
+
 def generate_launch_description():
     bringup_share = get_package_share_directory("locomotion_ros2_bringup")
     description_share = get_package_share_directory("locomotion_ros2_description")
-    urdf_path = os.path.join(description_share, "urdf", "g1_sil_ros2_control.urdf")
-    controllers_path = os.path.join(
+    urdf_direct_path = os.path.join(
+        description_share, "urdf", "g1_sil_ros2_control.urdf")
+    urdf_forward_path = os.path.join(
+        description_share, "urdf", "g1_sil_ros2_control_forward.urdf")
+    controllers_direct_path = os.path.join(
         bringup_share, "config", "gait_lab_sil_ros2_control.yaml")
-    with open(urdf_path, encoding="utf-8") as urdf_file:
-        robot_description = urdf_file.read()
+    controllers_forward_path = os.path.join(
+        bringup_share, "config", "gait_lab_sil_ros2_control_forward.yaml")
+    robot_description_direct = _load_text(urdf_direct_path)
+    robot_description_forward = _load_text(urdf_forward_path)
 
     menagerie_path = LaunchConfiguration("menagerie_path")
     gait_lab_path = LaunchConfiguration("gait_lab_path")
@@ -41,23 +51,46 @@ def generate_launch_description():
         "MUJOCO_GL": "egl",
     }
 
-    robot_state_publisher = Node(
+    robot_state_publisher_direct = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
         name="robot_state_publisher",
         output="screen",
-        parameters=[{"robot_description": robot_description}],
+        parameters=[{"robot_description": robot_description_direct}],
+        condition=UnlessCondition(use_ros2_control_forward),
     )
 
-    ros2_control_node = Node(
+    robot_state_publisher_forward = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        name="robot_state_publisher",
+        output="screen",
+        parameters=[{"robot_description": robot_description_forward}],
+        condition=IfCondition(use_ros2_control_forward),
+    )
+
+    ros2_control_node_direct = Node(
         package="controller_manager",
         executable="ros2_control_node",
         name="controller_manager",
         output="screen",
         parameters=[
-            {"robot_description": robot_description},
-            controllers_path,
+            {"robot_description": robot_description_direct},
+            controllers_direct_path,
         ],
+        condition=UnlessCondition(use_ros2_control_forward),
+    )
+
+    ros2_control_node_forward = Node(
+        package="controller_manager",
+        executable="ros2_control_node",
+        name="controller_manager",
+        output="screen",
+        parameters=[
+            {"robot_description": robot_description_forward},
+            controllers_forward_path,
+        ],
+        condition=IfCondition(use_ros2_control_forward),
     )
 
     direct_spawner = Node(
@@ -111,7 +144,9 @@ def generate_launch_description():
         }],
     )
 
-    sim_node = Node(
+    # Both paths use 10 cmds/tick (~500 cmd/s). Forward path relies on 500 Hz
+    # ros2_control to drain the burst and relay_commands to step MuJoCo.
+    sim_node_direct = Node(
         package="locomotion_ros2_examples",
         executable="gait_lab_sil_sim.py",
         name="gait_lab_sil_sim",
@@ -121,10 +156,27 @@ def generate_launch_description():
             "controller": controller,
             "ros2_control_split": True,
             "batch_substeps_per_command": False,
+            "substeps": 10,
         }],
+        condition=UnlessCondition(use_ros2_control_forward),
     )
 
-    gait_controller_node = Node(
+    sim_node_forward = Node(
+        package="locomotion_ros2_examples",
+        executable="gait_lab_sil_sim.py",
+        name="gait_lab_sil_sim",
+        output="screen",
+        additional_env=sim_env,
+        parameters=[{
+            "controller": controller,
+            "ros2_control_split": True,
+            "batch_substeps_per_command": False,
+            "substeps": 10,
+        }],
+        condition=IfCondition(use_ros2_control_forward),
+    )
+
+    gait_controller_node_direct = Node(
         package="locomotion_ros2_examples",
         executable="gait_lab_sil_gait_controller.py",
         name="gait_lab_sil_gait_controller",
@@ -132,9 +184,25 @@ def generate_launch_description():
         additional_env=sim_env,
         parameters=[{
             "controller": controller,
-            "use_ros2_control_forward": use_ros2_control_forward,
+            "use_ros2_control_forward": False,
+            "substeps": 10,
+        }],
+        condition=UnlessCondition(use_ros2_control_forward),
+    )
+
+    gait_controller_node_forward = Node(
+        package="locomotion_ros2_examples",
+        executable="gait_lab_sil_gait_controller.py",
+        name="gait_lab_sil_gait_controller",
+        output="screen",
+        additional_env=sim_env,
+        parameters=[{
+            "controller": controller,
+            "use_ros2_control_forward": True,
+            "substeps": 10,
             "ros2_control_forward_topic": "/gait_lab_sil_gait_forward/commands",
         }],
+        condition=IfCondition(use_ros2_control_forward),
     )
 
     delayed_spawner = TimerAction(
@@ -146,7 +214,12 @@ def generate_launch_description():
     # forward-controller path does not drop the first command burst.
     delayed_sim_stack = TimerAction(
         period=3.0,
-        actions=[sim_node, gait_controller_node],
+        actions=[
+            sim_node_direct,
+            sim_node_forward,
+            gait_controller_node_direct,
+            gait_controller_node_forward,
+        ],
     )
 
     return LaunchDescription([
@@ -155,8 +228,10 @@ def generate_launch_description():
         DeclareLaunchArgument("gait_lab_path", default_value=""),
         DeclareLaunchArgument("controller", default_value="rl-residual"),
         DeclareLaunchArgument("use_ros2_control_forward", default_value="false"),
-        robot_state_publisher,
-        ros2_control_node,
+        robot_state_publisher_direct,
+        robot_state_publisher_forward,
+        ros2_control_node_direct,
+        ros2_control_node_forward,
         delayed_spawner,
         delayed_sim_stack,
         runtime_node,

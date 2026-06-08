@@ -183,8 +183,10 @@ class GaitLabSilSim(Node):
             self.create_subscription(
                 JointState, commands_topic, self._on_joint_commands, 10)
             self.joint_state_pub = self.create_publisher(JointState, states_topic, 10)
+            snapshot_qos = QoSProfile(depth=1)
+            snapshot_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
             self.physics_snapshot_pub = self.create_publisher(
-                Float64MultiArray, "gait_lab_sil/physics_snapshot", 10)
+                Float64MultiArray, "gait_lab_sil/physics_snapshot", snapshot_qos)
         else:
             states_topic = None
 

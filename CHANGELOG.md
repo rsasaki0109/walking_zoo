@@ -592,6 +592,13 @@
   `GaitLabSilJointForwardController`, `use_ros2_control_forward:=true` launch
   arg, hardware `write()` relay, delayed sim/policy start, and E2E `--forward`
   flag. Default launch still uses the direct `joint_commands` path (E2E verified).
+- **B3 deep: forward path 500 Hz E2E.** Split controller configs (50 Hz direct,
+  500 Hz forward), `relay_commands` URDF param on `GaitLabSilTopicSystem`,
+  `g1_sil_ros2_control_forward.urdf`, latched `physics_snapshot` QoS to break
+  the policy/sim bootstrap deadlock, and per-cycle hardware relay so MuJoCo steps
+  even when stand targets match the reported state. Both
+  `check_gait_lab_sil_ros2_control_e2e.py` and `--forward` pass with
+  `rl-residual`.
 - **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
   `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
   `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is

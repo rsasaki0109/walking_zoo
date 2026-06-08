@@ -667,9 +667,10 @@ of gravity moves from widening the runtime to closing the gait map:
   `joint_state_broadcaster`, and E2E check. Legacy monolithic launch unchanged.
 - [x] **B3 deep first rung** — `GaitLabSilJointForwardController` plugin
   (queued `~/commands` → position command interfaces).
-- [x] **B3 deep second rung** — launch `use_ros2_control_forward:=true`, hardware
-  `write()` to sim, delayed sim/policy start, and E2E `--forward` flag (direct
-  path verified; forward walking still needs 500 Hz tuning).
+- [x] **B3 deep second rung** — launch `use_ros2_control_forward:=true`, split
+  50/500 Hz configs (`relay_commands`, forward URDF), latched `physics_snapshot`,
+  hardware `write()` relay every cycle, and E2E `--forward` (direct + forward
+  walking verified).
 - [ ] **B3 deep** — move policy inference into the controller plugin (C++ or
   embedded), not only a forwarder node.
 - [ ] **B4** — drive the SIL robot from a Nav2 goal through a steering gait

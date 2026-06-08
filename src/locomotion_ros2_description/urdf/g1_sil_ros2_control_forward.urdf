@@ -82,7 +82,7 @@
       <plugin>locomotion_ros2_gait_lab_sil/GaitLabSilTopicSystem</plugin>
       <param name="joint_commands_topic">/gait_lab_sil/ros2_control/joint_commands</param>
       <param name="joint_states_topic">/gait_lab_sil/ros2_control/joint_states</param>
-      <param name="relay_commands">false</param>
+      <param name="relay_commands">true</param>
       <param name="trigger_joint_command_threshold">-1.0</param>
     </hardware>
     <joint name="left_hip_pitch_joint">

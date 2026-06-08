@@ -106,9 +106,11 @@ class GaitLabSilGaitController(Node):
         latched.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self.create_subscription(String, "gait_lab_sil/control", self._on_control, latched)
         self.create_subscription(Vector3, "gait_lab_sil/push", self._on_push, 10)
+        snapshot_qos = QoSProfile(depth=1)
+        snapshot_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self.create_subscription(
             Float64MultiArray, "gait_lab_sil/physics_snapshot",
-            self._on_physics_snapshot, 10)
+            self._on_physics_snapshot, snapshot_qos)
         self.joint_cmd_pub = None
         self.forward_cmd_pub = None
         if self.use_ros2_control_forward:
@@ -137,6 +139,7 @@ class GaitLabSilGaitController(Node):
         signal = msg.data
         if signal == "activate":
             self._reset_robot()
+            self._state_synced = False
             self.active = True
             self.estop = False
         elif signal == "deactivate":

@@ -57,6 +57,7 @@ private:
 
   std::string joint_states_topic_{"/gait_lab_sil/ros2_control/joint_states"};
   std::string joint_commands_topic_{"/gait_lab_sil/ros2_control/joint_commands"};
+  bool relay_commands_{false};
 };
 
 }  // namespace locomotion_ros2_gait_lab_sil
