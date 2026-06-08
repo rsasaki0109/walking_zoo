@@ -107,6 +107,43 @@ A gait validated here does not stay in the lab: the
 software-in-the-loop robot behind the real runtime and safety pipeline, so the
 benchmark and the product share one gait.
 
+### Run any benchmarked gait through the runtime
+
+The SIL launch takes a `controller:=` argument, so any `gait_lab` controller can
+be dispatched through the real runtime + safety pipeline — not just the default
+`rl-residual`:
+
+```bash
+ros2 launch locomotion_ros2_bringup gait_lab_sil_runtime.launch.py controller:=dcm-walk
+ros2 launch locomotion_ros2_bringup gait_lab_sil_runtime.launch.py controller:=capture-point
+```
+
+And the lab's honest benchmark reproduces *on the product path*. For each
+controller, `check_gait_lab_sil_compare.py` brings up the runtime + SIL sim,
+drives one velocity command through the safety pipeline, and scores the result
+from `/locomotion_ros2/state` and the robot's base odometry — bad gaits still
+actually fall over, now behind the runtime:
+
+```bash
+python3 tools/check_gait_lab_sil_compare.py --horizon 5
+```
+
+```
+controller         forward   survival    minH  status
+stand-hold         -0.000m     5.00s    0.79m  [stand]
+open-loop-cpg      -0.009m     1.30s    0.08m  [FELL]
+balanced-cpg       +0.469m     3.30s    0.08m  [FELL]
+capture-point      +1.036m     1.30s    0.09m  [FELL]
+dcm-walk           +1.093m     1.40s    0.08m  [FELL]
+zmp-preview        +0.690m     2.70s    0.08m  [FELL]
+rl-residual        +0.166m     5.00s    0.77m  [ok]
+```
+
+The footstep walkers walk farthest then topple in ~1–3 s; only `rl-residual`
+survives the full horizon *and* walks — the same verdict as the bare
+`gait_lab` harness, now produced through `/cmd_vel` → runtime → safety →
+adapter → MuJoCo G1. The run writes `compare.json` and `compare.md` evidence.
+
 ## Architecture
 
 ```mermaid
