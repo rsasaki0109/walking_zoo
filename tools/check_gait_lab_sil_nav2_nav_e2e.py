@@ -48,11 +48,16 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=120.0)
     ap.add_argument("--controller", default="rl-steerable",
                     help="gait_lab controller the SIL sim runs")
+    ap.add_argument(
+        "--embedded",
+        action="store_true",
+        help="use ros2_control embedded C++ RL (default: monolithic sim)",
+    )
     args = ap.parse_args()
 
     env = os.environ.copy()
     env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
-    env.setdefault("ROS_DOMAIN_ID", "65")
+    env.setdefault("ROS_DOMAIN_ID", str(60 + (int(time.time()) % 20)))
     env.setdefault("LOCOMOTION_ROS2_GAIT_LAB_PATH", str(REPO / "experiments" / "gait_lab"))
     env.setdefault("MUJOCO_GL", "egl")
     os.environ["RMW_IMPLEMENTATION"] = env["RMW_IMPLEMENTATION"]
@@ -63,10 +68,13 @@ def main() -> int:
     sim_python = env.get("GAIT_LAB_SIL_SIM_PYTHON", "")
     if sim_python:
         env["PATH"] = os.path.dirname(sim_python) + os.pathsep + env.get("PATH", "")
-    launch = subprocess.Popen(
-        ["ros2", "launch", "locomotion_ros2_bringup", "gait_lab_sil_nav2.launch.py",
-         f"controller:={args.controller}"],
-        env=env, preexec_fn=os.setsid)
+    launch_args = [
+        "ros2", "launch", "locomotion_ros2_bringup", "gait_lab_sil_nav2.launch.py",
+        f"controller:={args.controller}",
+    ]
+    if not args.embedded:
+        launch_args.append("use_ros2_control_embedded:=false")
+    launch = subprocess.Popen(launch_args, env=env, preexec_fn=os.setsid)
 
     node = None
     rclpy = None
@@ -74,44 +82,105 @@ def main() -> int:
     try:
         import rclpy
         from rclpy.action import ActionClient
+        from geometry_msgs.msg import Twist
         from nav_msgs.msg import Odometry
-        from nav2_msgs.action import NavigateToPose
+        from nav2_msgs.action import FollowPath, NavigateToPose
         from locomotion_ros2_msgs.msg import WalkingState
+        from tf2_ros import Buffer, TransformListener
 
         rclpy.init(args=None)
         node = rclpy.create_node("gait_lab_sil_nav_e2e")
         latest = {}
+        tf_buffer = Buffer()
+        TransformListener(tf_buffer, node)
         node.create_subscription(Odometry, "/odom",
                                  lambda m: latest.__setitem__("odom", m), 10)
         node.create_subscription(
             WalkingState, "/locomotion_ros2/state",
             lambda m: latest.__setitem__("state", m), 10)
 
-        # Wait for the SIL robot to be active and Nav2's action server to be up.
+        def tf_ready() -> bool:
+            try:
+                tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time())
+                return True
+            except Exception:  # noqa: BLE001
+                return False
+
+        from lifecycle_msgs.srv import GetState
+
         nav_client = ActionClient(node, NavigateToPose, "navigate_to_pose")
-        deadline = time.time() + 90.0
+        follow_client = ActionClient(node, FollowPath, "follow_path")
+        lifecycle_clients = {
+            name: node.create_client(GetState, f"/{name}/get_state")
+            for name in (
+                "planner_server", "controller_server", "bt_navigator",
+            )
+        }
+
+        def lifecycle_active(name: str) -> bool:
+            client = lifecycle_clients[name]
+            if not client.service_is_ready():
+                return False
+            req = GetState.Request()
+            fut = client.call_async(req)
+            rclpy.spin_until_future_complete(node, fut, timeout_sec=1.0)
+            result = fut.result()
+            return result is not None and result.current_state.id == 3
+
+        deadline = time.time() + (120.0 if not args.embedded else 150.0)
         ready = False
         while time.time() < deadline:
             rclpy.spin_once(node, timeout_sec=0.2)
             s = latest.get("state")
+            nav2_active = all(lifecycle_active(n) for n in lifecycle_clients)
             if (s and s.adapter_connected
                     and s.lifecycle_state == WalkingState.LIFECYCLE_ACTIVE
-                    and nav_client.server_is_ready()):
+                    and nav_client.server_is_ready()
+                    and follow_client.server_is_ready()
+                    and nav2_active
+                    and tf_ready()
+                    and latest.get("odom") is not None):
                 ready = True
                 break
         if not ready:
-            print("SIL robot or Nav2 action server not ready in time", file=sys.stderr)
+            print("SIL robot, TF map->base_link, or Nav2 not ready in time",
+                  file=sys.stderr)
             return 1
-        print("SIL robot active and Nav2 up; sending NavigateToPose goal "
-              f"({args.goal_x}, {args.goal_y})")
+        # Lifecycle activate finishes before action servers accept goals.
+        settle_end = time.time() + 5.0
+        while time.time() < settle_end:
+            rclpy.spin_once(node, timeout_sec=0.2)
+        stack = "ros2_control_embedded" if args.embedded else "monolithic"
+        print(f"SIL robot active ({stack}) and Nav2 up")
+
+        # Prime the velocity gait before the behaviour tree takes over /cmd_vel.
+        cmd_pub = node.create_publisher(Twist, "/cmd_vel", 10)
+        prime = Twist()
+        prime.linear.x = 0.25
+        prime_end = time.time() + 2.5
+        while time.time() < prime_end:
+            cmd_pub.publish(prime)
+            rclpy.spin_once(node, timeout_sec=0.1)
 
         goal = NavigateToPose.Goal()
         goal.pose.header.frame_id = "map"
-        goal.pose.header.stamp = node.get_clock().now().to_msg()
         goal.pose.pose.position.x = args.goal_x
         goal.pose.pose.position.y = args.goal_y
         goal.pose.pose.orientation.w = 1.0
-        nav_client.send_goal_async(goal)
+
+        goal_handle = None
+        for attempt in range(1, 4):
+            goal.pose.header.stamp = node.get_clock().now().to_msg()
+            print(f"NavigateToPose attempt {attempt} -> ({args.goal_x}, {args.goal_y})")
+            goal_future = nav_client.send_goal_async(goal)
+            rclpy.spin_until_future_complete(node, goal_future, timeout_sec=15.0)
+            goal_handle = goal_future.result()
+            if goal_handle is not None and goal_handle.accepted:
+                break
+            time.sleep(1.0)
+        if goal_handle is None or not goal_handle.accepted:
+            print("NavigateToPose goal rejected", file=sys.stderr)
+            return 1
 
         best = float("inf")
         fell = False
@@ -134,8 +203,8 @@ def main() -> int:
         print(f"nav result: reached={reached} closest={best:.2f}m "
               f"tolerance={args.tolerance}m fell={fell}")
         if reached and not fell:
-            print("gait_lab SIL full-Nav2 E2E passed: the stack planned and walked "
-                  "the steerable RL gait to the goal")
+            print(f"gait_lab SIL full-Nav2 E2E passed ({stack}): the stack planned "
+                  "and walked the steerable RL gait to the goal")
             exit_code = 0
         else:
             print("gait_lab SIL full-Nav2 E2E failed", file=sys.stderr)

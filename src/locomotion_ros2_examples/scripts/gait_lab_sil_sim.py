@@ -201,7 +201,13 @@ class GaitLabSilSim(Node):
         self._split_steps_this_tick = 0
         if self.ros2_control_split:
             self.timer = None
+            # Nav2 needs a continuous odom->base_link TF; split mode only steps
+            # physics on joint commands, so publish state/odom on a timer too.
+            self._split_publish_timer = self.create_timer(
+                1.0 / hz, self._split_periodic_publish)
             self._publish_ros2_control_joint_states()
+            if self.publish_odom:
+                self._publish_odom()
         else:
             self.timer = self.create_timer(1.0 / hz, self._tick)
         mode = "ros2_control split" if self.ros2_control_split else "monolithic"
@@ -232,6 +238,8 @@ class GaitLabSilSim(Node):
             self.estop = False
             if self.ros2_control_split:
                 self._publish_ros2_control_joint_states()
+                if self.publish_odom:
+                    self._publish_odom()
                 self._publish_state(False)
         elif signal == "deactivate":
             self.active = False
@@ -276,6 +284,15 @@ class GaitLabSilSim(Node):
     # -- sim loop ----------------------------------------------------------
     def _commanded_to_move(self) -> bool:
         return self.moving
+
+    def _split_periodic_publish(self):
+        """Keep joint_states, odom, TF, and WalkingState fresh between commands."""
+        self._publish_ros2_control_joint_states()
+        if self.publish_odom:
+            self._publish_odom()
+        walking = (self.active and not self.estop and not self.fallen
+                   and self._commanded_to_move())
+        self._publish_state(walking)
 
     def _publish_ros2_control_joint_states(self):
         msg = JointState()
@@ -457,7 +474,10 @@ class GaitLabSilSim(Node):
         # Cast through float(): rpy is a numpy array, so naive comparisons yield
         # numpy.bool_, which the ROS message C extension rejects (it asserts a
         # native Python bool on the wire).
-        upright = abs(float(rpy[0])) < 0.4 and abs(float(rpy[1])) < 0.4
+        # Walking gaits oscillate more than a static stand; keep Nav2 cmd_vel flowing.
+        roll_lim, pitch_lim = (0.55, 0.55) if walking else (0.4, 0.4)
+        upright = (abs(float(rpy[0])) < roll_lim
+                   and abs(float(rpy[1])) < pitch_lim)
 
         s.lifecycle_state = (
             WalkingState.LIFECYCLE_ESTOPPED if self.estop else

@@ -1270,4 +1270,5 @@ def CONTROLLERS() -> list[GaitController]:
         ZMPPreviewWalk(),
         LearnedFeedbackWalk(),
         RLResidualWalk(),
+        RLSteerableWalk(),
     ]

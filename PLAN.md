@@ -677,8 +677,11 @@ of gravity moves from widening the runtime to closing the gait map:
   and runs MLP inference in C++ (`use_embedded_rl_policy:=true`; Python node
   publishes CPG feedforward + observation only).
 - [ ] **B3 deep** — move full CPG + observation builder into the controller plugin.
-- [ ] **B4** — drive the SIL robot from a Nav2 goal through a steering gait
-  (depends on B2).
+- [x] **B4 first rung** — full Nav2 `NavigateToPose` drives monolithic
+  `rl-steerable` SIL to a map goal (`tools/check_gait_lab_sil_nav2_nav_e2e.py`;
+  cmd_vel prime + delayed Nav2 bringup + `rl-steerable` registry).
+- [ ] **B4 embedded** — same E2E on the ros2_control embedded C++ RL path
+  (`--embedded`; TF/50 Hz nav config landed, walk-to-goal still flaky).
 
 ## Definition Of Done For The Next Push
 
