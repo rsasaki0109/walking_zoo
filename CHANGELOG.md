@@ -579,6 +579,15 @@
   roughly doubled) until even a step lands on ground that keeps falling away (~8°). Tested
   by `test_terrain_critical_slope_is_torque_limited_and_stepping_extends_it` and
   `test_slope_biases_the_capturability_frontier_uphill`; suite at 52 gait_lab tests.
+- **B3 first rung: ros2_control-split gait_lab SIL path.** Added
+  `g1_sil_ros2_control.urdf` with `joint_state_topic_hardware_interface`,
+  `gait_lab_sil_gait_controller.py` for policy-only control,
+  `ros2_control_split` mode on `gait_lab_sil_sim.py`,
+  `gait_lab_sil_ros2_control_runtime.launch.py`, and
+  `tools/check_gait_lab_sil_ros2_control_e2e.py`. Split-mode stability now
+  mirrors monolithic timing via per-tick `physics_snapshot` sync, shadow-model
+  substeps, and batched joint commands; `check_gait_lab_sil_ros2_control_e2e.py`
+  passes with `rl-residual`. The legacy monolithic sim launch is unchanged.
 - **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
   `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
   `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is

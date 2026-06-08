@@ -15,8 +15,11 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>geometry_msgs</depend>
+  <depend>hardware_interface</depend>
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>locomotion_ros2_core</depend>
   <depend>locomotion_ros2_msgs</depend>

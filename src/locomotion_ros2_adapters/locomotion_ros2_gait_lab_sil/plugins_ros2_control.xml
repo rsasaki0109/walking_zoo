@@ -1,0 +1,10 @@
+<library path="locomotion_ros2_gait_lab_sil_ros2_control">
+  <class
+    name="locomotion_ros2_gait_lab_sil/GaitLabSilTopicSystem"
+    type="locomotion_ros2_gait_lab_sil::GaitLabSilTopicSystem"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Topic bridge between gait_lab SIL sim joint states/commands and ros2_control.
+    </description>
+  </class>
+</library>

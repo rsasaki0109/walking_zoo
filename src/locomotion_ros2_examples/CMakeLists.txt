@@ -9,6 +9,7 @@ install(
     scripts/mujoco_g1_gait_demo.py
     scripts/mujoco_g1_gait_showcase.py
     scripts/gait_lab_sil_sim.py
+    scripts/gait_lab_sil_gait_controller.py
     scripts/send_estop.py
     scripts/send_mock_cmd_vel.py
     scripts/locomotion_ros2_demo_recorder.py

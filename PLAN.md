@@ -662,8 +662,11 @@ of gravity moves from widening the runtime to closing the gait map:
 - [ ] **B1 deep** — a WBC that walks *and* recovers (torque authority through the
   step). High-risk research; an honest null is an acceptable, publishable outcome.
 - [ ] **B2** — reactive steering that holds the full horizon (depends on B1).
-- [ ] **B3** — `ros2_control`-ify the SIL sim (low-risk breadth between research
-  pushes).
+- [x] **B3 first rung** — ros2_control joint-state bridge for gait_lab SIL: topic
+  hardware interface, split sim (physics) + gait controller (policy),
+  `joint_state_broadcaster`, and E2E check. Legacy monolithic launch unchanged.
+- [ ] **B3 deep** — gait_lab controllers as loadable ros2_control controller
+  plugins (beyond topic bridge + split nodes).
 - [ ] **B4** — drive the SIL robot from a Nav2 goal through a steering gait
   (depends on B2).
 

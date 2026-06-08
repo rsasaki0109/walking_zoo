@@ -1,0 +1,148 @@
+<?xml version="1.0"?>
+<!-- Minimal Unitree G1 leg model for gait_lab SIL ros2_control (topic bridge).
+     Joint names match gait_lab LEG_ACTUATORS and MuJoCo menagerie actuators. -->
+<robot name="unitree_g1_sil">
+  <link name="base_link"/>
+  <link name="left_hip_pitch_link"/>
+  <link name="left_hip_roll_link"/>
+  <link name="left_hip_yaw_link"/>
+  <link name="left_knee_link"/>
+  <link name="left_ankle_pitch_link"/>
+  <link name="left_ankle_roll_link"/>
+  <link name="right_hip_pitch_link"/>
+  <link name="right_hip_roll_link"/>
+  <link name="right_hip_yaw_link"/>
+  <link name="right_knee_link"/>
+  <link name="right_ankle_pitch_link"/>
+  <link name="right_ankle_roll_link"/>
+
+  <joint name="left_hip_pitch_joint" type="revolute">
+    <parent link="base_link"/><child link="left_hip_pitch_link"/>
+    <origin xyz="0 0.1 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="left_hip_roll_joint" type="revolute">
+    <parent link="base_link"/><child link="left_hip_roll_link"/>
+    <origin xyz="0 0.08 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="left_hip_yaw_joint" type="revolute">
+    <parent link="base_link"/><child link="left_hip_yaw_link"/>
+    <origin xyz="0 0.06 0" rpy="0 0 0"/><axis xyz="0 0 1"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="left_knee_joint" type="revolute">
+    <parent link="base_link"/><child link="left_knee_link"/>
+    <origin xyz="0 0.04 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="-0.1" upper="2.8" effort="200" velocity="20"/>
+  </joint>
+  <joint name="left_ankle_pitch_joint" type="revolute">
+    <parent link="base_link"/><child link="left_ankle_pitch_link"/>
+    <origin xyz="0 0.02 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="left_ankle_roll_joint" type="revolute">
+    <parent link="base_link"/><child link="left_ankle_roll_link"/>
+    <origin xyz="0 0.0 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="right_hip_pitch_joint" type="revolute">
+    <parent link="base_link"/><child link="right_hip_pitch_link"/>
+    <origin xyz="0 -0.1 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="right_hip_roll_joint" type="revolute">
+    <parent link="base_link"/><child link="right_hip_roll_link"/>
+    <origin xyz="0 -0.08 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="right_hip_yaw_joint" type="revolute">
+    <parent link="base_link"/><child link="right_hip_yaw_link"/>
+    <origin xyz="0 -0.06 0" rpy="0 0 0"/><axis xyz="0 0 1"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="right_knee_joint" type="revolute">
+    <parent link="base_link"/><child link="right_knee_link"/>
+    <origin xyz="0 -0.04 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="-0.1" upper="2.8" effort="200" velocity="20"/>
+  </joint>
+  <joint name="right_ankle_pitch_joint" type="revolute">
+    <parent link="base_link"/><child link="right_ankle_pitch_link"/>
+    <origin xyz="0 -0.02 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+  <joint name="right_ankle_roll_joint" type="revolute">
+    <parent link="base_link"/><child link="right_ankle_roll_link"/>
+    <origin xyz="0 0.0 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit lower="-2.5" upper="2.5" effort="200" velocity="20"/>
+  </joint>
+
+  <ros2_control name="g1_sil" type="system">
+    <hardware>
+      <plugin>locomotion_ros2_gait_lab_sil/GaitLabSilTopicSystem</plugin>
+      <param name="joint_commands_topic">/gait_lab_sil/ros2_control/joint_commands</param>
+      <param name="joint_states_topic">/gait_lab_sil/ros2_control/joint_states</param>
+      <param name="trigger_joint_command_threshold">-1.0</param>
+    </hardware>
+    <joint name="left_hip_pitch_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="left_hip_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="left_hip_yaw_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="left_knee_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="left_ankle_pitch_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="left_ankle_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_hip_pitch_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_hip_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_hip_yaw_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_knee_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_ankle_pitch_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_ankle_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+</robot>

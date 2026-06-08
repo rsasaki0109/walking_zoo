@@ -34,9 +34,26 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped, TwistStamped, Vector3
 from nav_msgs.msg import Odometry
-from std_msgs.msg import String
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64MultiArray, String
 from tf2_ros import TransformBroadcaster
 from locomotion_ros2_msgs.msg import WalkingState
+
+
+LEG_ACTUATORS = [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+]
 
 
 def _locate_gait_lab() -> str:
@@ -80,7 +97,15 @@ class GaitLabSilSim(Node):
         self.declare_parameter("publish_odom", True)
         self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
+        # When true, physics runs here and a separate gait_lab_sil_gait_controller
+        # node publishes ros2_control joint commands (B3 split path).
+        self.declare_parameter("ros2_control_split", False)
+        self.declare_parameter(
+            "joint_commands_topic", "/gait_lab_sil/ros2_control/joint_commands")
+        self.declare_parameter(
+            "joint_states_topic", "/gait_lab_sil/ros2_control/joint_states")
 
+        self.ros2_control_split = bool(self.get_parameter("ros2_control_split").value)
         controller_name = self.get_parameter("controller").value
         self.substeps = int(self.get_parameter("substeps").value)
         self.move_threshold = float(self.get_parameter("move_threshold").value)
@@ -95,11 +120,14 @@ class GaitLabSilSim(Node):
         self._Command = Command
         self.model = G1Model()
         controllers = {c.name: c for c in CONTROLLERS()}
-        if controller_name not in controllers:
-            raise RuntimeError(
-                f"unknown controller {controller_name!r}; "
-                f"choices: {sorted(controllers)}")
-        self.controller = controllers[controller_name]
+        if not self.ros2_control_split:
+            if controller_name not in controllers:
+                raise RuntimeError(
+                    f"unknown controller {controller_name!r}; "
+                    f"choices: {sorted(controllers)}")
+            self.controller = controllers[controller_name]
+        else:
+            self.controller = None
         self.controller_name = controller_name
 
         # Robot/lifecycle state.
@@ -144,6 +172,18 @@ class GaitLabSilSim(Node):
         self.create_subscription(Vector3, "gait_lab_sil/push", self._on_push, 10)
         self.state_pub = self.create_publisher(WalkingState, "gait_lab_sil/robot_state", 10)
 
+        self._joint_commands = None
+        if self.ros2_control_split:
+            commands_topic = self.get_parameter("joint_commands_topic").value
+            states_topic = self.get_parameter("joint_states_topic").value
+            self.create_subscription(
+                JointState, commands_topic, self._on_joint_commands, 10)
+            self.joint_state_pub = self.create_publisher(JointState, states_topic, 10)
+            self.physics_snapshot_pub = self.create_publisher(
+                Float64MultiArray, "gait_lab_sil/physics_snapshot", 10)
+        else:
+            states_topic = None
+
         self.publish_odom = bool(self.get_parameter("publish_odom").value)
         self.odom_frame = str(self.get_parameter("odom_frame").value)
         self.base_frame = str(self.get_parameter("base_frame").value)
@@ -152,9 +192,15 @@ class GaitLabSilSim(Node):
             self.tf_broadcaster = TransformBroadcaster(self)
 
         hz = float(self.get_parameter("control_hz").value)
-        self.timer = self.create_timer(1.0 / hz, self._tick)
+        self._split_steps_this_tick = 0
+        if self.ros2_control_split:
+            self.timer = None
+            self._publish_ros2_control_joint_states()
+        else:
+            self.timer = self.create_timer(1.0 / hz, self._tick)
+        mode = "ros2_control split" if self.ros2_control_split else "monolithic"
         self.get_logger().info(
-            f"gait_lab SIL sim up: controller={controller_name}, "
+            f"gait_lab SIL sim up ({mode}): controller={controller_name}, "
             f"{self.substeps} mj_steps/tick @ {hz:.0f} Hz")
 
     # -- bridge inputs -----------------------------------------------------
@@ -178,6 +224,8 @@ class GaitLabSilSim(Node):
             self._reset_robot()
             self.active = True
             self.estop = False
+            if self.ros2_control_split:
+                self._publish_ros2_control_joint_states()
         elif signal == "deactivate":
             self.active = False
             self.moving = False
@@ -193,12 +241,21 @@ class GaitLabSilSim(Node):
             self.moving = False
         self.get_logger().info(f"gait_lab SIL control: {signal}")
 
+    def _on_joint_commands(self, msg: JointState):
+        if not self.ros2_control_split:
+            self._joint_commands = dict(zip(msg.name, msg.position))
+            return
+        self._joint_commands = dict(zip(msg.name, msg.position))
+        self._step_ros2_control_split()
+
     def _reset_robot(self):
         self.model.reset()
-        self.controller.reset(self.model)
+        if self.controller is not None:
+            self.controller.reset(self.model)
         self.gait_t = 0.0
         self.walking_prev = False
         self.fallen = False
+        self._joint_commands = None
 
     def _rehome_posture(self):
         """Reset joints/orientation/velocity to the stand keyframe, keeping x/y."""
@@ -213,23 +270,50 @@ class GaitLabSilSim(Node):
     def _commanded_to_move(self) -> bool:
         return self.moving
 
+    def _publish_ros2_control_joint_states(self):
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = list(LEG_ACTUATORS)
+        positions = []
+        velocities = []
+        m = self.model.model
+        for name in LEG_ACTUATORS:
+            act = self.model.actuator(name)
+            qadr = self.model._act_qadr[act]
+            dofadr = m.jnt_dofadr[m.actuator_trnid[act, 0]]
+            positions.append(float(self.model.data.qpos[qadr]))
+            velocities.append(float(self.model.data.qvel[dofadr]))
+        msg.position = positions
+        msg.velocity = velocities
+        self.joint_state_pub.publish(msg)
+        snap = Float64MultiArray()
+        snap.data = (
+            [float(v) for v in self.model.data.qpos]
+            + [float(v) for v in self.model.data.qvel]
+        )
+        self.physics_snapshot_pub.publish(snap)
+
     def _tick(self):
         walking = self.active and not self.estop and not self.fallen \
             and self._commanded_to_move()
+        if not self.ros2_control_split:
+            self._tick_monolithic(walking)
+
+        if float(self.model.data.qpos[2]) < self.fall_height:
+            self.fallen = True
+        if self.renderer is not None:
+            self._render()
+        if self.publish_odom:
+            self._publish_odom()
+        self._publish_state(walking)
+
+    def _tick_monolithic(self, walking: bool):
         if walking and not self.walking_prev:
-            # Rising edge: re-home the posture + zero velocity (keeping world x/y)
-            # and start the gait fresh (phase 0). This makes the gait begin from
-            # exactly the nominal stand condition the policy was verified to walk
-            # the full horizon from — without it, the slightly-varying held-stand
-            # pose occasionally tips this learned (not bulletproof) gait over.
             self._rehome_posture()
             self.controller.reset(self.model)
             self.gait_t = 0.0
         self.walking_prev = walking
 
-        # Apply a queued external shove to the base velocity (after the rising-edge
-        # rehome above, which would otherwise zero it). Only while walking, so the
-        # disturbance lands on an active gait, not a held stand.
         if self._pending_push is not None and walking:
             kx, ky = self._pending_push
             self.model.data.qvel[0] += kx
@@ -238,9 +322,6 @@ class GaitLabSilSim(Node):
             self.get_logger().info(
                 f"gait_lab SIL push applied: ({kx:+.2f}, {ky:+.2f}) m/s")
 
-        # Forward both the sagittal speed and the yaw rate: a steerable controller
-        # (rl-steerable) acts on yaw_rate so Nav2 can turn the robot; the straight
-        # controllers (rl-residual etc.) simply ignore it.
         cmd = self._Command(
             forward_speed=float(self.cmd_speed),
             yaw_rate=float(self.cmd_yaw))
@@ -250,17 +331,49 @@ class GaitLabSilSim(Node):
                 ctrl = self.controller.update(obs, cmd)
                 self.gait_t += self.model.timestep
             else:
-                ctrl = self.stand            # hold the standing pose
+                ctrl = self.stand
             self.model.data.ctrl[:] = ctrl
             self.model.step()
 
+    def _apply_split_joint_commands(self):
+        if self._joint_commands is None:
+            self.model.data.ctrl[:] = self.stand
+            return
+        for name in LEG_ACTUATORS:
+            if name in self._joint_commands and self.model.has_actuator(name):
+                self.model.data.ctrl[self.model.actuator(name)] = float(
+                    self._joint_commands[name])
+
+    def _finish_ros2_control_tick(self, walking: bool):
         if float(self.model.data.qpos[2]) < self.fall_height:
             self.fallen = True
+        self._publish_ros2_control_joint_states()
         if self.renderer is not None:
             self._render()
         if self.publish_odom:
             self._publish_odom()
         self._publish_state(walking)
+
+    def _step_ros2_control_split(self):
+        walking = self.active and not self.estop and not self.fallen \
+            and self._commanded_to_move()
+        if walking and not self.walking_prev and self._split_steps_this_tick == 0:
+            self._rehome_posture()
+        if self._split_steps_this_tick == 0:
+            self.walking_prev = walking
+            if self._pending_push is not None and walking:
+                kx, ky = self._pending_push
+                self.model.data.qvel[0] += kx
+                self.model.data.qvel[1] += ky
+                self._pending_push = None
+                self.get_logger().info(
+                    f"gait_lab SIL push applied: ({kx:+.2f}, {ky:+.2f}) m/s")
+        self._apply_split_joint_commands()
+        self.model.step()
+        self._split_steps_this_tick += 1
+        if self._split_steps_this_tick >= self.substeps:
+            self._split_steps_this_tick = 0
+            self._finish_ros2_control_tick(walking)
 
     # -- odometry / TF -----------------------------------------------------
     def _publish_odom(self):
