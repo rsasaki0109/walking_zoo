@@ -159,7 +159,7 @@ def main() -> int:
         print(f"SIL robot active ({stack}) and Nav2 up")
 
         cmd_pub = node.create_publisher(Twist, "/cmd_vel", 10)
-        def prime_gait(seconds: float = 2.5, speed: float = 0.25):
+        def prime_gait(seconds: float = 2.0, speed: float = 0.22):
             twist = Twist()
             twist.linear.x = speed
             prime_end = time.time() + seconds
@@ -200,7 +200,8 @@ def main() -> int:
         best = float("inf")
         fell_before_reach = False
         reached = False
-        end = time.time() + args.timeout
+        nav_timeout = args.timeout * (1.25 if args.embedded else 1.0)
+        end = time.time() + nav_timeout
         while time.time() < end:
             rclpy.spin_once(node, timeout_sec=0.1)
             st = latest.get("state")

@@ -240,17 +240,23 @@ class GaitLabSilGaitController(Node):
 
         cmd = self._Command(forward_speed=float(self.cmd_speed), yaw_rate=float(self.cmd_yaw))
         if self.use_embedded_rl_policy:
-            # Physics runs in gait_lab_sil_sim; publish obs/ff from the synced snapshot
-            # only (no local mj_step — stepping here desyncs policy input from the sim).
+            # Physics runs in gait_lab_sil_sim; advance the policy decimation counter
+            # once per MuJoCo substep (as update() does) but never mj_step locally.
             if walking:
-                obs = self.model.observe(self.gait_t)
-                ctrl, policy_obs, refresh = self.controller.feedforward_and_observation(
-                    obs, cmd)
-                if refresh:
+                ctrl = self.stand
+                policy_obs = None
+                refresh = False
+                for _ in range(self.substeps):
+                    obs = self.model.observe(self.gait_t)
+                    ctrl, step_obs, refresh = self.controller.feedforward_and_observation(
+                        obs, cmd)
+                    if step_obs is not None:
+                        policy_obs = step_obs
+                    self.gait_t += self.model.timestep
+                if policy_obs is not None:
                     self._publish_embedded_rl(ctrl, policy_obs)
                 else:
                     self._publish_embedded_ff(ctrl)
-                self.gait_t += self.model.timestep * self.substeps
             else:
                 self._publish_embedded_rl_stand()
             return

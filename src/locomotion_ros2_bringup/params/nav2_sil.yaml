@@ -46,7 +46,7 @@ controller_server:
       stateful: True
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.25
+      desired_linear_vel: 0.22
       max_linear_accel: 0.5
       max_linear_decel: 0.5
       lookahead_dist: 0.6
@@ -58,8 +58,8 @@ controller_server:
       min_approach_linear_velocity: 0.1
       approach_velocity_scaling_dist: 0.6
       use_regulated_linear_velocity_scaling: true
-      regulated_linear_scaling_min_radius: 0.9
-      regulated_linear_scaling_min_speed: 0.15
+      regulated_linear_scaling_min_radius: 0.6
+      regulated_linear_scaling_min_speed: 0.12
       allow_reversing: false
       # The straight rl-residual gait cannot turn in place, so DISABLE
       # rotate-to-heading: pure pursuit drives forward along the path and steers
@@ -67,7 +67,7 @@ controller_server:
       # gait would just stall on. The steerable gait can be driven with it on.
       use_rotate_to_heading: false
       rotate_to_heading_min_angle: 0.6
-      max_angular_accel: 0.6
+      max_angular_accel: 0.35
       max_robot_pose_search_dist: 10.0
 
 planner_server:

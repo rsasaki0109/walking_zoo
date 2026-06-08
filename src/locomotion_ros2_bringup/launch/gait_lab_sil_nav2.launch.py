@@ -117,8 +117,9 @@ def generate_launch_description():
             "frame_id": "base_link",
             # SIL: do not gate Nav2 on brief gait balance oscillation.
             "require_ready": False,
-            "legged.max_forward": 0.4,
-            "legged.max_yaw_rate": 0.5,
+            "legged.max_forward": 0.35,
+            "legged.max_yaw_rate": 0.35,
+            "legged.turn_speed_coupling": 1.8,
         }],
     )
 
