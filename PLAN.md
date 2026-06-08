@@ -1,10 +1,11 @@
 # locomotion_ros2 Development Plan
 
-locomotion_ros2 is a ROS2-native Walking Runtime & Adapter Hub for humanoid and
-legged robots. The project should read as "Nav2 for walking robots": not a
-policy zoo, not a simulator, and not a custom gait research stack, but a
-production-shaped runtime layer that makes walking robots controllable through
-stable ROS2 interfaces.
+locomotion_ros2 is ROS2-native locomotion for humanoid and legged robots, spanning
+two halves: an honest, physics-based gait lab (`gait_lab`) where walking
+controllers are developed and benchmarked — bad gaits actually fall over — and a
+production-shaped ROS2 runtime that deploys a chosen gait safely across robot
+SDKs ("Nav2 for walking robots"). The gait is the subject; the runtime is how it
+reaches a robot.
 
 This plan is intentionally practical. The immediate goal is to make the project
 feel useful and exciting within the first minute on GitHub: a real ROS2 runtime,
@@ -15,9 +16,11 @@ gaits, clear safety boundaries, and copy-paste demos that work without hardware.
 
 ### North Star
 
-Any walking robot should be controllable through a common ROS2 walking runtime.
+A gait should be developed and proven honestly, then deployed to any walking
+robot through a common ROS2 runtime — one path from algorithm to robot.
 
-locomotion_ros2 should become the runtime layer between:
+locomotion_ros2 should become both the honest gait lab and the runtime layer
+between:
 
 - Nav2 and walking robots.
 - Teleoperation tools and walking robots.
@@ -29,7 +32,9 @@ locomotion_ros2 should become the runtime layer between:
 
 locomotion_ros2 is:
 
-- A ROS2-native walking runtime.
+- An honest gait lab: walking controllers benchmarked on real physics, with
+  negatives reported (`gait_lab`).
+- A ROS2-native walking runtime that deploys a chosen gait.
 - An adapter hub for humanoid and legged robot SDKs.
 - A safety-first command admission layer.
 - A Nav2 companion for walking platforms.
@@ -39,9 +44,10 @@ locomotion_ros2 is:
 
 locomotion_ros2 is not:
 
-- An RL training repository.
-- A custom simulator.
-- A custom MPC, WBC, or gait algorithm repository.
+- A slide-deck gait collection — controllers must survive physics, or the lab
+  reports that they don't.
+- Its own simulator — `gait_lab` drives existing physics (MuJoCo) and model
+  assets; the runtime is simulator-free by default.
 - A toy visualization project.
 - A vendor-specific Unitree wrapper.
 - A shortcut around safety gates.

@@ -1,14 +1,25 @@
 # locomotion_ros2
 
-ROS2-native Walking Runtime & Adapter Hub for Humanoid and Legged Robots.
+ROS2-native locomotion for humanoid and legged robots — from honest gait
+benchmarks to safe, real-robot deployment.
 
-locomotion_ros2 is not another locomotion policy repository. It is a ROS2-native
-walking runtime layer for operating humanoid and legged robots in the real
-world.
+locomotion_ros2 is two halves that meet in the middle:
 
-Think **Nav2 for walking robots**: Nav2 decides where a robot should go;
-locomotion_ros2 owns how walking commands are admitted, limited, dispatched, and
-observed across robot-specific SDKs.
+- **The locomotion** — [`gait_lab`](experiments/gait_lab) benchmarks walking
+  controllers honestly on real MuJoCo physics, where *bad gaits actually fall
+  over*. Nine controllers (open-loop CPG, capture-point, DCM step adjustment,
+  ZMP preview, a PPO residual, a contact-QP whole-body controller, …) behind one
+  interface, scored on the same Unitree G1 with the same metrics — negatives
+  reported.
+- **The runtime** — a ROS2-native layer that takes a chosen gait and admits,
+  limits, dispatches, and observes it safely across robot-specific SDKs. Think
+  **Nav2 for walking robots**: Nav2 decides *where* a robot should go;
+  locomotion_ros2 owns *how* the walking commands are admitted, limited,
+  dispatched, and observed before they reach a robot.
+
+The gait is the subject; the runtime is how it reaches a robot. A controller
+validated in `gait_lab` drives a simulated Unitree G1 behind the real runtime
+and safety pipeline — the experiment → product loop, wired end to end.
 
 ![MuJoCo Unitree G1 locomotion_ros2 gait showcase](docs/assets/readme/mujoco_unitree_g1_showcase.gif)
 
@@ -48,46 +59,79 @@ command can pass through.
 
 ## Why locomotion_ros2?
 
-Walking robots need a runtime layer, not just policies.
+A locomotion controller is not enough on its own — and neither is a runtime.
 
+- A gait that survives in a slide deck is not a gait that survives on physics.
+  `gait_lab` makes the difference visible: same robot, same metrics, bad gaits
+  fall over, and the negatives are reported.
 - `cmd_vel` alone is too thin for humanoids, quadrupeds, body pose control,
   footsteps, stand/sit modes, and fall handling.
 - Robot SDKs are fragmented across Unitree, Digit, Figure, ANYmal, and other
-  platforms.
-- Learned policies and VLA systems still need a safe runtime boundary before
-  they can operate real walking robots.
-- locomotion_ros2 provides the missing layer between Nav2, teleoperation, learned
-  policies, future VLA systems, and vendor SDKs.
+  platforms, and a learned or model-based gait still needs a safe boundary
+  before it can move a real robot.
+- locomotion_ros2 spans both ends: an honest place to *develop* a gait, and the
+  ROS2 layer that *deploys* it between Nav2, teleoperation, VLA systems, and
+  vendor SDKs.
 
 ## What This Is Not
 
-- Not an RL training repository.
-- Not a simulator.
-- Not a custom MPC, WBC, or gait research stack.
-- Not a vendor-specific Unitree wrapper.
-- Not a path around safety gates.
+- Not magic sim-to-real — `gait_lab` reports exactly where position-controlled
+  gaits fall, and the runtime keeps real-robot motion off by default.
+- Not its own simulator — `gait_lab` drives existing physics (MuJoCo) and robot
+  model assets; the runtime is hardware- and simulator-free by default.
+- Not a vendor-specific Unitree wrapper — the adapter contract is robot-agnostic.
+- Not a path around safety gates — every command passes the safety pipeline.
+
+## The Locomotion: gait_lab
+
+[`gait_lab`](experiments/gait_lab) is where the gaits are developed and judged.
+It drives a real MuJoCo Unitree G1 through physics (position actuators +
+`mj_step`, not kinematic playback), puts every controller behind one small
+`GaitController` interface, and scores them on the same robot with the same
+metrics. A bad gait topples; a good one stays up and walks — apples-to-apples,
+negatives included.
+
+![gait_lab animated gait zoo](experiments/gait_lab/assets/gait_zoo.gif)
+
+*Nine controllers, one command, the same G1 — live. `open-loop-cpg` topples in
+~1 s; the kinematic footstep walkers (`capture-point`, `dcm-walk`,
+`zmp-preview`) walk then fall; only `rl-residual` (CPG + a PPO residual) holds
+the full horizon. That spread — who stays up, who walks farthest, who only looks
+alive — is the honest benchmark this lab produces. It also maps the open
+frontier precisely: clean steerable, push-robust walking needs to leave pure
+position control for a force-aware (torque/ZMP) whole-body controller. See the
+[gait_lab README](experiments/gait_lab/README.md) for the full story.*
+
+A gait validated here does not stay in the lab: the
+`locomotion_ros2_gait_lab_sil` adapter runs a chosen `gait_lab` controller as a
+software-in-the-loop robot behind the real runtime and safety pipeline, so the
+benchmark and the product share one gait.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
+  Lab["gait_lab (develop & benchmark gaits)"] -->|chosen gait| SIL[gait_lab SIL adapter]
   Teleop[Teleop] --> Runtime
   Nav2[Nav2 / cmd_vel] --> Bridge[locomotion_ros2_nav2 bridge] --> Runtime
   VLA[VLA / semantic action] --> Runtime
   Runtime[Walking Runtime Manager] --> Safety[Safety Pipeline]
   Safety --> Adapter[Adapter Plugin Contract]
   Adapter --> Mock[Mock Adapter]
+  Adapter --> SIL
   Adapter --> Unitree[Unitree SDK2 Adapter]
   Adapter --> Future[Digit / Figure / ANYmal / others]
 ```
 
 Core layers:
 
+- `experiments/gait_lab`: the locomotion — honest, physics-based gait benchmarks.
 - `locomotion_ros2_msgs`: stable ROS2 msg/srv/action interfaces.
 - `locomotion_ros2_core`: C++ adapter contract and shared types.
 - `locomotion_ros2_safety`: velocity limiter, watchdog, estop gate.
 - `locomotion_ros2_runtime`: lifecycle runtime, command dispatch, state publishing.
 - `locomotion_ros2_mock_adapter`: always-buildable demo adapter.
+- `locomotion_ros2_gait_lab_sil`: runs a `gait_lab` gait behind the runtime (SIL).
 - `locomotion_ros2_nav2`: `/cmd_vel` bridge for Nav2 integration.
 
 ## Quick Demo
