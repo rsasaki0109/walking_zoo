@@ -620,6 +620,10 @@
   `feedforward_and_observation` once per MuJoCo substep so C++ RL runs at 50 Hz,
   not 5 Hz). Tightened Nav2 yaw/forward caps for `rl-steerable` spiral control;
   `--embedded` Nav2 E2E reaches 2 m at 0.8 m tolerance.
+- **B4 spiral reduction.** Added `legged.yaw_deadband` to the Nav2 cmd_vel bridge
+  shaper (gtest-covered), capped lateral velocity on the SIL Nav2 launch, registered
+  `RLSteerableFootstepWalk` for optional `--controller`, and log `max_lateral` in
+  the Nav2 E2E checker.
 - **Added fall-detected and recovery-blocked visuals to the MuJoCo G1 gait surface.**
   `fall_detected` holds the fallen placeholder pose with FAULT overlay semantics;
   `recovery_blocked` shows a frozen mid-recovery attempt while a walk command is

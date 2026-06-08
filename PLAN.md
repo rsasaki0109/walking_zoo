@@ -662,7 +662,10 @@ of gravity moves from widening the runtime to closing the gait map:
 - [ ] **B1 deep** — a WBC that walks *and* recovers (torque authority through the
   step). High-risk research; an honest null is an acceptable, publishable outcome.
 - [x] **B2 first rung** — `rl-steerable` on the ros2_control-split SIL path
-  (`check_gait_lab_sil_ros2_control_e2e.py --steer`, embedded RL relay).
+  (`check_gait_lab_sil_ros2_control_e2e.py --steer-loose`, embedded RL relay).
+- [x] **B2 quantitative rung** — `--steer` gates signed yaw (≥0.20 rad),
+  travel (≥0.25 m), and no fall during the 8 s ``ExecuteVelocity`` command on
+  embedded ``rl-steerable`` (`tracking` ratio logged).
 - [ ] **B2** — reactive steering that holds the full horizon (depends on B1).
 - [x] **B3 first rung** — ros2_control joint-state bridge for gait_lab SIL: topic
   hardware interface, split sim (physics) + gait controller (policy),

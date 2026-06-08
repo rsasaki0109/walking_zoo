@@ -11,8 +11,11 @@ Pass ``--forward`` to exercise the ``GaitLabSilJointForwardController`` path
 Pass ``--embedded`` for the C++ ``GaitLabSilRlResidualController`` path
 (use_embedded_rl_policy:=true).
 
-Pass ``--steer`` with ``controller:=rl-steerable`` to confirm turning on the
-ros2_control-split stack (yaw command + odometry heading change).
+Pass ``--steer`` for the B2 quantitative gate: ``rl-steerable`` on the embedded
+ros2_control path must walk, turn in the commanded direction, and not fall during
+an ``ExecuteVelocity`` yaw+forward command.
+
+Pass ``--steer-loose`` to keep the first-rung survival check (any heading/travel).
 """
 
 import argparse
@@ -26,6 +29,13 @@ import time
 from contextlib import suppress
 
 REPO = Path(__file__).resolve().parents[1]
+
+# B2 quantitative gate (matches eval_steerable.py arc-ish commands at 8 s).
+STEER_CMD_VX = 0.2
+STEER_CMD_YAW = 0.25
+STEER_DURATION_SEC = 8.0
+STEER_MIN_YAW_RAD = 0.20
+STEER_MIN_TRAVEL_M = 0.25
 
 
 def terminate_process_group(process):
@@ -56,7 +66,12 @@ def main() -> int:
     parser.add_argument(
         "--steer",
         action="store_true",
-        help="send a yaw velocity command and require heading change",
+        help="B2 gate: signed yaw turn + travel on embedded rl-steerable",
+    )
+    parser.add_argument(
+        "--steer-loose",
+        action="store_true",
+        help="first-rung steer check (any yaw/travel while walking)",
     )
     parser.add_argument(
         "--controller",
@@ -68,9 +83,9 @@ def main() -> int:
     if args.forward and args.embedded:
         print("choose only one of --forward or --embedded", file=sys.stderr)
         return 2
-    if args.steer:
+    if args.steer or args.steer_loose:
         args.controller = "rl-steerable"
-    if args.steer and not args.forward:
+    if (args.steer or args.steer_loose) and not args.forward:
         # Turning needs the 500 Hz relay path; embedded RL keeps policy parity.
         args.embedded = True
 
@@ -110,6 +125,8 @@ def main() -> int:
         path_label = "direct"
     if args.steer:
         path_label += "+steer"
+    elif args.steer_loose:
+        path_label += "+steer-loose"
     try:
         import rclpy
         from rclpy.action import ActionClient
@@ -181,7 +198,7 @@ def main() -> int:
         while time.time() < settle_deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
 
-        if args.steer:
+        if args.steer or args.steer_loose:
             odom_deadline = time.time() + 8.0
             while time.time() < odom_deadline and odom_yaw["latest"] is None:
                 rclpy.spin_once(node, timeout_sec=0.1)
@@ -190,10 +207,10 @@ def main() -> int:
                 return 1
 
         goal = ExecuteVelocity.Goal()
-        if args.steer:
-            goal.command.twist.linear.x = 0.2
-            goal.command.twist.angular.z = 0.25
-            goal.duration_sec = 8.0
+        if args.steer or args.steer_loose:
+            goal.command.twist.linear.x = STEER_CMD_VX
+            goal.command.twist.angular.z = STEER_CMD_YAW
+            goal.duration_sec = STEER_DURATION_SEC
         else:
             goal.command.twist.linear.x = 0.3
             goal.duration_sec = 3.0
@@ -215,40 +232,62 @@ def main() -> int:
             print("velocity goal rejected", file=sys.stderr)
             return 1
         result_future = goal_handle.get_result_async()
-        result_deadline = time.time() + (24.0 if args.steer else 18.0)
+        result_deadline = time.time() + (
+            24.0 if (args.steer or args.steer_loose) else 18.0)
         while time.time() < result_deadline and not result_future.done():
             rclpy.spin_once(node, timeout_sec=0.1)
         if not result_future.done():
             print("velocity goal timed out", file=sys.stderr)
             return 1
         result = result_future.result().result
-        yaw_delta = 0.0
+        signed_yaw = 0.0
         travel = 0.0
         if odom_yaw["start"] is not None and odom_yaw["latest"] is not None:
-            yaw_delta = abs(odom_yaw["latest"] - odom_yaw["start"])
-            yaw_delta = min(yaw_delta, abs(yaw_delta - 2.0 * math.pi))
+            signed_yaw = odom_yaw["latest"] - odom_yaw["start"]
+            signed_yaw = math.atan2(
+                math.sin(signed_yaw), math.cos(signed_yaw))
         if odom_xy["start"] is not None and odom_xy["latest"] is not None:
             dx = odom_xy["latest"][0] - odom_xy["start"][0]
             dy = odom_xy["latest"][1] - odom_xy["start"][1]
             travel = math.hypot(dx, dy)
+        yaw_abs = abs(signed_yaw)
+        expected_yaw = STEER_CMD_YAW * STEER_DURATION_SEC
+        tracking = yaw_abs / expected_yaw if expected_yaw > 0 else 0.0
         print(
             f"velocity result: success={result.success} "
             f"walking={observed['walking']} fell={observed['fell']} "
-            f"yaw_delta={yaw_delta:.2f}rad travel={travel:.2f}m"
+            f"signed_yaw={signed_yaw:+.2f}rad travel={travel:.2f}m "
+            f"tracking={tracking:.0%}"
         )
         final = latest.get("state")
         final_fallen = bool(final and final.is_fallen)
-        # B2 first rung: rl-steerable survives a yaw velocity command on the split
-        # stack. Heading/travel are logged; tight tracking is a later milestone.
-        steered = (not args.steer) or (
-            yaw_delta >= 0.06 or travel >= 0.15 or observed["walking"])
-        if result.success and observed["walking"] and not final_fallen and steered:
+        if args.steer:
+            steered = (
+                signed_yaw * STEER_CMD_YAW > 0
+                and yaw_abs >= STEER_MIN_YAW_RAD
+                and travel >= STEER_MIN_TRAVEL_M)
+            fell_ok = not observed["fell"]
+        elif args.steer_loose:
+            steered = (
+                yaw_abs >= 0.06 or travel >= 0.15 or observed["walking"])
+            fell_ok = not final_fallen
+        else:
+            steered = True
+            fell_ok = not final_fallen
+        if result.success and observed["walking"] and fell_ok and steered:
             print(f"gait_lab SIL ros2_control E2E passed ({path_label})")
             exit_code = 0
         else:
+            if (args.steer and steered is False and yaw_abs >= STEER_MIN_YAW_RAD
+                    and signed_yaw * STEER_CMD_YAW <= 0):
+                print(
+                    "steer sign mismatch: positive yaw command but odometry turned "
+                    f"the other way ({signed_yaw:+.2f} rad)",
+                    file=sys.stderr,
+                )
             print(
                 f"gait_lab SIL ros2_control E2E failed ({path_label}, "
-                f"final_fallen={final_fallen}, steered={steered})",
+                f"fell_ok={fell_ok}, steered={steered})",
                 file=sys.stderr,
             )
     except Exception as error:  # noqa: BLE001
