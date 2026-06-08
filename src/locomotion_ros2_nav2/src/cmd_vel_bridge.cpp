@@ -26,6 +26,8 @@ CmdVelBridge::CmdVelBridge(const rclcpp::NodeOptions & options)
   limits.max_yaw_accel = declare_parameter<double>("legged.max_yaw_accel", limits.max_yaw_accel);
   limits.lateral_deadband =
     declare_parameter<double>("legged.lateral_deadband", limits.lateral_deadband);
+  limits.yaw_deadband =
+    declare_parameter<double>("legged.yaw_deadband", limits.yaw_deadband);
   limits.turn_speed_coupling =
     declare_parameter<double>("legged.turn_speed_coupling", limits.turn_speed_coupling);
   shaper_.set_limits(limits);

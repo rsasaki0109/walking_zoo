@@ -118,7 +118,10 @@ def generate_launch_description():
             # SIL: do not gate Nav2 on brief gait balance oscillation.
             "require_ready": False,
             "legged.max_forward": 0.35,
+            "legged.max_lateral": 0.05,
             "legged.max_yaw_rate": 0.35,
+            "legged.yaw_deadband": 0.10,
+            "legged.lateral_deadband": 0.05,
             "legged.turn_speed_coupling": 1.8,
         }],
     )
@@ -233,7 +236,7 @@ def generate_launch_description():
             description="Path to experiments/gait_lab (empty = auto-detect)."),
         DeclareLaunchArgument(
             "controller", default_value="rl-steerable",
-            description="gait_lab controller the sim runs (rl-steerable can turn)."),
+            description="gait_lab controller (rl-steerable-footstep optional for tight turns)."),
         DeclareLaunchArgument(
             "use_ros2_control_embedded", default_value="false",
             description="ros2_control embedded RL path (true = C++ policy; false = monolithic sim)."),

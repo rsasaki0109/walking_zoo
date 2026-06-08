@@ -61,6 +61,11 @@ ShapedVelocity LeggedVelocityShaper::shape(double vx, double vy, double vyaw, do
     vy = 0.0;
   }
 
+  // 2b. Yaw deadband: straight-line Nav2 paths should not spiral on noise.
+  if (std::abs(vyaw) < std::abs(limits_.yaw_deadband)) {
+    vyaw = 0.0;
+  }
+
   // 3. Turn/forward coupling: shed forward speed when turning hard so the gait
   //    can keep its footing instead of being asked to arc fast.
   if (limits_.max_yaw_rate > 0.0 && limits_.turn_speed_coupling > 0.0) {

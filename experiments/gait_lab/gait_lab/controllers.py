@@ -1271,4 +1271,5 @@ def CONTROLLERS() -> list[GaitController]:
         LearnedFeedbackWalk(),
         RLResidualWalk(),
         RLSteerableWalk(),
+        RLSteerableFootstepWalk(),
     ]

@@ -687,6 +687,8 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B4 embedded 0.8 m** — gait controller advances embedded RL decimation per
   substep (50 Hz policy, not 5 Hz); Nav2 yaw/forward caps; `--embedded` E2E passes
   at 0.8 m (occasional `rl-steerable` spiral/fall flake).
+- [x] **B4 spiral reduction** — legged bridge `yaw_deadband` + lateral cap curb
+  Nav2 spiral drift; `rl-steerable-footstep` registered for optional `--controller`.
 
 ## Definition Of Done For The Next Push
 

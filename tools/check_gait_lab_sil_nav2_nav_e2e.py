@@ -49,7 +49,7 @@ def main() -> int:
     ap.add_argument("--attempts", type=int, default=1,
                     help="extra NavigateToPose tries when the first is rejected")
     ap.add_argument("--controller", default="rl-steerable",
-                    help="gait_lab controller the SIL sim runs")
+                    help="gait_lab controller (try rl-steerable-footstep for tight turns)")
     ap.add_argument(
         "--embedded",
         action="store_true",
@@ -198,6 +198,7 @@ def main() -> int:
             return 1
 
         best = float("inf")
+        max_lateral = 0.0
         fell_before_reach = False
         reached = False
         nav_timeout = args.timeout * (1.25 if args.embedded else 1.0)
@@ -207,6 +208,9 @@ def main() -> int:
             st = latest.get("state")
             if st and st.is_fallen and not reached:
                 fell_before_reach = True
+            od = latest.get("odom")
+            if od is not None:
+                max_lateral = max(max_lateral, abs(od.pose.pose.position.y))
             dist = distance_to_goal()
             best = min(best, dist)
             if dist <= args.tolerance:
@@ -214,7 +218,8 @@ def main() -> int:
                 break
 
         print(f"nav result: reached={reached} closest={best:.2f}m "
-              f"tolerance={args.tolerance}m fell_before_reach={fell_before_reach}")
+              f"max_lateral={max_lateral:.2f}m tolerance={args.tolerance}m "
+              f"fell_before_reach={fell_before_reach}")
         if reached and not fell_before_reach:
             print(f"gait_lab SIL full-Nav2 E2E passed ({stack}): the stack planned "
                   "and walked the steerable RL gait to the goal")

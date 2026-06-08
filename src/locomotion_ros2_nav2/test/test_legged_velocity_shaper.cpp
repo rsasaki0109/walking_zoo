@@ -57,6 +57,16 @@ TEST(LeggedVelocityShaper, KeepsLateralAboveDeadband)
   EXPECT_DOUBLE_EQ(out.vy, 0.2);
 }
 
+TEST(LeggedVelocityShaper, SuppressesTinyYawCommand)
+{
+  auto limits = test_limits();
+  limits.yaw_deadband = 0.08;
+  LeggedVelocityShaper shaper(limits);
+  const auto out = shaper.shape(0.3, 0.0, 0.03, 0.0);
+  EXPECT_DOUBLE_EQ(out.vyaw, 0.0);
+  EXPECT_TRUE(out.modified);
+}
+
 TEST(LeggedVelocityShaper, CutsForwardSpeedWhenTurningHard)
 {
   LeggedVelocityShaper shaper(test_limits());

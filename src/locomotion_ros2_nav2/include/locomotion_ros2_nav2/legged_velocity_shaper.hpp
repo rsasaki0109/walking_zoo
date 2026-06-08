@@ -17,6 +17,7 @@ struct LeggedMotionLimits
   double max_linear_accel{1.0};   // m/s^2, per-axis rate limit
   double max_yaw_accel{2.0};      // rad/s^2
   double lateral_deadband{0.05};  // m/s, suppress tiny side-steps
+  double yaw_deadband{0.0};       // rad/s, suppress tiny in-place turn noise
   double turn_speed_coupling{0.7};  // 0..1, forward speed cut when turning hard
 };
 
