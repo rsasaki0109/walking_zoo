@@ -349,10 +349,10 @@ def test_steerable_cpg_yaw_knob_changes_control(model):
     obs = model.observe(0.0)
     li = model.actuator("left_hip_yaw_joint")
     ri = model.actuator("right_hip_yaw_joint")
-    left = ctrl.update(obs, Command(0.2, 0.4))
-    right = ctrl.update(obs, Command(0.2, -0.4))
-    # +yaw biases both hip-yaws one way, -yaw the other.
-    assert left[li] > right[li] and left[ri] > right[ri]
+    pos = ctrl.update(obs, Command(0.2, 0.4))
+    neg = ctrl.update(obs, Command(0.2, -0.4))
+    # Opposite yaw commands bias hip-yaws the other way (sign matches world +z).
+    assert pos[li] < neg[li] and pos[ri] < neg[ri]
     # Forward speed is not a feedforward term: changing it leaves the control
     # vector unchanged (only the policy residual, absent here, would react).
     import numpy as np
@@ -360,6 +360,32 @@ def test_steerable_cpg_yaw_knob_changes_control(model):
     fast = ctrl.update(obs, Command(0.25, 0.0))
     slow = ctrl.update(obs, Command(0.05, 0.0))
     assert np.allclose(fast, slow)
+
+
+def test_steerable_cpg_yaw_turns_with_command(model):
+    # +yaw_rate should increase torso yaw; -yaw_rate should decrease it (world +z).
+    import numpy as np
+
+    def dyaw(cmd: Command) -> float:
+        h = GaitHarness(model, horizon=8.0)
+        model.reset()
+        ctrl = SteerableCPG()
+        ctrl.reset(model)
+        settle = int(round(h.settle / model.timestep))
+        y0 = 0.0
+        for i in range(int(round(8.0 / model.timestep))):
+            t = i * model.timestep
+            obs = model.observe(t)
+            model.data.ctrl[:] = ctrl.update(obs, cmd)
+            model.step()
+            if i == settle:
+                y0 = float(obs.torso_rpy[2])
+        y1 = float(model.observe(0.0).torso_rpy[2])
+        return float(np.arctan2(np.sin(y1 - y0), np.cos(y1 - y0)))
+
+    for yr in (0.4, -0.4):
+        delta = dyaw(Command(0.25, yr))
+        assert delta * yr > 0.2, f"yaw_rate={yr:+.1f} produced dyaw={delta:+.2f}"
 
 
 def test_rl_env_steerable_obs_includes_command(model):

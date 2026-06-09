@@ -636,6 +636,9 @@
   substep for `rl-steerable*` (mirrors harness stability); `--steer` E2E primes
   straight walking, retries up to three times with `/locomotion_ros2/clear_fault`,
   and uses gentler arc commands (0.15 m/s, 0.20 rad/s yaw).
+- **B2 SteerableCPG yaw sign fix.** Negated the hip-yaw feedforward bias so
+  ``+yaw_rate`` turns world ``+z`` on G1; retrain ``rl_policy_steer.npz`` after
+  this change (``train_rl.py --steerable --init-policy rl_policy.npz``).
 - **B4 embedded footstep Nav2.** Embedded Nav2 E2E now defaults to
   ``rl-steerable-footstep`` as well (low spiral drift under capped ``/cmd_vel``).
 - **B2 steer sign diagnostic.** ``check_gait_lab_sil_ros2_control_e2e.py

@@ -197,8 +197,9 @@ class SteerableCPG(BalancedCPG):
         ankle_pitch_fix = g.pitch_kp * pitch + g.pitch_kd * pitch_rate
         ankle_roll_fix = g.roll_kp * roll + g.roll_kd * roll_rate
 
-        # The only command-driven feedforward knob: a hip-yaw turning bias.
-        yaw_bias = self.yaw_gain * cmd.yaw_rate
+        # Hip-yaw bias for turning. Negated so +yaw_rate matches +torso_rpy[2] on G1
+        # (the old sign tracked opposite; see test_steerable_cpg_yaw_turns_with_command).
+        yaw_bias = -self.yaw_gain * cmd.yaw_rate
 
         phase = 2.0 * np.pi * self.frequency * obs.t
         rock = self.lateral_amp * np.sin(phase + np.pi)

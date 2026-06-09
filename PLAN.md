@@ -678,6 +678,9 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B3 MLP parity gate** — `tools/check_gait_lab_rl_policy_parity.py` and
   gtest pin Python ``_policy`` vs C++ ``GaitLabRlPolicy::infer`` (≤3e-6 on trained
   ``rl_policy*.npz``, fixed + rollout observations).
+- [x] **B2 CPG yaw sign fix** — ``SteerableCPG`` hip-yaw bias negated so
+  ``+yaw_rate`` matches world ``+z``; tests pin the knob and heading sign.
+  ``rl_policy_steer.npz`` must be retrained after this feedforward change.
 - [ ] **B2** — reactive steering that holds the full horizon (depends on B1).
 - [x] **B3 first rung** — ros2_control joint-state bridge for gait_lab SIL: topic
   hardware interface, split sim (physics) + gait controller (policy),
