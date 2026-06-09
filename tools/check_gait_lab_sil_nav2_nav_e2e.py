@@ -10,8 +10,8 @@ gait in MuJoCo behind the runtime + safety pipeline. It sends one
 
 Success = the robot's odometry reaches within ``--tolerance`` of the goal (the
 planner planned, the controller drove the legged gait there, and it did not fall
-on the way). Run with an interpreter that has rclpy + mujoco, ROS + workspace
-sourced.
+on the way). ``--embedded`` defaults to a shorter goal (1.2 m), wider tolerance
+(1.05 m), and three nav retries. Run with rclpy + mujoco, ROS + workspace sourced.
 """
 
 import argparse
@@ -53,10 +53,10 @@ def terminate(process):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--goal-x", type=float, default=None,
-                    help="goal x (default 2.0 monolithic, 1.5 embedded)")
+                    help="goal x (default 2.0 monolithic, 1.2 embedded)")
     ap.add_argument("--goal-y", type=float, default=0.0)
     ap.add_argument("--tolerance", type=float, default=None,
-                    help="reach tolerance m (default 0.8 monolithic, 1.0 embedded)")
+                    help="reach tolerance m (default 0.8 monolithic, 1.05 embedded)")
     ap.add_argument("--timeout", type=float, default=None,
                     help="nav monitor timeout s (default 120 mono, 180 embedded)")
     ap.add_argument("--attempts", type=int, default=1,
