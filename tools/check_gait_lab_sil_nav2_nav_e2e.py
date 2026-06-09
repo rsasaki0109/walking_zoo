@@ -10,8 +10,9 @@ gait in MuJoCo behind the runtime + safety pipeline. It sends one
 
 Success = the robot's odometry reaches within ``--tolerance`` of the goal (the
 planner planned, the controller drove the legged gait there, and it did not fall
-on the way). Monolithic defaults: 1.5 m goal, 1.0 m tolerance, three nav retries.
-``--embedded`` uses 1.2 m / 1.05 m. Run with rclpy + mujoco, ROS + workspace sourced.
+on the way). Monolithic defaults: ``rl-steerable-footstep``, 1.5 m goal, 1.0 m
+tolerance, three nav retries. ``--embedded`` uses ``rl-steerable`` at 1.2 m / 1.05 m.
+Run with rclpy + mujoco, ROS + workspace sourced.
 """
 
 import argparse
@@ -34,6 +35,8 @@ PRIME_SPEED = 0.20
 MONOLITHIC_GOAL_X = 1.5
 MONOLITHIC_TOLERANCE = 1.0
 MONOLITHIC_TIMEOUT = 150.0
+MONOLITHIC_CONTROLLER = "rl-steerable-footstep"
+EMBEDDED_CONTROLLER = "rl-steerable"
 EMBEDDED_GOAL_X = 1.2
 EMBEDDED_TOLERANCE = 1.05
 EMBEDDED_TIMEOUT = 180.0
@@ -64,14 +67,23 @@ def main() -> int:
                     help="nav monitor timeout s (default 150 mono, 180 embedded)")
     ap.add_argument("--attempts", type=int, default=1,
                     help="extra NavigateToPose tries when the first is rejected")
-    ap.add_argument("--controller", default="rl-steerable",
-                    help="gait_lab controller (try rl-steerable-footstep for tight turns)")
+    ap.add_argument("--controller", default=None,
+                    help="gait_lab controller (default footstep mono, rl-steerable embedded)")
+    ap.add_argument(
+        "--footstep",
+        action="store_true",
+        help="shorthand for --controller rl-steerable-footstep",
+    )
     ap.add_argument(
         "--embedded",
         action="store_true",
         help="use ros2_control embedded C++ RL (default: monolithic sim)",
     )
     args = ap.parse_args()
+    if args.footstep:
+        args.controller = "rl-steerable-footstep"
+    if args.controller is None:
+        args.controller = EMBEDDED_CONTROLLER if args.embedded else MONOLITHIC_CONTROLLER
     if args.goal_x is None:
         args.goal_x = EMBEDDED_GOAL_X if args.embedded else MONOLITHIC_GOAL_X
     if args.tolerance is None:

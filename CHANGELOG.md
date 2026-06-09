@@ -636,6 +636,11 @@
   substep for `rl-steerable*` (mirrors harness stability); `--steer` E2E primes
   straight walking, retries up to three times with `/locomotion_ros2/clear_fault`,
   and uses gentler arc commands (0.15 m/s, 0.20 rad/s yaw).
+- **B4 footstep Nav2 default.** Monolithic Nav2 launch and E2E checker now default
+  to ``rl-steerable-footstep`` (much lower spiral drift under capped Nav2
+  ``/cmd_vel``); embedded Nav2 and B2 ``--steer`` still use ``rl-steerable``.
+- **B4 footstep Nav2 option.** ``--footstep`` / ``--controller rl-steerable`` on the
+  Nav2 and ros2_control E2E checkers override the gait controller explicitly.
 - **B4 monolithic Nav2 tuning.** Added ``nav2_sil_monolithic_overrides.yaml``, tighter
   monolithic cmd_vel bridge caps, slower sim yaw ramp (0.12), and monolithic E2E
   defaults (1.5 m goal, 1.0 m tolerance, 150 s timeout, three nav retries).

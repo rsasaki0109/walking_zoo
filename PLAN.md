@@ -715,6 +715,13 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B4 monolithic Nav2 tuning** — monolithic Nav2 overrides, tighter bridge
   caps, slower sim yaw ramp, and E2E defaults (1.5 m goal, 1.0 m tolerance,
   3 nav retries).
+- [x] **B4 footstep Nav2 option** — ``--footstep`` on the full Nav2 E2E checker
+  selects ``rl-steerable-footstep``; monolithic Nav2 passes with much lower
+  lateral drift (~0.04 m vs ~0.88 m for ``rl-steerable``). Native
+  ``eval_steerable.py --footstep`` still tops out ~1.5 s — footstep helps Nav2
+  spiral, not the B2 full-horizon steer gate.
+- [x] **B4 footstep Nav2 default** — monolithic Nav2 launch + E2E default to
+  ``rl-steerable-footstep``; embedded and ``--steer`` keep ``rl-steerable``.
 
 ## Definition Of Done For The Next Push
 

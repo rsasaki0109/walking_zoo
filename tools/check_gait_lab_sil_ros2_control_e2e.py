@@ -86,7 +86,14 @@ def main() -> int:
         default="rl-residual",
         help="gait_lab controller (use rl-steerable with --steer)",
     )
+    parser.add_argument(
+        "--footstep",
+        action="store_true",
+        help="shorthand for --controller rl-steerable-footstep",
+    )
     args = parser.parse_args()
+    if args.footstep:
+        args.controller = "rl-steerable-footstep"
 
     if args.forward and args.embedded:
         print("choose only one of --forward or --embedded", file=sys.stderr)
