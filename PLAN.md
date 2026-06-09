@@ -663,11 +663,13 @@ of gravity moves from widening the runtime to closing the gait map:
   step). High-risk research; an honest null is an acceptable, publishable outcome.
 - [x] **B2 first rung** — `rl-steerable` on the ros2_control-split SIL path
   (`check_gait_lab_sil_ros2_control_e2e.py --steer-loose`, embedded RL relay).
-- [x] **B2 quantitative rung** — `--steer` gates signed yaw (≥0.20 rad),
+- [x] **B2 quantitative rung** — `--steer` gates signed yaw (≥0.18 rad,
+  0.15 rad/s arc),
   travel (≥0.25 m), and no fall during the 8 s ``ExecuteVelocity`` command on
   embedded ``rl-steerable`` (`tracking` ratio logged).
 - [x] **B2 flake reduction** — per-substep yaw ramp (`steer_yaw_ramp_rate`) on
   `rl-steerable*` in the split gait controller; `--steer` primes straight walking,
+  gentler arc gate (0.15 rad/s yaw, 3 s prime), slower ramp (0.12 rad/s²);
   retries with `clear_fault`, and uses gentler arc commands (0.15 m/s, 0.20 rad/s).
 - [x] **B3 embedded parity fix** — embedded RL lockstep (`substeps:=1`): one CPG
   tick + obs/ff pair per MuJoCo step (was 10 virtual ticks → 1 command). C++
@@ -710,6 +712,9 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B4 embedded Nav2 tuning** — embedded Nav2 overrides (slower RPP, longer
   progress allowance), tighter cmd_vel bridge caps, and E2E defaults (1.2 m goal,
   1.05 m tolerance, 3 nav retries).
+- [x] **B4 monolithic Nav2 tuning** — monolithic Nav2 overrides, tighter bridge
+  caps, slower sim yaw ramp, and E2E defaults (1.5 m goal, 1.0 m tolerance,
+  3 nav retries).
 
 ## Definition Of Done For The Next Push
 

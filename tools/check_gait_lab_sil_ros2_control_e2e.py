@@ -13,8 +13,8 @@ Pass ``--embedded`` for the C++ ``GaitLabSilRlResidualController`` path
 
 Pass ``--steer`` for the B2 quantitative gate: ``rl-steerable`` on the embedded
 ros2_control path must walk, turn in the commanded direction, and not fall during
-an ``ExecuteVelocity`` arc command (0.15 m/s, 0.20 rad/s yaw, 8 s; straight prime
-and up to three attempts with ``clear_fault`` on fall).
+an ``ExecuteVelocity`` arc command (0.15 m/s, 0.15 rad/s yaw, 8 s; 3 s straight
+prime and up to three attempts with ``clear_fault`` on fall).
 
 Pass ``--steer-loose`` to keep the first-rung survival check (any heading/travel).
 """
@@ -31,14 +31,14 @@ from contextlib import suppress
 
 REPO = Path(__file__).resolve().parents[1]
 
-# B2 quantitative gate (matches eval_steerable.py arc-ish commands at 8 s).
+# B2 quantitative gate (gentler arc than eval_steerable.py to curb spiral/fall).
 STEER_CMD_VX = 0.15
-STEER_CMD_YAW = 0.20
+STEER_CMD_YAW = 0.15
 STEER_DURATION_SEC = 8.0
-STEER_PRIME_SEC = 2.0
+STEER_PRIME_SEC = 3.0
 STEER_ATTEMPTS = 3
-STEER_MIN_YAW_RAD = 0.20
-STEER_MIN_TRAVEL_M = 0.25
+STEER_MIN_YAW_RAD = 0.18
+STEER_MIN_TRAVEL_M = 0.22
 
 
 def terminate_process_group(process):

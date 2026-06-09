@@ -285,7 +285,7 @@ def generate_launch_description():
             "use_ros2_control_forward": False,
             "use_embedded_rl_policy": True,
             "substeps": 1,
-            "steer_yaw_ramp_rate": 0.15,
+            "steer_yaw_ramp_rate": 0.12,
         }],
         condition=IfCondition(use_embedded_rl_policy),
     )

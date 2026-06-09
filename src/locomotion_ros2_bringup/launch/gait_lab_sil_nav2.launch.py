@@ -86,6 +86,8 @@ def generate_launch_description():
     params_file = os.path.join(bringup_share, "params", "nav2_sil.yaml")
     embedded_nav_params = os.path.join(
         bringup_share, "params", "nav2_sil_embedded_overrides.yaml")
+    monolithic_nav_params = os.path.join(
+        bringup_share, "params", "nav2_sil_monolithic_overrides.yaml")
     map_yaml = os.path.join(bringup_share, "maps", "arena.yaml")
     urdf_forward_path = os.path.join(
         description_share, "urdf", "g1_sil_ros2_control_forward.urdf")
@@ -130,13 +132,13 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             **bridge_common,
-            "legged.max_forward": 0.35,
-            "legged.max_lateral": 0.05,
-            "legged.max_yaw_rate": 0.35,
-            "legged.yaw_deadband": 0.10,
+            "legged.max_forward": 0.30,
+            "legged.max_lateral": 0.04,
+            "legged.max_yaw_rate": 0.30,
+            "legged.yaw_deadband": 0.12,
             "legged.lateral_deadband": 0.05,
-            "legged.turn_speed_coupling": 1.8,
-            "legged.max_yaw_accel": 0.20,
+            "legged.turn_speed_coupling": 2.0,
+            "legged.max_yaw_accel": 0.15,
         }],
         condition=UnlessCondition(use_ros2_control_embedded),
     )
@@ -167,7 +169,7 @@ def generate_launch_description():
         parameters=[{
             "controller": controller,
             "publish_odom": True,
-            "steer_yaw_ramp_rate": 0.15,
+            "steer_yaw_ramp_rate": 0.12,
         }],
         remappings=[("gait_lab_sil/odom", "/odom")],
         condition=UnlessCondition(use_ros2_control_embedded),
@@ -254,7 +256,7 @@ def generate_launch_description():
     # planner_server autostart times out and stays inactive.
     delayed_nav2 = TimerAction(
         period=5.0,
-        actions=_nav2_nodes([params_file], map_yaml),
+        actions=_nav2_nodes([params_file, monolithic_nav_params], map_yaml),
         condition=UnlessCondition(use_ros2_control_embedded),
     )
     delayed_nav2_embedded = TimerAction(

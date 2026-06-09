@@ -1,0 +1,12 @@
+# Nav2 overrides for the monolithic SIL path (50 Hz sim).
+# Merged on top of nav2_sil.yaml when use_ros2_control_embedded:=false.
+
+controller_server:
+  ros__parameters:
+    progress_checker:
+      movement_time_allowance: 75.0
+    FollowPath:
+      desired_linear_vel: 0.20
+      regulated_linear_scaling_min_radius: 0.75
+      regulated_linear_scaling_min_speed: 0.11
+      max_angular_accel: 0.30

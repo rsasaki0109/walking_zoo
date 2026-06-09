@@ -636,6 +636,11 @@
   substep for `rl-steerable*` (mirrors harness stability); `--steer` E2E primes
   straight walking, retries up to three times with `/locomotion_ros2/clear_fault`,
   and uses gentler arc commands (0.15 m/s, 0.20 rad/s yaw).
+- **B4 monolithic Nav2 tuning.** Added ``nav2_sil_monolithic_overrides.yaml``, tighter
+  monolithic cmd_vel bridge caps, slower sim yaw ramp (0.12), and monolithic E2E
+  defaults (1.5 m goal, 1.0 m tolerance, 150 s timeout, three nav retries).
+- **B2 steer flake reduction.** Gentler ``--steer`` arc (0.15 rad/s yaw, 3 s prime,
+  ≥0.18 rad signed turn) and slower ``steer_yaw_ramp_rate`` (0.12) on ros2_control.
 - **B4 embedded Nav2 tuning.** Added ``nav2_sil_embedded_overrides.yaml``, embedded
   cmd_vel bridge caps, and ``--embedded`` E2E defaults (1.2 m goal, 1.05 m
   tolerance, 180 s timeout, three nav retries) for the spiral-prone steerable gait.

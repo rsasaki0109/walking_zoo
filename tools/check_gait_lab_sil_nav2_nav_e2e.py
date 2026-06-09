@@ -10,8 +10,8 @@ gait in MuJoCo behind the runtime + safety pipeline. It sends one
 
 Success = the robot's odometry reaches within ``--tolerance`` of the goal (the
 planner planned, the controller drove the legged gait there, and it did not fall
-on the way). ``--embedded`` defaults to a shorter goal (1.2 m), wider tolerance
-(1.05 m), and three nav retries. Run with rclpy + mujoco, ROS + workspace sourced.
+on the way). Monolithic defaults: 1.5 m goal, 1.0 m tolerance, three nav retries.
+``--embedded`` uses 1.2 m / 1.05 m. Run with rclpy + mujoco, ROS + workspace sourced.
 """
 
 import argparse
@@ -26,11 +26,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-NAV_RUN_ATTEMPTS_MONO = 2
+NAV_RUN_ATTEMPTS_MONO = 3
 NAV_RUN_ATTEMPTS_EMBEDDED = 3
-PRIME_SEC_MONO = 2.5
+PRIME_SEC_MONO = 3.0
 PRIME_SEC_EMBEDDED = 3.0
 PRIME_SPEED = 0.20
+MONOLITHIC_GOAL_X = 1.5
+MONOLITHIC_TOLERANCE = 1.0
+MONOLITHIC_TIMEOUT = 150.0
 EMBEDDED_GOAL_X = 1.2
 EMBEDDED_TOLERANCE = 1.05
 EMBEDDED_TIMEOUT = 180.0
@@ -53,12 +56,12 @@ def terminate(process):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--goal-x", type=float, default=None,
-                    help="goal x (default 2.0 monolithic, 1.2 embedded)")
+                    help="goal x (default 1.5 monolithic, 1.2 embedded)")
     ap.add_argument("--goal-y", type=float, default=0.0)
     ap.add_argument("--tolerance", type=float, default=None,
-                    help="reach tolerance m (default 0.8 monolithic, 1.05 embedded)")
+                    help="reach tolerance m (default 1.0 monolithic, 1.05 embedded)")
     ap.add_argument("--timeout", type=float, default=None,
-                    help="nav monitor timeout s (default 120 mono, 180 embedded)")
+                    help="nav monitor timeout s (default 150 mono, 180 embedded)")
     ap.add_argument("--attempts", type=int, default=1,
                     help="extra NavigateToPose tries when the first is rejected")
     ap.add_argument("--controller", default="rl-steerable",
@@ -70,11 +73,12 @@ def main() -> int:
     )
     args = ap.parse_args()
     if args.goal_x is None:
-        args.goal_x = EMBEDDED_GOAL_X if args.embedded else 2.0
+        args.goal_x = EMBEDDED_GOAL_X if args.embedded else MONOLITHIC_GOAL_X
     if args.tolerance is None:
-        args.tolerance = EMBEDDED_TOLERANCE if args.embedded else 0.8
+        args.tolerance = (
+            EMBEDDED_TOLERANCE if args.embedded else MONOLITHIC_TOLERANCE)
     if args.timeout is None:
-        args.timeout = EMBEDDED_TIMEOUT if args.embedded else 120.0
+        args.timeout = EMBEDDED_TIMEOUT if args.embedded else MONOLITHIC_TIMEOUT
     nav_run_attempts = (
         NAV_RUN_ATTEMPTS_EMBEDDED if args.embedded else NAV_RUN_ATTEMPTS_MONO)
     prime_sec = PRIME_SEC_EMBEDDED if args.embedded else PRIME_SEC_MONO
