@@ -720,8 +720,13 @@ of gravity moves from widening the runtime to closing the gait map:
   lateral drift (~0.04 m vs ~0.88 m for ``rl-steerable``). Native
   ``eval_steerable.py --footstep`` still tops out ~1.5 s — footstep helps Nav2
   spiral, not the B2 full-horizon steer gate.
-- [x] **B4 footstep Nav2 default** — monolithic Nav2 launch + E2E default to
-  ``rl-steerable-footstep``; embedded and ``--steer`` keep ``rl-steerable``.
+- [x] **B4 footstep Nav2 default** — monolithic + embedded Nav2 launch/E2E default
+  to ``rl-steerable-footstep``; B2 ``--steer`` keeps ``rl-steerable``.
+- [x] **B4 embedded footstep Nav2** — ``--embedded --footstep`` passes (closest
+  ~1.04 m, lateral ~0.03 m); embedded E2E default is now footstep too.
+- [x] **B2 steer sign diagnostic** — ``--steer-sign-check`` on the ros2_control
+  E2E checker reports +/- yaw command vs odometry (bidirectional tracking still
+  weak; matches ``eval_steerable.py``).
 
 ## Definition Of Done For The Next Push
 

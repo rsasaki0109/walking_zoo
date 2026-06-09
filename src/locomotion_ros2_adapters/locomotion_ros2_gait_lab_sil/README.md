@@ -95,8 +95,10 @@ ros2 launch locomotion_ros2_bringup gait_lab_sil_ros2_control_runtime.launch.py 
 Verified by `tools/check_gait_lab_sil_ros2_control_e2e.py` (`--forward`,
 `--embedded`, `--steer`, `--steer-direct`; needs MuJoCo) and
 `tools/check_gait_lab_rl_policy_parity.py` (Python vs C++ MLP inference).
-Full Nav2 (`check_gait_lab_sil_nav2_nav_e2e.py`) defaults to monolithic sim;
-`--embedded` uses the same 500 Hz `substeps:=1` lockstep as the steer E2E path.
+Full Nav2 (`check_gait_lab_sil_nav2_nav_e2e.py`) defaults to monolithic
+`rl-steerable-footstep`; `--embedded` uses the same footstep policy on the 500 Hz
+`substeps:=1` lockstep stack. B2 `--steer` keeps `rl-steerable`; add
+`--steer-sign-check` for the +/- yaw diagnostic.
 
 ### Driving it from Nav2
 

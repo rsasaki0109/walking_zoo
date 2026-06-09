@@ -16,6 +16,9 @@ ros2_control path must walk, turn in the commanded direction, and not fall durin
 an ``ExecuteVelocity`` arc command (0.15 m/s, 0.15 rad/s yaw, 8 s; 3 s straight
 prime and up to three attempts with ``clear_fault`` on fall).
 
+Pass ``--steer-sign-check`` for a +/- yaw sign diagnostic (matches
+``eval_steerable.py``; does not gate CI unless combined with ``--steer``).
+
 Pass ``--steer-loose`` to keep the first-rung survival check (any heading/travel).
 """
 
@@ -39,6 +42,8 @@ STEER_PRIME_SEC = 3.0
 STEER_ATTEMPTS = 3
 STEER_MIN_YAW_RAD = 0.18
 STEER_MIN_TRAVEL_M = 0.22
+STEER_SIGN_DURATION_SEC = 5.0
+STEER_SIGN_MIN_YAW_RAD = 0.10
 
 
 def terminate_process_group(process):
@@ -82,6 +87,11 @@ def main() -> int:
         help="B2 gate on Python policy path (no embedded C++ RL)",
     )
     parser.add_argument(
+        "--steer-sign-check",
+        action="store_true",
+        help="diagnostic: report +/- yaw command vs odometry sign (see eval_steerable)",
+    )
+    parser.add_argument(
         "--controller",
         default="rl-residual",
         help="gait_lab controller (use rl-steerable with --steer)",
@@ -98,9 +108,10 @@ def main() -> int:
     if args.forward and args.embedded:
         print("choose only one of --forward or --embedded", file=sys.stderr)
         return 2
-    if args.steer or args.steer_loose:
+    if args.steer or args.steer_loose or args.steer_sign_check:
         args.controller = "rl-steerable"
-    if (args.steer or args.steer_loose) and not args.forward and not args.steer_direct:
+    if ((args.steer or args.steer_loose or args.steer_sign_check)
+            and not args.forward and not args.steer_direct):
         # Default B2 gate uses embedded C++ RL on the 500 Hz split path.
         args.embedded = True
     if args.steer_direct:
@@ -144,6 +155,8 @@ def main() -> int:
         path_label += "+steer-direct" if args.steer_direct else "+steer"
     elif args.steer_loose:
         path_label += "+steer-loose"
+    if args.steer_sign_check:
+        path_label += "+sign-check"
     try:
         import rclpy
         from rclpy.action import ActionClient
@@ -279,6 +292,53 @@ def main() -> int:
             while time.time() < settle_end:
                 rclpy.spin_once(node, timeout_sec=0.1)
             return True
+
+        def measure_yaw_arc(cmd_yaw: float, *, label: str) -> tuple[float, bool]:
+            if not clear_fault_if_needed():
+                print(f"steer sign {label}: clear_fault failed", file=sys.stderr)
+                return 0.0, True
+            if STEER_PRIME_SEC > 0.0:
+                prime = run_velocity_goal(
+                    STEER_CMD_VX, 0.0, STEER_PRIME_SEC,
+                    track_fall=False, timeout_sec=STEER_PRIME_SEC + 8.0)
+                if prime is None or not prime[0].success:
+                    print(f"steer sign {label}: prime failed", file=sys.stderr)
+                    return 0.0, True
+                observed["fell"] = False
+            odom_yaw["start"] = odom_yaw["latest"]
+            arc = run_velocity_goal(
+                STEER_CMD_VX, cmd_yaw, STEER_SIGN_DURATION_SEC,
+                track_fall=True, timeout_sec=STEER_SIGN_DURATION_SEC + 10.0)
+            if arc is None:
+                print(f"steer sign {label}: arc timed out", file=sys.stderr)
+                return 0.0, True
+            _, fell_during = arc
+            signed = 0.0
+            if odom_yaw["start"] is not None and odom_yaw["latest"] is not None:
+                signed = odom_yaw["latest"] - odom_yaw["start"]
+                signed = math.atan2(math.sin(signed), math.cos(signed))
+            if fell_during:
+                observed["fell"] = True
+            return signed, observed["fell"]
+
+        if args.steer_sign_check:
+            pos_yaw, pos_fell = measure_yaw_arc(STEER_CMD_YAW, label="+yaw")
+            neg_yaw, neg_fell = measure_yaw_arc(-STEER_CMD_YAW, label="-yaw")
+            pos_ok = (
+                pos_yaw * STEER_CMD_YAW > 0
+                and abs(pos_yaw) >= STEER_SIGN_MIN_YAW_RAD)
+            neg_ok = (
+                neg_yaw * (-STEER_CMD_YAW) > 0
+                and abs(neg_yaw) >= STEER_SIGN_MIN_YAW_RAD)
+            bidir = "yes" if pos_ok and neg_ok else "weak/none"
+            print(
+                f"steer sign check: +cmd -> {pos_yaw:+.2f}rad ok={pos_ok} "
+                f"fell={pos_fell}; -cmd -> {neg_yaw:+.2f}rad ok={neg_ok} "
+                f"fell={neg_fell}; bidirectional={bidir}"
+            )
+            if not args.steer and not args.steer_loose:
+                print(f"gait_lab SIL steer sign diagnostic done ({path_label})")
+                return 0
 
         if args.steer:
             result = None

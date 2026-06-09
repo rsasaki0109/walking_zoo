@@ -11,7 +11,8 @@ gait in MuJoCo behind the runtime + safety pipeline. It sends one
 Success = the robot's odometry reaches within ``--tolerance`` of the goal (the
 planner planned, the controller drove the legged gait there, and it did not fall
 on the way). Monolithic defaults: ``rl-steerable-footstep``, 1.5 m goal, 1.0 m
-tolerance, three nav retries. ``--embedded`` uses ``rl-steerable`` at 1.2 m / 1.05 m.
+tolerance, three nav retries. ``--embedded`` also defaults to footstep at 1.2 m /
+1.05 m (``--controller rl-steerable`` for the CPG substrate).
 Run with rclpy + mujoco, ROS + workspace sourced.
 """
 
@@ -36,7 +37,7 @@ MONOLITHIC_GOAL_X = 1.5
 MONOLITHIC_TOLERANCE = 1.0
 MONOLITHIC_TIMEOUT = 150.0
 MONOLITHIC_CONTROLLER = "rl-steerable-footstep"
-EMBEDDED_CONTROLLER = "rl-steerable"
+EMBEDDED_CONTROLLER = "rl-steerable-footstep"
 EMBEDDED_GOAL_X = 1.2
 EMBEDDED_TOLERANCE = 1.05
 EMBEDDED_TIMEOUT = 180.0

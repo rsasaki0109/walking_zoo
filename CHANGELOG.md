@@ -636,6 +636,10 @@
   substep for `rl-steerable*` (mirrors harness stability); `--steer` E2E primes
   straight walking, retries up to three times with `/locomotion_ros2/clear_fault`,
   and uses gentler arc commands (0.15 m/s, 0.20 rad/s yaw).
+- **B4 embedded footstep Nav2.** Embedded Nav2 E2E now defaults to
+  ``rl-steerable-footstep`` as well (low spiral drift under capped ``/cmd_vel``).
+- **B2 steer sign diagnostic.** ``check_gait_lab_sil_ros2_control_e2e.py
+  --steer-sign-check`` logs +/- yaw command vs odometry heading change.
 - **B4 footstep Nav2 default.** Monolithic Nav2 launch and E2E checker now default
   to ``rl-steerable-footstep`` (much lower spiral drift under capped Nav2
   ``/cmd_vel``); embedded Nav2 and B2 ``--steer`` still use ``rl-steerable``.
