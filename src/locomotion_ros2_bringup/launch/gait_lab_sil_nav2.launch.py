@@ -5,8 +5,8 @@ gait_lab gait, running in MuJoCo behind the real locomotion_ros2 runtime and
 safety pipeline, driven to a goal by the complete Nav2 stack.
 
 Set ``use_ros2_control_embedded:=true`` to run physics + C++ RL residual inference
-on the ros2_control-split path (50 Hz nav config); ``false`` (default) keeps the
-legacy monolithic sim node.
+on the ros2_control-split path (500 Hz lockstep nav config); ``false`` (default)
+keeps the legacy monolithic sim node.
 
     ros2 launch locomotion_ros2_bringup gait_lab_sil_nav2.launch.py \
         gait_lab_path:=/path/to/locomotion_ros2/experiments/gait_lab
@@ -186,7 +186,7 @@ def generate_launch_description():
             "controller": controller,
             "ros2_control_split": True,
             "batch_substeps_per_command": False,
-            "substeps": 10,
+            "substeps": 1,
             "publish_odom": True,
         }],
         remappings=[("gait_lab_sil/odom", "/odom")],
@@ -203,7 +203,7 @@ def generate_launch_description():
             "controller": controller,
             "use_ros2_control_forward": False,
             "use_embedded_rl_policy": True,
-            "substeps": 10,
+            "substeps": 1,
             "steer_yaw_ramp_rate": 0.15,
         }],
         condition=IfCondition(use_ros2_control_embedded),
@@ -222,7 +222,7 @@ def generate_launch_description():
     # Start Nav2 after the SIL sim is publishing odom->base_link TF; otherwise
     # planner_server autostart times out and stays inactive.
     delayed_nav2 = TimerAction(
-        period=5.0,
+        period=7.0,
         actions=nav2_nodes,
     )
 

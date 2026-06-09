@@ -1,9 +1,10 @@
 # Embedded C++ RL on the ros2_control split path, tuned for full-Nav2 bringup.
-# 500 Hz starves the Nav2 action servers on a single machine; 50 Hz matches the
-# gait_lab policy tick and leaves headroom for planner/controller_server.
+# Lockstep parity needs 500 Hz physics (one MuJoCo step per policy tick); the
+# learned residual still refreshes at 50 Hz via decimation inside the gait node.
+# Use monolithic sim (launch default) if this starves Nav2 on a small machine.
 controller_manager:
   ros__parameters:
-    update_rate: 50
+    update_rate: 500
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
     gait_lab_sil_rl_residual:

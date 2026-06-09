@@ -636,6 +636,9 @@
   substep for `rl-steerable*` (mirrors harness stability); `--steer` E2E primes
   straight walking, retries up to three times with `/locomotion_ros2/clear_fault`,
   and uses gentler arc commands (0.15 m/s, 0.20 rad/s yaw).
+- **B4 embedded Nav2 lockstep.** Nav2 embedded bringup now uses 500 Hz ros2_control
+  with `substeps:=1` (matching the steer E2E embedded path); residual refresh stays
+  at 50 Hz via gait-node decimation. Monolithic sim remains the Nav2 default.
 - **B4 Nav2 flake reduction.** Monolithic `gait_lab_sil_sim` ramps `rl-steerable*`
   yaw per MuJoCo substep; SIL Nav2 launch caps bridge `max_yaw_accel` at 0.20 rad/s².
   Full Nav2 E2E retries navigation twice with `clear_fault` and a straight cmd_vel prime.

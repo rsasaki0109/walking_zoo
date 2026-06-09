@@ -704,6 +704,9 @@ of gravity moves from widening the runtime to closing the gait map:
   Nav2 spiral drift; `rl-steerable-footstep` registered for optional `--controller`.
 - [x] **B4 Nav2 flake reduction** — monolithic sim yaw ramp + bridge
   `max_yaw_accel`; Nav2 E2E retries navigation with `clear_fault` + cmd_vel prime.
+- [x] **B4 embedded Nav2 lockstep** — Nav2 embedded launch uses 500 Hz
+  `substeps:=1` lockstep (was 50 Hz + batched virtual ticks); monolithic remains
+  the default when 500 Hz starves Nav2 on a small machine.
 
 ## Definition Of Done For The Next Push
 
