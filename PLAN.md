@@ -707,6 +707,9 @@ of gravity moves from widening the runtime to closing the gait map:
 - [x] **B4 embedded Nav2 lockstep** — Nav2 embedded launch uses 500 Hz
   `substeps:=1` lockstep (was 50 Hz + batched virtual ticks); monolithic remains
   the default when 500 Hz starves Nav2 on a small machine.
+- [x] **B4 embedded Nav2 tuning** — embedded Nav2 overrides (slower RPP, longer
+  progress allowance), tighter cmd_vel bridge caps, and E2E defaults (1.2 m goal,
+  1.05 m tolerance, 3 nav retries).
 
 ## Definition Of Done For The Next Push
 

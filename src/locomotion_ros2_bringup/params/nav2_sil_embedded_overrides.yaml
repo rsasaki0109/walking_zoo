@@ -1,0 +1,12 @@
+# Nav2 overrides for the embedded ros2_control SIL path (500 Hz lockstep).
+# Merged on top of nav2_sil.yaml when use_ros2_control_embedded:=true.
+
+controller_server:
+  ros__parameters:
+    progress_checker:
+      movement_time_allowance: 90.0
+    FollowPath:
+      desired_linear_vel: 0.18
+      regulated_linear_scaling_min_radius: 0.85
+      regulated_linear_scaling_min_speed: 0.10
+      max_angular_accel: 0.28

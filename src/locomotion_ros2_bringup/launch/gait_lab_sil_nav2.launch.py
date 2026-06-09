@@ -29,6 +29,42 @@ def _load_text(path: str) -> str:
         return handle.read()
 
 
+def _nav2_nodes(params_files, map_yaml: str):
+    extra = {"use_sim_time": False}
+    return [
+        Node(
+            package="nav2_map_server", executable="map_server", name="map_server",
+            output="screen",
+            parameters=[*params_files, {"yaml_filename": map_yaml, **extra}]),
+        Node(
+            package="nav2_planner", executable="planner_server", name="planner_server",
+            output="screen", parameters=[*params_files, extra]),
+        Node(
+            package="nav2_controller", executable="controller_server",
+            name="controller_server", output="screen",
+            parameters=[*params_files, extra]),
+        Node(
+            package="nav2_behaviors", executable="behavior_server",
+            name="behavior_server", output="screen",
+            parameters=[*params_files, extra]),
+        Node(
+            package="nav2_bt_navigator", executable="bt_navigator",
+            name="bt_navigator", output="screen",
+            parameters=[*params_files, extra]),
+        Node(
+            package="nav2_lifecycle_manager", executable="lifecycle_manager",
+            name="lifecycle_manager_navigation", output="screen",
+            parameters=[{
+                "use_sim_time": False,
+                "autostart": True,
+                "node_names": [
+                    "map_server", "planner_server", "controller_server",
+                    "behavior_server", "bt_navigator",
+                ],
+            }]),
+    ]
+
+
 def _default_gait_lab_path() -> str:
     env = os.environ.get("LOCOMOTION_ROS2_GAIT_LAB_PATH", "")
     if env:
@@ -48,6 +84,8 @@ def generate_launch_description():
     bringup_share = get_package_share_directory("locomotion_ros2_bringup")
     description_share = get_package_share_directory("locomotion_ros2_description")
     params_file = os.path.join(bringup_share, "params", "nav2_sil.yaml")
+    embedded_nav_params = os.path.join(
+        bringup_share, "params", "nav2_sil_embedded_overrides.yaml")
     map_yaml = os.path.join(bringup_share, "maps", "arena.yaml")
     urdf_forward_path = os.path.join(
         description_share, "urdf", "g1_sil_ros2_control_forward.urdf")
@@ -61,33 +99,6 @@ def generate_launch_description():
         "LOCOMOTION_ROS2_GAIT_LAB_CONTROLLER": controller,
         "MUJOCO_GL": "egl",
     }
-
-    nav2_nodes = [
-        Node(package="nav2_map_server", executable="map_server", name="map_server",
-             output="screen",
-             parameters=[params_file, {"yaml_filename": map_yaml, "use_sim_time": False}]),
-        Node(package="nav2_planner", executable="planner_server", name="planner_server",
-             output="screen", parameters=[params_file, {"use_sim_time": False}]),
-        Node(package="nav2_controller", executable="controller_server",
-             name="controller_server", output="screen",
-             parameters=[params_file, {"use_sim_time": False}]),
-        Node(package="nav2_behaviors", executable="behavior_server",
-             name="behavior_server", output="screen",
-             parameters=[params_file, {"use_sim_time": False}]),
-        Node(package="nav2_bt_navigator", executable="bt_navigator",
-             name="bt_navigator", output="screen",
-             parameters=[params_file, {"use_sim_time": False}]),
-        Node(package="nav2_lifecycle_manager", executable="lifecycle_manager",
-             name="lifecycle_manager_navigation", output="screen",
-             parameters=[{
-                 "use_sim_time": False,
-                 "autostart": True,
-                 "node_names": [
-                     "map_server", "planner_server", "controller_server",
-                     "behavior_server", "bt_navigator",
-                 ],
-             }]),
-    ]
 
     runtime_node = Node(
         package="locomotion_ros2_runtime",
@@ -105,18 +116,20 @@ def generate_launch_description():
         }],
     )
 
+    bridge_common = {
+        "input_topic": "/cmd_vel",
+        "input_stamped": True,
+        "output_topic": "/locomotion_ros2/cmd_vel",
+        "frame_id": "base_link",
+        "require_ready": False,
+    }
     cmd_vel_bridge = Node(
         package="locomotion_ros2_nav2",
         executable="cmd_vel_bridge",
         name="locomotion_ros2_cmd_vel_bridge",
         output="screen",
         parameters=[{
-            "input_topic": "/cmd_vel",
-            "input_stamped": True,
-            "output_topic": "/locomotion_ros2/cmd_vel",
-            "frame_id": "base_link",
-            # SIL: do not gate Nav2 on brief gait balance oscillation.
-            "require_ready": False,
+            **bridge_common,
             "legged.max_forward": 0.35,
             "legged.max_lateral": 0.05,
             "legged.max_yaw_rate": 0.35,
@@ -125,6 +138,24 @@ def generate_launch_description():
             "legged.turn_speed_coupling": 1.8,
             "legged.max_yaw_accel": 0.20,
         }],
+        condition=UnlessCondition(use_ros2_control_embedded),
+    )
+    cmd_vel_bridge_embedded = Node(
+        package="locomotion_ros2_nav2",
+        executable="cmd_vel_bridge",
+        name="locomotion_ros2_cmd_vel_bridge",
+        output="screen",
+        parameters=[{
+            **bridge_common,
+            "legged.max_forward": 0.28,
+            "legged.max_lateral": 0.04,
+            "legged.max_yaw_rate": 0.30,
+            "legged.yaw_deadband": 0.12,
+            "legged.lateral_deadband": 0.05,
+            "legged.turn_speed_coupling": 2.2,
+            "legged.max_yaw_accel": 0.15,
+        }],
+        condition=IfCondition(use_ros2_control_embedded),
     )
 
     sim_monolithic = Node(
@@ -222,8 +253,14 @@ def generate_launch_description():
     # Start Nav2 after the SIL sim is publishing odom->base_link TF; otherwise
     # planner_server autostart times out and stays inactive.
     delayed_nav2 = TimerAction(
+        period=5.0,
+        actions=_nav2_nodes([params_file], map_yaml),
+        condition=UnlessCondition(use_ros2_control_embedded),
+    )
+    delayed_nav2_embedded = TimerAction(
         period=7.0,
-        actions=nav2_nodes,
+        actions=_nav2_nodes([params_file, embedded_nav_params], map_yaml),
+        condition=IfCondition(use_ros2_control_embedded),
     )
 
     map_to_odom = Node(
@@ -249,6 +286,7 @@ def generate_launch_description():
 
         runtime_node,
         cmd_vel_bridge,
+        cmd_vel_bridge_embedded,
         sim_monolithic,
         robot_state_publisher_embedded,
         ros2_control_node_embedded,
@@ -256,4 +294,5 @@ def generate_launch_description():
         delayed_sim_stack,
         map_to_odom,
         delayed_nav2,
+        delayed_nav2_embedded,
     ])

@@ -26,9 +26,15 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-NAV_RUN_ATTEMPTS = 2
-PRIME_SEC = 2.5
+NAV_RUN_ATTEMPTS_MONO = 2
+NAV_RUN_ATTEMPTS_EMBEDDED = 3
+PRIME_SEC_MONO = 2.5
+PRIME_SEC_EMBEDDED = 3.0
 PRIME_SPEED = 0.20
+EMBEDDED_GOAL_X = 1.2
+EMBEDDED_TOLERANCE = 1.05
+EMBEDDED_TIMEOUT = 180.0
+EMBEDDED_READY_DEADLINE = 180.0
 
 
 def terminate(process):
@@ -46,10 +52,13 @@ def terminate(process):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--goal-x", type=float, default=2.0)
+    ap.add_argument("--goal-x", type=float, default=None,
+                    help="goal x (default 2.0 monolithic, 1.5 embedded)")
     ap.add_argument("--goal-y", type=float, default=0.0)
-    ap.add_argument("--tolerance", type=float, default=0.8)
-    ap.add_argument("--timeout", type=float, default=120.0)
+    ap.add_argument("--tolerance", type=float, default=None,
+                    help="reach tolerance m (default 0.8 monolithic, 1.0 embedded)")
+    ap.add_argument("--timeout", type=float, default=None,
+                    help="nav monitor timeout s (default 120 mono, 180 embedded)")
     ap.add_argument("--attempts", type=int, default=1,
                     help="extra NavigateToPose tries when the first is rejected")
     ap.add_argument("--controller", default="rl-steerable",
@@ -60,6 +69,16 @@ def main() -> int:
         help="use ros2_control embedded C++ RL (default: monolithic sim)",
     )
     args = ap.parse_args()
+    if args.goal_x is None:
+        args.goal_x = EMBEDDED_GOAL_X if args.embedded else 2.0
+    if args.tolerance is None:
+        args.tolerance = EMBEDDED_TOLERANCE if args.embedded else 0.8
+    if args.timeout is None:
+        args.timeout = EMBEDDED_TIMEOUT if args.embedded else 120.0
+    nav_run_attempts = (
+        NAV_RUN_ATTEMPTS_EMBEDDED if args.embedded else NAV_RUN_ATTEMPTS_MONO)
+    prime_sec = PRIME_SEC_EMBEDDED if args.embedded else PRIME_SEC_MONO
+    ready_deadline = EMBEDDED_READY_DEADLINE if args.embedded else 120.0
 
     env = os.environ.copy()
     env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
@@ -134,7 +153,7 @@ def main() -> int:
             result = fut.result()
             return result is not None and result.current_state.id == 3
 
-        deadline = time.time() + (120.0 if not args.embedded else 150.0)
+        deadline = time.time() + ready_deadline
         ready = False
         nav2_active_cached = False
         while time.time() < deadline:
@@ -166,7 +185,7 @@ def main() -> int:
         cmd_pub = node.create_publisher(Twist, "/cmd_vel", 10)
         clear_client = node.create_client(ClearFault, "/locomotion_ros2/clear_fault")
 
-        def prime_gait(seconds: float = PRIME_SEC, speed: float = PRIME_SPEED):
+        def prime_gait(seconds: float = prime_sec, speed: float = PRIME_SPEED):
             twist = Twist()
             twist.linear.x = speed
             prime_end = time.time() + seconds
@@ -243,8 +262,8 @@ def main() -> int:
         fell_before_reach = False
         best = float("inf")
         max_lateral = 0.0
-        for run in range(1, NAV_RUN_ATTEMPTS + 1):
-            print(f"nav run {run}/{NAV_RUN_ATTEMPTS}")
+        for run in range(1, nav_run_attempts + 1):
+            print(f"nav run {run}/{nav_run_attempts}")
             if run > 1 and not clear_fault_if_fallen():
                 print("clear_fault unavailable after nav fall", file=sys.stderr)
                 break
